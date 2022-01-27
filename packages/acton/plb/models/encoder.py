@@ -5,6 +5,8 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
+import pdb
+
 inter_dim_dict = {2048: 512, 1024:256, 512: 128, 256: 128, 128: 64, 64: 64}
 
 class PositionalEncoding(nn.Module):
@@ -37,6 +39,7 @@ class Transformer(nn.Module):
 
     def forward(self, point_bank, len):
         # point_bank, [N, T, 51]
+        pdb.set_trace()
         max_len = point_bank.size(1)  # collate fuction collate across GPUs, so the padded length might not larger than the max in this GPU
         points = self.embedder(point_bank) * math.sqrt(self.d_model)
         points = self.pos_encoder(points.transpose(0, 1))  # [T, N, 512], transpose should be before pos_encoder

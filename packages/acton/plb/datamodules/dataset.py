@@ -27,16 +27,19 @@ class SkeletonDataset():
             seq_name = str(seq_name_np)
             if seq_name.split("_")[0] in self.genre:
                 all_seq.append(seq_name)
-
+        # print(f'\n\n\nall_seq = {len(all_seq)}\n\n\n')
         with open(os.path.join("src/data/dataset", "splits", f"split_wseed_{self.split}.json"), "r") as f:
             ldd = json.load(f)
             self.validation_split = []
             for genre in self.genre:
                 self.validation_split += ldd[genre]
-
+        # print(f'\n\n\nvalidation_split = {len(self.validation_split)}\n\n\n')
         self.train_split = [_ for _ in all_seq if _ not in self.validation_split]
+        # print(f'\n\n\ntrain_split = {len(self.train_split)}\n\n\n')
+        
         # remove files officially deemed as broken
         bad_vids = self.official_loader.filter_file + ["gHO_sFM_cAll_d20_mHO5_ch13", ]
+        # print(f'\n\n\nbad_vids = {len(bad_vids)}\n\n\n')
         self.validation_split = [_ for _ in self.validation_split if _ not in bad_vids]
         self.train_split = [_ for _ in self.train_split if _ not in bad_vids]
 

@@ -40,8 +40,8 @@ def get_names(genre, trval="train", seed=1234):
         ldd = json.load(f)
         validation_split += ldd[genre]
 
-    annot_3d = list(os.listdir("../aistplusplus/annotations/keypoints3d"))
-    filter_file = os.path.join("../aistplusplus/annotations/", 'ignore_list.txt')
+    annot_3d = list(os.listdir("../aistpp_subset/aistplusplus/annotations/keypoints3d"))
+    filter_file = os.path.join("../aistpp_subset/aistplusplus/annotations/", 'ignore_list.txt')
     with open(filter_file, "r") as f:
         filter_file = [_[:-1] for _ in f.readlines()]
     annot_3d = [_ for _ in annot_3d if _.startswith(genre) and _[:-4] not in filter_file]
