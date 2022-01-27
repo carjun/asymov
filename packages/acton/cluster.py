@@ -11,6 +11,8 @@ import torch
 import pandas as pd
 from pathlib import Path
 
+import pdb
+
 from src.data.dataset.loader import AISTDataset
 from src import algo
 from src.data.dataset.cluster_misc import lexicon, get_names, genre_list
@@ -60,6 +62,7 @@ def parse_args():
     return ldd
 
 def main():
+    
     args = parse_args()
     debug = args["NAME"] == "debug"
     log_dir = os.path.join("./logs", args["NAME"])
@@ -73,8 +76,7 @@ def main():
     video_dir = os.path.join(log_dir, "saved_videos")
     Path(video_dir).mkdir(parents=True, exist_ok=True)
     official_loader = AISTDataset(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], "annotations"))
-
-    if 1:  # change this to 0 for skeleton experiment
+    if 0:  # change this to 0 for skeleton experiment
         # get model
         load_name = args["CLUSTER"]["CKPT"] if args["CLUSTER"]["CKPT"] != -1 else args["NAME"]
         with open(os.path.join(log_dir, f"val_cluster_zrsc_scores.txt"), "a") as f:
@@ -85,9 +87,9 @@ def main():
                 cfg = fn
         with open(os.path.join("./logs", load_name, cfg), 'r') as stream:
             old_args = yaml.safe_load(stream)
-        cpt_name = os.listdir(os.path.join("./logs", load_name, "default/version_0/checkpoints"))[0]
+        cpt_name = os.listdir(os.path.join("./logs", load_name, "default/version_7/checkpoints"))[0]
         print(f"We are using checkpoint: {cpt_name}")
-        model = eval(old_args["PRETRAIN"]["ALGO"]).load_from_checkpoint(os.path.join("./logs", load_name, "default/version_0/checkpoints", cpt_name))
+        model = eval(old_args["PRETRAIN"]["ALGO"]).load_from_checkpoint(os.path.join("./logs", load_name, "default/version_7/checkpoints", cpt_name))
         model.eval()
         def ske2feat(ldd):
             ldd1 = torch.Tensor(ldd).flatten(1, -1) / 100  # [T, 51]
@@ -123,6 +125,9 @@ def main():
         val_df = get_names(genre, trval="val", seed=4321)
         val_df = val_df[val_df["situ"] == "sFM"]
         for reference_name in tqdm(list(tr_df["name"]), desc='Loading training set features'):
+            print(reference_name)
+            if(reference_name=='gWA_sFM_cAll_d27_mWA4_ch19'):
+                pdb.set_trace()
             ldd = official_loader.load_keypoint3d(reference_name)
             tr_kpt_container.append(ldd)
             tr_len_container.append(ldd.shape[0])
@@ -135,6 +140,7 @@ def main():
             val_feat_container.append(ske2feat(ldd).detach().cpu().numpy())
             val_name_container.append(reference_name)
 
+    pdb.set_trace()
     tr_where_to_cut = [0, ] + list(np.cumsum(np.array(tr_len_container)))
     tr_stacked = np.vstack(tr_feat_container)
     val_where_to_cut = [0, ] + list(np.cumsum(np.array(val_len_container)))

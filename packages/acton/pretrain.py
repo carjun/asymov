@@ -74,7 +74,7 @@ def main():
 
     # trainer
     trainer = pl.Trainer(
-        gpus=args["PRETRAIN"]["GPUS"],
+        gpus=None,#args["PRETRAIN"]["GPUS"],
         check_val_every_n_epoch=args["PRETRAIN"]["TRAINER"]["VAL_STEP"],
         logger=tt_logger,
         accelerator=args["PRETRAIN"]["TRAINER"]["ACCELERATOR"],

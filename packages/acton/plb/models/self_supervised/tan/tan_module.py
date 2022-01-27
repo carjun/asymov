@@ -11,7 +11,9 @@ from torch import nn
 from torch.nn import functional as F
 from torch.optim.optimizer import Optimizer
 
-from pl_bolts.optimizers.lars_scheduling import LARSWrapper
+# from pl_bolts.optimizers.lars_scheduling import LARSWrapper
+from lars_wrapper import LARSWrapper
+
 from pl_bolts.transforms.dataset_normalizations import (
     cifar10_normalization,
     imagenet_normalization,
@@ -187,6 +189,8 @@ class TAN(pl.LightningModule):
         else:
             self.train_iters_per_epoch = 0
 
+        # print(global_batch_size)
+        # print(self.train_iters_per_epoch)
         # define LR schedule
         warmup_lr_schedule = np.linspace(self.start_lr, self.learning_rate, self.train_iters_per_epoch * self.warmup_epochs)
         iters = np.arange(self.train_iters_per_epoch * (self.max_epochs - self.warmup_epochs))
@@ -197,6 +201,9 @@ class TAN(pl.LightningModule):
         ])
 
         self.lr_schedule = np.concatenate((warmup_lr_schedule, cosine_lr_schedule))
+        # print(warmup_lr_schedule)
+        # print(cosine_lr_schedule)
+        # print(self.lr_schedule)
 
         # construct validator
         self.validators = []
@@ -357,6 +364,8 @@ class TAN(pl.LightningModule):
         # warm-up + decay schedule placed here since LARSWrapper is not optimizer class
         # adjust LR of optim contained within LARSWrapper
         for param_group in optimizer.param_groups:
+            # print(f'\n{self.lr_schedule}\n')
+            # print(f'\n{self.trainer.global_step}\n\n\n')
             param_group["lr"] = self.lr_schedule[self.trainer.global_step]  # // torch.cuda.device_count()]
 
         # rank = torch.distributed.get_rank()
