@@ -298,12 +298,13 @@ class KITMocap(RawData):
         self._MMMSKELPATH = base_path + 'skeleton.xml'
         self._MMMSAMPLEPATH = base_path + 'dataProcessing/00001_mmm.xml'
 
-        os.makedirs(Path(self._SKELPATH).parent, exist_ok=True)
         # get the skeleton and permutation
         self.skel, self.permutation, self.new_joints = self.get_skeletonNpermutation()
 
-        # save skeleton
-        torch.save(self.skel, open(self._SKELPATH, 'wb'))
+        # save skeleton. Note that there might be a mismatch with above values.
+        if not os.path.exists(self._SKELPATH):
+            os.makedirs(Path(self._SKELPATH).parent, exist_ok=True)
+            torch.save(self.skel, open(self._SKELPATH, 'wb'))
 
         if preProcess_flag:
             self.preProcess(path2data)
@@ -348,26 +349,28 @@ class KITMocap(RawData):
 
             self.df = pd.DataFrame(data=data, columns=[
                                    'euler', 'descriptions', 'quaternion', 'axis-angle', 'fke', 'rifke', 'perplexity'])
+        else:
+            self.df = pd.read_hdf('dataProcessing/data.h5', 'df')
 
-            self.columns = pd.read_csv(
-                self.df.iloc[0].quaternion, index_col=0).columns
-            joints = [col[:-3] for col in self.columns]
-            self.joints = []
-            self.columns_dict = {}
-            start = 0
-            for joint in joints:
-                if not self.joints:
-                    self.joints.append(joint)
-                    end = 1
-                elif self.joints[-1] == joint:
-                    end += 1
-                else:
-                    self.columns_dict.update(
-                        {self.joints[-1]: self.columns[start:end]})
-                    self.joints.append(joint)
-                    start = end
-                    end = end + 1
-            self.columns_dict.update({self.joints[-1]: self.columns[start:end]})
+        self.columns = pd.read_csv(
+            self.df.iloc[0].quaternion, index_col=0).columns
+        joints = [col[:-3] for col in self.columns]
+        self.joints = []
+        self.columns_dict = {}
+        start = 0
+        for joint in joints:
+            if not self.joints:
+                self.joints.append(joint)
+                end = 1
+            elif self.joints[-1] == joint:
+                end += 1
+            else:
+                self.columns_dict.update(
+                    {self.joints[-1]: self.columns[start:end]})
+                self.joints.append(joint)
+                start = end
+                end = end + 1
+        self.columns_dict.update({self.joints[-1]: self.columns[start:end]})
 
     def _get_df(self):
         return self.df
