@@ -125,9 +125,9 @@ def main():
         val_df = get_names(genre, trval="val", seed=4321)
         val_df = val_df[val_df["situ"] == "sFM"]
         for reference_name in tqdm(list(tr_df["name"]), desc='Loading training set features'):
-            print(reference_name)
-            if(reference_name=='gWA_sFM_cAll_d27_mWA4_ch19'):
-                pdb.set_trace()
+            # print(reference_name)
+            # if(reference_name=='gWA_sFM_cAll_d27_mWA4_ch19'):
+            #     pdb.set_trace()
             ldd = official_loader.load_keypoint3d(reference_name)
             tr_kpt_container.append(ldd)
             tr_len_container.append(ldd.shape[0])
@@ -140,7 +140,7 @@ def main():
             val_feat_container.append(ske2feat(ldd).detach().cpu().numpy())
             val_name_container.append(reference_name)
 
-    pdb.set_trace()
+    # pdb.set_trace()
     tr_where_to_cut = [0, ] + list(np.cumsum(np.array(tr_len_container)))
     tr_stacked = np.vstack(tr_feat_container)
     val_where_to_cut = [0, ] + list(np.cumsum(np.array(val_len_container)))
@@ -163,6 +163,13 @@ def main():
         cluster_l = c.get_assignment(tr_stacked)  # assigned to which cluster
         tr_res_df['cluster'] = cluster_l
         tr_res_df['frame_index'] = s  # the frame index in home sequence
+        tr_res_df['seq_name'] = np.concatenate([[name] * tr_len_container[i] for i, name in enumerate(tr_name_container)], axis=0)
+        tr_res_df['feat_vec'] = [[vec] for vec in tr_stacked]
+        tr_res_df['dist'] = tr_res_df[['feat_vec', 'cluster']].apply(
+            lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
+            axis=1)
+        proxy_centers_tr = tr_res_df.loc[tr_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers 
+
         tr_word_df = pd.DataFrame(columns=["idx", "word", "length", "y", "name"])  # word index in home sequence
         for sequence_idx in range(len(tr_len_container)):
             name = tr_name_container[sequence_idx]
@@ -183,6 +190,8 @@ def main():
         tr_word_df = tr_word_df[tr_word_df["idx"] > 0]
         tr_word_df.to_pickle(dirpath / f"advanced_tr_{K}.pkl")
         print(f"advanced_tr_{K}.pkl dumped to {log_dir}")  # saved tokenization of training set
+        proxy_centers_tr.to_pickle(dirpath / f"proxy_centers_tr_{K}.pkl")
+        print(f"proxy_centers_tr_{K}.pkl dumped to {log_dir}") # saved proxy centers
 
         # infer on validation set and save
         y = np.concatenate([np.ones((l,)) * i for i, l in enumerate(val_len_container)], axis=0)
@@ -191,6 +200,13 @@ def main():
         cluster_l = c.get_assignment(val_stacked)  # assigned to which cluster
         val_res_df['cluster'] = cluster_l
         val_res_df['frame_index'] = s  # the frame index in home sequence
+        val_res_df['seq_name'] = np.concatenate([[name] * val_len_container[i] for i, name in enumerate(val_name_container)], axis=0)
+        val_res_df['feat_vec'] = [[vec] for vec in val_stacked]
+        val_res_df['dist'] = val_res_df[['feat_vec', 'cluster']].apply(
+            lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
+            axis=1)
+        proxy_centers_val = val_res_df.loc[val_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers 
+
         val_word_df = pd.DataFrame(columns=["idx", "word", "length", "y", "name"])  # word index in home sequence
         for sequence_idx in range(len(val_len_container)):
             name = val_name_container[sequence_idx]
@@ -211,6 +227,8 @@ def main():
         val_word_df = val_word_df[val_word_df["idx"] > 0]
         val_word_df.to_pickle(dirpath / f"advanced_val_{K}.pkl")
         print(f"advanced_val_{K}.pkl dumped to {log_dir}")  # saved tokenization of validation set
+        proxy_centers_val.to_pickle(dirpath / f"proxy_centers_val_{K}.pkl")
+        print(f"proxy_centers_val_{K}.pkl dumped to {log_dir}")
 
 if __name__ == '__main__':
     main()
