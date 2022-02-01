@@ -169,6 +169,7 @@ def main():
             lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
             axis=1)
         proxy_centers_tr = tr_res_df.loc[tr_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers 
+        sorted_proxies_tr = tr_res_df.groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
         tr_word_df = pd.DataFrame(columns=["idx", "word", "length", "y", "name"])  # word index in home sequence
         for sequence_idx in range(len(tr_len_container)):
@@ -190,8 +191,12 @@ def main():
         tr_word_df = tr_word_df[tr_word_df["idx"] > 0]
         tr_word_df.to_pickle(dirpath / f"advanced_tr_{K}.pkl")
         print(f"advanced_tr_{K}.pkl dumped to {log_dir}")  # saved tokenization of training set
+        tr_res_df.to_pickle(dirpath / f"advanced_tr_res_{K}.pkl")
+        print(f"advanced_tr_res_{K}.pkl dumped to {log_dir}") # frame wise tokenization
         proxy_centers_tr.to_pickle(dirpath / f"proxy_centers_tr_{K}.pkl")
         print(f"proxy_centers_tr_{K}.pkl dumped to {log_dir}") # saved proxy centers
+        sorted_proxies_tr.to_pickle(dirpath / f"sorted_proxies_tr_{K}.pkl")
+        print(f"sorted_proxies_tr_{K}.pkl dumped to {log_dir}") # save sorted proxies
 
         # infer on validation set and save
         y = np.concatenate([np.ones((l,)) * i for i, l in enumerate(val_len_container)], axis=0)
@@ -206,6 +211,7 @@ def main():
             lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
             axis=1)
         proxy_centers_val = val_res_df.loc[val_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers 
+        sorted_proxies_val = val_res_df.groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
         val_word_df = pd.DataFrame(columns=["idx", "word", "length", "y", "name"])  # word index in home sequence
         for sequence_idx in range(len(val_len_container)):
@@ -227,8 +233,12 @@ def main():
         val_word_df = val_word_df[val_word_df["idx"] > 0]
         val_word_df.to_pickle(dirpath / f"advanced_val_{K}.pkl")
         print(f"advanced_val_{K}.pkl dumped to {log_dir}")  # saved tokenization of validation set
+        val_res_df.to_pickle(dirpath / f"advanced_val_res_{K}.pkl")
+        print(f"advanced_val_res_{K}.pkl dumped to {log_dir}") # frame wise tokenization
         proxy_centers_val.to_pickle(dirpath / f"proxy_centers_val_{K}.pkl")
-        print(f"proxy_centers_val_{K}.pkl dumped to {log_dir}")
+        print(f"proxy_centers_val_{K}.pkl dumped to {log_dir}") # saved proxy centers
+        sorted_proxies_val.to_pickle(dirpath / f"sorted_proxies_val_{K}.pkl")
+        print(f"sorted_proxies_val_{K}.pkl dumped to {log_dir}") # save sorted proxies
 
 if __name__ == '__main__':
     main()
