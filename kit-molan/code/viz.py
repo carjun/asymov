@@ -372,7 +372,7 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     else:
         assert NotImplementedError
 
-    n_j = n_j = len(joint_names)
+    n_j = len(joint_names)
 
     # Get color-spectrum for skeleton
     colors = get_joint_colors(joint_names)
