@@ -168,7 +168,11 @@ def main():
         tr_res_df['dist'] = tr_res_df[['feat_vec', 'cluster']].apply(
             lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
             axis=1)
+
         proxy_centers_tr = tr_res_df.loc[tr_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers 
+        proxy_centers_tr['keypoints3d'] = proxy_centers_tr[['frame_index','seq_name']].apply(   
+            lambda x: official_loader.load_keypoint3d(x['seq_name'])[x['frame_index']], axis=1)   #3d skeleton keypoints of the closest frame
+        
         sorted_proxies_tr = tr_res_df.groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
         tr_word_df = pd.DataFrame(columns=["idx", "word", "length", "y", "name"])  # word index in home sequence
@@ -189,12 +193,18 @@ def main():
                     current_len = 1
                 prev = cc
         tr_word_df = tr_word_df[tr_word_df["idx"] > 0]
+        
         tr_word_df.to_pickle(dirpath / f"advanced_tr_{K}.pkl")
         print(f"advanced_tr_{K}.pkl dumped to {log_dir}")  # saved tokenization of training set
+        
         tr_res_df.to_pickle(dirpath / f"advanced_tr_res_{K}.pkl")
         print(f"advanced_tr_res_{K}.pkl dumped to {log_dir}") # frame wise tokenization
-        proxy_centers_tr.to_pickle(dirpath / f"proxy_centers_tr_{K}.pkl")
+        
+        #don't need the complete dataframe
+        # proxy_centers_tr.to_pickle(dirpath / f"proxy_centers_tr_{K}.pkl")
+        proxy_centers_tr[['cluster', 'keypoints3d']].to_pickle(dirpath / f"proxy_centers_tr_{K}.pkl")
         print(f"proxy_centers_tr_{K}.pkl dumped to {log_dir}") # saved proxy centers
+        
         sorted_proxies_tr.to_pickle(dirpath / f"sorted_proxies_tr_{K}.pkl")
         print(f"sorted_proxies_tr_{K}.pkl dumped to {log_dir}") # save sorted proxies
 
@@ -231,14 +241,21 @@ def main():
                     current_len = 1
                 prev = cc
         val_word_df = val_word_df[val_word_df["idx"] > 0]
+        
         val_word_df.to_pickle(dirpath / f"advanced_val_{K}.pkl")
         print(f"advanced_val_{K}.pkl dumped to {log_dir}")  # saved tokenization of validation set
-        val_res_df.to_pickle(dirpath / f"advanced_val_res_{K}.pkl")
-        print(f"advanced_val_res_{K}.pkl dumped to {log_dir}") # frame wise tokenization
-        proxy_centers_val.to_pickle(dirpath / f"proxy_centers_val_{K}.pkl")
-        print(f"proxy_centers_val_{K}.pkl dumped to {log_dir}") # saved proxy centers
-        sorted_proxies_val.to_pickle(dirpath / f"sorted_proxies_val_{K}.pkl")
-        print(f"sorted_proxies_val_{K}.pkl dumped to {log_dir}") # save sorted proxies
+        
+        # not needed
+        # val_res_df.to_pickle(dirpath / f"advanced_val_res_{K}.pkl")
+        # print(f"advanced_val_res_{K}.pkl dumped to {log_dir}") # frame wise tokenization
+        
+        # not needed
+        # proxy_centers_val.to_pickle(dirpath / f"proxy_centers_val_{K}.pkl")
+        # print(f"proxy_centers_val_{K}.pkl dumped to {log_dir}") # saved proxy centers
+        
+        #not needed
+        # sorted_proxies_val.to_pickle(dirpath / f"sorted_proxies_val_{K}.pkl")
+        # print(f"sorted_proxies_val_{K}.pkl dumped to {log_dir}") # save sorted proxies
 
 if __name__ == '__main__':
     main()
