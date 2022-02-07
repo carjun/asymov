@@ -13,6 +13,7 @@ import pdb
 
 import random
 import numpy as np
+import pandas as pd
 import math
 import torch
 from torch.nn.functional import interpolate as intrp
@@ -26,61 +27,84 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 from pathlib import Path
+
+#TODO: change the import path to inside acton package
+from src.data.dataset import loader,utils
+from tqdm import tqdm
 import pdb
 
-sys.path.append('/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/src/')
-import dataUtils as dutils
-import data as d
-import kitml_utils
-sys.path.append('/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/src/common')
-import mmm
+# sys.path.append('/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/src/')
+# import dataUtils as dutils
+# import data as d
+# import kitml_utils
+# sys.path.append('/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/src/common')
+# import mmm
 
 
 """
 Visualize input and output motion sequences and labels
 """
 
-def get_smpl_skeleton():
-    ''' AC -- change the skeleton ordering so that you traverse
-    the joints in the following order: Left lower, Left upper,
-    Spine, Neck, Head, Right lower, Right upper.
-    '''
-    return np.array(
-        [
-            # Left lower
-            [ 0, 1 ],
-            [ 1, 4 ],
-            [ 4, 7 ],
-            [ 7, 10],
+#joint_names--------------------------------------------------------------------
 
-            # Left upper
-            [ 9, 13],
-            [13, 16],
-            [16, 18],
-            [18, 20],
-            # [20, 22],
+def get_smpl_joint_names():
+    # Joint names from SMPL Wiki
+    joint_names_map = {
+        0: 'Pelvis',
 
-            # Spinal column
-            [ 0, 3 ],
-            [ 3, 6 ],
-            [ 6, 9 ],
-            [ 9, 12],
-            [12, 15],
+        1: 'L_Hip',
+        4: 'L_Knee',
+        7: 'L_Ankle',
+        10: 'L_Foot',
 
-            # Right lower
-            [ 0, 2 ],
-            [ 2, 5 ],
-            [ 5, 8 ],
-            [ 8, 11],
+        2: 'R_Hip',
+        5: 'R_Knee',
+        8: 'R_Ankle',
+        11: 'R_Foot',
 
-            # Right upper
-            [ 9, 14],
-            [14, 17],
-            [17, 19],
-            [19, 21],
-            # [21, 23],
-        ])
+        3: 'Spine1',
+        6: 'Spine2',
+        9: 'Spine3',
+        12: 'Neck',
+        15: 'Head',
 
+        13: 'L_Collar',
+        16: 'L_Shoulder',
+        18: 'L_Elbow',
+        20: 'L_Wrist',
+        22: 'L_Hand',
+        14: 'R_Collar',
+        17: 'R_Shoulder',
+        19: 'R_Elbow',
+        21: 'R_Wrist',
+        23: 'R_Hand'}
+
+    # Return all joints except indices 22 (L_Hand), 23 (R_Hand)
+    return [joint_names_map[idx] for idx in range(len(joint_names_map)-2)]
+
+def get_kitml_joint_names():
+    return [
+            'root',     # 0
+            'BP',       # 1
+            'BT',       # 2
+            'BLN',      # 3
+            'BUN',      # 4
+            'LS',       # 5
+            'LE',       # 6
+            'LW',       # 7
+            'RS',       # 8
+            'RE',       # 9
+            'RW',       # 10
+            'LH',       # 11
+            'LK',       # 12
+            'LA',       # 13
+            'LMrot',    # 14
+            'LF',       # 15
+            'RH',       # 16
+            'RK',       # 17
+            'RA',       # 18
+            'RMrot',    # 19
+            'RF']       # 20
 
 def get_nturgbd_joint_names():
     '''From paper:
@@ -125,6 +149,66 @@ def get_nturgbd_joint_names():
 
     return [joint_names_map[idx] for idx in range(len(joint_names_map))]
 
+def get_coco17_joint_names():
+    '''
+    From loader.py in acton package
+    '''
+    return [
+        'nose', #0
+        'left_eye', 'right_eye', #1,2  
+        'left_ear', 'right_ear', #3,4
+        'left_shoulder', 'right_shoulder', #5,6 
+        'left_elbow', 'right_elbow', #7,8
+        'left_wrist', 'right_wrist', #9,10
+        'left_hip', 'right_hip', #11,12
+        'left_knee', 'right_knee', #13,14
+        'left_ankle', 'right_ankle' #15,16
+    ]
+
+#-------------------------------------------------------------------------------
+
+#joint_connectivity-------------------------------------------------------------
+
+def get_smpl_skeleton():
+    ''' AC -- change the skeleton ordering so that you traverse
+    the joints in the following order: Left lower, Left upper,
+    Spine, Neck, Head, Right lower, Right upper.
+    '''
+    return np.array(
+        [
+            # Left lower
+            [ 0, 1 ],
+            [ 1, 4 ],
+            [ 4, 7 ],
+            [ 7, 10],
+
+            # Left upper
+            [ 9, 13],
+            [13, 16],
+            [16, 18],
+            [18, 20],
+            # [20, 22],
+
+            # Spinal column
+            [ 0, 3 ],
+            [ 3, 6 ],
+            [ 6, 9 ],
+            [ 9, 12],
+            [12, 15],
+
+            # Right lower
+            [ 0, 2 ],
+            [ 2, 5 ],
+            [ 5, 8 ],
+            [ 8, 11],
+
+            # Right upper
+            [ 9, 14],
+            [14, 17],
+            [17, 19],
+            [19, 21],
+            # [21, 23],
+        ])
 
 def get_kitml_skeleton():
     return np.array([
@@ -158,43 +242,6 @@ def get_kitml_skeleton():
         [18, 19],
         [19, 20]
     ])
-
-
-def get_smpl_joint_names():
-    # Joint names from SMPL Wiki
-    joint_names_map = {
-        0: 'Pelvis',
-
-        1: 'L_Hip',
-        4: 'L_Knee',
-        7: 'L_Ankle',
-        10: 'L_Foot',
-
-        2: 'R_Hip',
-        5: 'R_Knee',
-        8: 'R_Ankle',
-        11: 'R_Foot',
-
-        3: 'Spine1',
-        6: 'Spine2',
-        9: 'Spine3',
-        12: 'Neck',
-        15: 'Head',
-
-        13: 'L_Collar',
-        16: 'L_Shoulder',
-        18: 'L_Elbow',
-        20: 'L_Wrist',
-        22: 'L_Hand',
-        14: 'R_Collar',
-        17: 'R_Shoulder',
-        19: 'R_Elbow',
-        21: 'R_Wrist',
-        23: 'R_Hand'}
-
-    # Return all joints except indices 22 (L_Hand), 23 (R_Hand)
-    return [joint_names_map[idx] for idx in range(len(joint_names_map)-2)]
-
 
 def get_nturgbd_skeleton():
     ''' AC -- change the skeleton ordering so that you traverse
@@ -244,30 +291,33 @@ def get_nturgbd_skeleton():
         ]
     )
 
+def get_coco17_skeleton():
+    '''
+    From visualizer.py in acton package
+    '''
+    return np.array([
+        #Left lower
+        [11, 13], [13, 15],
 
-def get_kitml_joint_names():
-    return [
-            'root',     # 0
-            'BP',       # 1
-            'BT',       # 2
-            'BLN',      # 3
-            'BUN',      # 4
-            'LS',       # 5
-            'LE',       # 6
-            'LW',       # 7
-            'RS',       # 8
-            'RE',       # 9
-            'RW',       # 10
-            'LH',       # 11
-            'LK',       # 12
-            'LA',       # 13
-            'LMrot',    # 14
-            'LF',       # 15
-            'RH',       # 16
-            'RK',       # 17
-            'RA',       # 18
-            'RMrot',    # 19
-            'RF']       # 20
+        #Left upper
+        [5, 7], [7, 9],
+
+        #Head
+        [0, 1], [0, 2],
+        [1, 3], [2, 4],
+
+        #Spine 
+        [5, 11], [6, 12], 
+        [5, 6], [11, 12], #bridging left and right
+
+        #Right lower
+        [12, 14], [14, 16],
+
+        #Right upper
+        [6, 8], [8, 10]
+    ])
+
+#-------------------------------------------------------------------------------
 
 
 def get_joint_colors(joint_names):
@@ -369,6 +419,9 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
         seq = seq[..., [0, 2, 1]]
         az = 60
         radius = 1.2
+    elif sk_type=='coco17':
+        joint_names = get_coco17_joint_names()
+        kin_chain = get_coco17_skeleton()
     else:
         assert NotImplementedError
 
@@ -379,7 +432,12 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     labels = [(joint_names[jidx[0]], joint_names[jidx[1]]) for jidx in kin_chain]
 
     # xroot, yroot, zroot = 0.0, 0.0, 0.0
-    xroot, yroot, zroot = seq[0, 0, 0], seq[0, 0, 1], seq[0, 0, 2]
+    if sk_type=='coco17':
+        xroot, yroot, zroot = 0.5*(seq[0,11] + seq[0,12])
+        seq=seq-np.array([[[xroot, yroot, zroot]]])
+        seq=seq/np.max(np.abs(seq))
+    else:
+        xroot, yroot, zroot = seq[0, 0, 0], seq[0, 0, 1], seq[0, 0, 2]
     # seq = seq - seq[0, :, :]
 
     # Change viewing angle so that first frame is in frontal pose
@@ -387,20 +445,16 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     # az = calc_angle_from_y(seq[0]-np.array([xroot, yroot, zroot]))
 
     # Viz. skeleton for each frame
-    for t in range(seq.shape[0]):
-
+    for t in tqdm(range(seq.shape[0]), desc='frames'):
+        # pdb.set_trace()
         # Fig. settings
         fig = plt.figure(figsize=(7, 6)) if debug else \
               plt.figure(figsize=(5, 5))
         ax = fig.add_subplot(111, projection='3d')
 
-        for i, (j1, j2) in enumerate(kin_chain):
-            # Store bones
-            x = np.array([seq[t, j1, 0], seq[t, j2, 0]])
-            y = np.array([seq[t, j1, 1], seq[t, j2, 1]])
-            z = np.array([seq[t, j1, 2], seq[t, j2, 2]])
-            # Plot bones in skeleton
-            ax.plot(x, y, z, c=colors[i], marker='o', linewidth=2, label=labels[i])
+        xroot, yroot, zroot = 0.5*(seq[t,11] + seq[t,12])
+        # seq[t] = seq[t] - [xroot, yroot, zroot]
+        
 
         # More figure settings
         ax.set_title(action)
@@ -411,8 +465,8 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
 
         # pdb.set_trace()
         ax.set_xlim3d(-radius + xroot, radius + xroot)
-        ax.set_ylim3d([-radius + yroot, radius + yroot])
-        ax.set_zlim3d([-radius + zroot, radius + zroot])
+        ax.set_ylim3d(-radius + yroot, radius + yroot)
+        ax.set_zlim3d(-radius + zroot, radius + zroot)
 
         if True==debug:
             ax.axis('on')
@@ -425,16 +479,25 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
             ax.set_xticklabels([])
             ax.set_zticklabels([])
 
-        cv2.waitKey(0)
-
         # ax.view_init(75, az)
         # ax.view_init(elev=20, azim=90+az)
-        ax.view_init(elev=-20, azim=az)
+        ax.view_init(elev=-90, azim=90)
         # ax.view_init(elev=110, azim=70)
-
         if True==debug:
             ax.legend(bbox_to_anchor=(1.1, 1), loc='upper right')
             pass
+
+        for i, (j1, j2) in enumerate(kin_chain):
+            # Store bones
+            x = np.array([seq[t, j1, 0], seq[t, j2, 0]])#-xroot
+            y = np.array([seq[t, j1, 1], seq[t, j2, 1]])#-yroot
+            z = np.array([seq[t, j1, 2], seq[t, j2, 2]])#-zroot
+            # Plot bones in skeleton
+            ax.plot(x, y, z, c=colors[i], marker='o', linewidth=2, label=labels[i])
+            pass
+            
+        # pdb.set_trace()
+        cv2.waitKey(0)
 
         # fig.savefig(osp.join(folder_p, 'frames', '{1}_{0}.jpg'.format(t, ii)))
         fig.savefig(osp.join(folder_p, 'frames', '{0}.jpg'.format(t)))
@@ -476,6 +539,8 @@ def viz_seq(seq, folder_p, sk_type, debug=False):
     Return:
         None. Path of mp4 video: folder_p/video.mp4
     '''
+    # pdb.set_trace()
+
     # Delete folder if exists
     if osp.exists(folder_p):
         print('Deleting existing folder ', folder_p)
@@ -486,7 +551,7 @@ def viz_seq(seq, folder_p, sk_type, debug=False):
 
     # Dump frames into folder. Args: (data, radius, frames path)
     viz_skeleton(seq, folder_p=folder_p, sk_type=sk_type, radius=1.2, debug=debug)
-    if sk_type == 'kitml':
+    if sk_type == 'kitml' or sk_type == 'coco17':
         write_vid_from_imgs(folder_p, 60.0)
     else:
         write_vid_from_imgs(folder_p, 30.0)
@@ -598,6 +663,7 @@ def debug_viz_kitml_seq():
         # Viz. "values" (joint positions?)
         viz_seq(seq, './test_viz/{}_orig_format'.format(sid), 'kitml', debug=True)
 
+#specific_skeleton_viz----------------------------------------------------------
 
 def viz_kitml_seq():
     '''
@@ -620,4 +686,44 @@ def viz_kitml_seq():
         # Viz. "values" (joint positions?)
         viz_seq(seq, './test_viz/{}'.format(sid), 'kitml', debug=True)
 
-viz_kitml_seq()
+def viz_aistpp_seq():
+    '''
+    '''
+    d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
+    keypoints3d=d.load_keypoint3d('gWA_sFM_cAll_d27_mWA2_ch21')
+
+    frames_dir='/content/drive/Shareddrives/vid tokenization/frames2'
+    viz_seq(keypoints3d, frames_dir, 'coco17', debug=True)
+
+#-------------------------------------------------------------------------------
+
+#cluster_seq2vid----------------------------------------------------------------
+
+def cluster_seq2vid(cluster_seq, cluster2keypoint_mapping_path, frames_dir, sk_type):
+    '''
+    Maps sequence of clusters to proxy center keypoints and visualizes into an mp4 video.
+
+    Args:
+        cluster_seq : Array of cluster indices per frame
+        cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
+        frames_dir : Path to root folder that will contain frames folder
+        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+
+    Return:
+        None. Path of mp4 video: folder_p/video.mp4
+    '''
+
+    cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
+    skeleton_keypoints = np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]) 
+    viz_seq(skeleton_keypoints, frames_dir, sk_type, debug=False)
+
+#-------------------------------------------------------------------------------
+
+if __name__ == '__main__':
+    # viz_kitml_seq()
+    viz_aistpp_seq()
+    # d = pd.read_pickle('/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_res_150.pkl')
+    # cluster_seq = d[d['seq_name']=='gWA_sFM_cAll_d25_mWA2_ch03']['cluster']
+
+    # cluster_seq2vid(cluster_seq[:500], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl', '/content/drive/Shareddrives/vid tokenization/seq2vid', 'coco17')
+
