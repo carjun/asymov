@@ -200,13 +200,13 @@ def main():
         tr_res_df.to_pickle(dirpath / f"advanced_tr_res_{K}.pkl")
         print(f"advanced_tr_res_{K}.pkl dumped to {log_dir}") # frame wise tokenization
         
-        #don't need the complete dataframe
-        # proxy_centers_tr.to_pickle(dirpath / f"proxy_centers_tr_{K}.pkl")
+        proxy_centers_tr.to_pickle(dirpath / f"proxy_centers_tr_complete_{K}.pkl")
+        print(f"proxy_centers_tr_complete_{K}.pkl dumped to {log_dir}") # saved complete proxy cluster center info 
         proxy_centers_tr[['cluster', 'keypoints3d']].to_pickle(dirpath / f"proxy_centers_tr_{K}.pkl")
-        print(f"proxy_centers_tr_{K}.pkl dumped to {log_dir}") # saved proxy centers
+        print(f"proxy_centers_tr_{K}.pkl dumped to {log_dir}") # saved proxy centers to feature vector mapping
         
         sorted_proxies_tr.to_pickle(dirpath / f"sorted_proxies_tr_{K}.pkl")
-        print(f"sorted_proxies_tr_{K}.pkl dumped to {log_dir}") # save sorted proxies
+        print(f"sorted_proxies_tr_{K}.pkl dumped to {log_dir}") # saved sorted proxies
 
         # infer on validation set and save
         y = np.concatenate([np.ones((l,)) * i for i, l in enumerate(val_len_container)], axis=0)
@@ -255,7 +255,7 @@ def main():
         
         #not needed
         # sorted_proxies_val.to_pickle(dirpath / f"sorted_proxies_val_{K}.pkl")
-        # print(f"sorted_proxies_val_{K}.pkl dumped to {log_dir}") # save sorted proxies
+        # print(f"sorted_proxies_val_{K}.pkl dumped to {log_dir}") # saved sorted proxies
 
 if __name__ == '__main__':
     main()
