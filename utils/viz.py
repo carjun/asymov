@@ -699,29 +699,30 @@ def viz_aistpp_seq():
 
 #cluster2vid--------------------------------------------------------------------
 
-def aistpp_cluster2vid(cluster_idx, proxy_center_info_path, frames_dir, support_frames_count=20):
+def aistpp_cluster2vid(clusters_idx, proxy_center_info_path, frames_dir, support_frames_count=20):
     '''
-    cluster_idx : cluster index to visualize
+    clusters_idx : cluster indices to visualize
     proxy_center_info_path : path to pickled Dataframe containing sequence name and frame of proxy centers
     support_frames_count : maximum number of frames before and after the one corresponding proxy center, defaults to 60
     frames_dir : Path to root folder that will contain frames folder
 
     Return:
-        None. Path of mp4 video: frames_dir/video.mp4
+        None. Path of mp4 video: frames_dir/{cluster_idx}/video.mp4
     '''
 
     #get proxy center info
     proxy_center_info = pd.read_pickle(proxy_center_info_path)
-    center_frame_idx, seq_name = proxy_center_info.loc[cluster_idx, ['frame_index', 'seq_name']]
+    center_frames_idx, seq_names = proxy_center_info.loc[clusters_idx, 'frame_index'], proxy_center_info.loc[clusters_idx, 'seq_name']
 
     #get keypoints to visualize
     #TODO : change the path to official loader
     d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
-    seq_complete = d.load_keypoint3d(seq_name)
-    seq = seq_complete[max(0, center_frame_idx-support_frames_count):min(seq_complete.shape[0], center_frame_idx+support_frames_count+1)]
-    
-    #visualize the required fragment of complete sequence
-    viz_seq(seq, frames_dir, 'coco17', debug=False)
+    for cluster_idx, center_frame_idx, seq_name in tqdm(zip(clusters_idx, center_frames_idx, seq_names), desc='clusters'):
+        seq_complete = d.load_keypoint3d(seq_name)
+        seq = seq_complete[max(0, center_frame_idx-support_frames_count):min(seq_complete.shape[0], center_frame_idx+support_frames_count+1)]
+        
+        #visualize the required fragment of complete sequence
+        viz_seq(seq, ospj(frames_dir, str(cluster_idx)), 'coco17', debug=False)
 
 #-------------------------------------------------------------------------------
 
@@ -755,5 +756,5 @@ if __name__ == '__main__':
     # cluster_seq = d[d['seq_name']=='gWA_sFM_cAll_d25_mWA2_ch03']['cluster']
     # cluster_seq2vid(cluster_seq[:500], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl', '/content/drive/Shareddrives/vid tokenization/seq2vid', 'coco17')
 
-    aistpp_cluster2vid(0, '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl', '/content/drive/Shareddrives/vid tokenization/cluster2vid')
+    aistpp_cluster2vid([i for i in range(150)], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl', '/content/drive/Shareddrives/vid tokenization/cluster2vid')
 
