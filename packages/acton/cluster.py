@@ -175,7 +175,7 @@ def main():
         
         sorted_proxies_tr = tr_res_df.groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
-        tr_word_df = pd.DataFrame(columns=["idx", "word", "length", "y", "name"])  # word index in home sequence
+        tr_word_df = pd.DataFrame(columns=["idx", "cluster", "length", "y", "name"])  # word index in home sequence
         for sequence_idx in range(len(tr_len_container)):
             name = tr_name_container[sequence_idx]
             cluster_seq = list(cluster_l[tr_where_to_cut[sequence_idx]: tr_where_to_cut[sequence_idx + 1]]) + [-1, ]
@@ -187,7 +187,7 @@ def main():
                     current_len += 1
                 else:
                     tr_word_df = tr_word_df.append(
-                        {"idx": int(running_idx), "word": lexicon[prev], "length": current_len, "y": sequence_idx,
+                        {"idx": int(running_idx), "cluster": prev, "length": current_len, "y": sequence_idx,
                          "name": name}, ignore_index=True)
                     running_idx += 1
                     current_len = 1
@@ -223,7 +223,7 @@ def main():
         proxy_centers_val = val_res_df.loc[val_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers 
         sorted_proxies_val = val_res_df.groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
-        val_word_df = pd.DataFrame(columns=["idx", "word", "length", "y", "name"])  # word index in home sequence
+        val_word_df = pd.DataFrame(columns=["idx", "cluster", "length", "y", "name"])  # word index in home sequence
         for sequence_idx in range(len(val_len_container)):
             name = val_name_container[sequence_idx]
             cluster_seq = list(cluster_l[val_where_to_cut[sequence_idx]: val_where_to_cut[sequence_idx + 1]]) + [-1, ]
@@ -235,7 +235,7 @@ def main():
                     current_len += 1
                 else:
                     val_word_df = val_word_df.append(
-                        {"idx": int(running_idx), "word": lexicon[prev], "length": current_len, "y": sequence_idx,
+                        {"idx": int(running_idx), "cluster": prev, "length": current_len, "y": sequence_idx,
                          "name": name}, ignore_index=True)
                     running_idx += 1
                     current_len = 1
