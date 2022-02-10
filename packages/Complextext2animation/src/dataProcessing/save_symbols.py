@@ -32,7 +32,7 @@ def get_symbols(rifke):
     T = len(rifke)
 
     # Stub. TODO: Implement actual code.
-    l_sym = 33 + np.zeros(T, dtype=int)
+    l_sym = np.array((range(T)), dtype=int)
     return l_sym
 
 
@@ -46,6 +46,7 @@ def write_symbols(l_sym, sym_fn):
 
 def add_symbol_data_to_dataset():
 
+    pdb.set_trace()
     # Get paths for all files
     df = pd.read_hdf('./data.h5', 'df')
     l_fns = df['rifke']
@@ -58,7 +59,7 @@ def add_symbol_data_to_dataset():
         rifke_fn = ospj(D_FOLDER, ospb(f))
         sym_fn = rifke_fn.replace('rifke', 'sym')
 
-        if not os.path.exists(sym_fn):
+        if True:  # not os.path.exists(sym_fn):
             # get symbols
             rifke = read_rifke(rifke_fn)
             l_sym = get_symbols(rifke)
@@ -69,6 +70,6 @@ def add_symbol_data_to_dataset():
 
     # Save new dataframe. Commented for now to prevent accidental overwrite.
     df['symbol'] = l_sym_fns
-    # df.to_hdf('./data.h5', key='df', mode='w')
+    df.to_hdf('./data.h5', key='df', mode='w')
 
 add_symbol_data_to_dataset()
