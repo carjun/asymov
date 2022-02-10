@@ -20,6 +20,7 @@ from tqdm import tqdm
 import copy
 import pdb
 import pickle
+from collections import defaultdict
 
 
 def train(args, exp_num):
@@ -62,7 +63,7 @@ def train(args, exp_num):
     desc = args.desc
     split = (args.train_frac, args.dev_frac)
     idx_dependent = args.idx_dependent
-    batch_size = args.batch_size
+    b_sz = args.batch_size
     time = args.time
     global chunks
     chunks = args.chunks
@@ -82,7 +83,7 @@ def train(args, exp_num):
     data_obj = None
     if args.dobj_path is None:
         data_obj = Data(path2data, dataset, lmksSubset, desc,
-                    split, batch_size=batch_size,
+                    split, batch_size=b_sz,
                     time=time,
                     chunks=chunks,
                     offset=offset,
@@ -119,18 +120,17 @@ def train(args, exp_num):
                                  vocab_size=args.vocab_size,
                                  Seq2SeqKwargs=modelKwargs,
                                  load=args.load).to(device).double()
+
+    BCE = nn.BCELoss()
+
     optim_gen = torch.optim.Adam(generator.parameters(), lr=args.lr)
-    optim_dis = torch.optim.Adam(discriminator.parameters(), lr=args.lr)
+    optim_disc = torch.optim.Adam(discriminator.parameters(), lr=args.lr)
+    scheduler = lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
 
     print('Model Created')
     print("Model's state_dict:")
     for param_tensor in generator.state_dict():
         print(param_tensor, "\t", generator.state_dict()[param_tensor].size())
-
-    gan_loss_function = nn.BCELoss()
-
-    # LR scheduler
-    scheduler = lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
 
     # Transforms
     columns = get_columns(feats_kind, data_obj)
@@ -140,14 +140,19 @@ def train(args, exp_num):
                      mask, feats_kind, dataset, f_new)
 
     def loop_train(generator, discriminator, data, epoch=0):
-        running_loss = 0
-        running_count = 0
+        '''Local method -- one epoch of training. Forward and Backward.'''
+
         generator.train()
         discriminator.train()
 
-        Tqdm = tqdm(data, desc='train' +
-                    ' {:.10f}'.format(0), leave=False, ncols=50)
+        # Logging
+        iter_loss = defaultdict(list)
+
+        Tqdm = tqdm(data, desc='train {:.10f}'.format(0), leave=False, ncols=50)
         for count, batch in enumerate(Tqdm):
+
+            # Prep. data
+            # -------------
             X, Y, s2v = batch['input'], batch['output'], batch['desc']
             pose, trajectory, start_trajectory = X
             pose_gt, trajectory_gt, start_trajectory_gt = Y
@@ -170,73 +175,83 @@ def train(args, exp_num):
                 x = (pose/12).type(torch.cuda.LongTensor)
                 y = (pose_gt/12).type(torch.cuda.LongTensor)
 
-            # Discriminator training
-            optim_dis.zero_grad()
-            fake_samples_labels = torch.zeros(
-                (batch_size, 1)).to(device='cuda').double()
-            real_samples_labels = torch.ones(
-                (batch_size, 1)).to(device='cuda').double()
-            all_samples_labels = torch.cat(
-                (real_samples_labels, fake_samples_labels))
+            # Train Disc.
+            # -------------------
+            optim_disc.zero_grad()
 
+            # Create label vector = [real labels, fake labels]
+            real_ls = torch.ones((b_sz, 1)).to(device='cuda').double()
+            fake_ls = torch.zeros((b_sz, 1)).to(device='cuda').double()
+            all_ls = torch.cat((real_ls, fake_ls))
+
+            # Create samples = [real data, fake data]
             p_hat_l, _ = generator(x, y, s2v, lmb, train=True)
             sym_hat_l = torch.argmax(p_hat_l, dim=-1)
             all_samples = torch.cat((y.squeeze(), sym_hat_l))
 
-            output_discriminator = discriminator(all_samples)
-            loss_discriminator = 0.001 * \
-                gan_loss_function(output_discriminator, all_samples_labels)
-            # Tqdm.set_description(desc+'Discriminator Loss: {:.8f}'.format(loss_discriminator/running_count ))
-            loss_discriminator.backward()
-            optim_dis.step()
+            # Disc. forward pass
+            out_disc = discriminator(all_samples)
 
-            # Generator training
+            # Disc. loss
+            loss_disc = 0.001 * BCE(out_disc, all_ls)
+            iter_loss['disc'].append(loss_disc.item())
+
+            # Disc. backward pass
+            loss_disc.backward()
+            optim_disc.step()
+
+            # Train Gen.
+            # -------------------
             optim_gen.zero_grad()
-            p_hat_l, internal_losses = generator(x, y, s2v, lmb, train=True)
+
+            # Gen. forward pass
+            p_hat_l, loss_int_gen = generator(x, y, s2v, lmb, train=True)
             sym_hat_l = torch.argmax(p_hat_l, dim=-1)
-            output_discriminator_generated = discriminator(sym_hat_l)
-            loss_generator = 0.001 * \
-                gan_loss_function(
-                    output_discriminator_generated, real_samples_labels)
+            out_disc_fake = discriminator(sym_hat_l)
 
-            loss_ = loss_generator.item()
-            for loss_type in internal_losses:
-                loss_generator += internal_losses[loss_type]
-                loss_ += internal_losses[loss_type].item()
+            # Gen. loss
+            loss_gen = 0.001*BCE(out_disc_fake, real_ls)
+            iter_loss['gen'].append(loss_gen.item())
+            for lt in loss_int_gen:
+                loss_gen += loss_int_gen[lt]
+                iter_loss[lt].append(loss_int_gen[lt].item())
+            iter_loss['gen_full'].append(loss_gen.item())
 
-            running_count += np.prod(y.shape)
-            running_loss += loss_
-
-            # update tqdm
-            Tqdm.set_description('Train Generator {:.8f} Discriminator {:.8f}'.format(
-                running_loss/running_count, loss_discriminator))
-            Tqdm.refresh()
-
-            # These lines are required loss.backward and optimizer.step
-            loss_generator.backward()
+            # Gen. backward pass
+            loss_gen.backward()
             optim_gen.step()
+
+            # Update tqdm with losses for this iteration
+            Tqdm.set_description('Train Gen. {:.4f} Disc. {:.4f}'.format(
+                    np.mean(iter_loss['gen_full']), np.mean(iter_loss['disc'])))
+            Tqdm.refresh()
 
             x = x.detach()
             y = y.detach()
-            loss_generator = loss_generator.detach()
-            loss_discriminator = loss_discriminator.detach()
+            loss_gen = loss_gen.detach()
+            loss_disc = loss_disc.detach()
             p_hat_l = p_hat_l.detach()
             sym_hat_l = sym_hat_l.detach()
+            del loss_int_gen
 
-            # internal_losses = [i.detach() for i in internal_losses]
-            if count >= 0 and args.debug:  # debugging by overfitting
+            # Debugging by overfitting to one batch
+            if count >= 0 and args.debug:
                 break
 
-        return running_loss/running_count
+        return iter_loss
 
     def loop_eval(generator, discriminator, data, epoch=0):
-        running_loss = 0
-        running_count = 0
+        '''Eval. Only forward pass. Also log the losses.'''
         generator.eval()
         discriminator.eval()
-        Tqdm = tqdm(data, desc='eval' +
-                    ' {:.10f}'.format(0), leave=False, ncols=50)
+
+        iter_loss = defaultdict(list)
+
+        Tqdm = tqdm(data, desc='eval {:.10f}'.format(0), leave=False, ncols=50)
         for count, batch in enumerate(Tqdm):
+
+            # Prep. data
+            # ------------
             X, Y, s2v = batch['input'], batch['output'], batch['desc']
             pose, trajectory, start_trajectory = X
             pose_gt, trajectory_gt, start_trajectory_gt = Y
@@ -258,55 +273,49 @@ def train(args, exp_num):
                 x = (pose/12).type(torch.cuda.LongTensor)
                 y = (pose_gt/12).type(torch.cuda.LongTensor)
 
-            # Discriminator
-            fake_samples_labels = torch.zeros(
-                (batch_size, 1)).to(device='cuda').double()
-            real_samples_labels = torch.ones(
-                (batch_size, 1)).to(device='cuda').double()
-            all_samples_labels = torch.cat(
-                (real_samples_labels, fake_samples_labels))
+            # Disc: Create label vector = [real labels, fake labels]
+            real_ls = torch.ones((b_sz, 1)).to(device='cuda').double()
+            fake_ls = torch.zeros((b_sz, 1)).to(device='cuda').double()
+            all_ls = torch.cat((real_ls, fake_ls))
 
-            # yhat (fake samples) <= generator forward pass
+            # Disc: Create samples = [real data, fake data]
             p_hat_l, _ = generator(x, y, s2v, lmb, train=False)
             sym_hat_l = torch.argmax(p_hat_l, dim=-1)
             all_samples = torch.cat((y.squeeze(), sym_hat_l))
 
-            output_discriminator = discriminator(all_samples)
-            loss_discriminator = 0.001 * \
-                gan_loss_function(output_discriminator, all_samples_labels)
+            # Disc. forward pass
+            out_disc = discriminator(all_samples)
+            loss_disc = 0.001 * BCE(out_disc, all_ls)
+            iter_loss['disc'].append(loss_disc.item())
 
-            # Generator
-            p_hat_l, internal_losses = generator(x, y, s2v, lmb, train=False)
+            # Gen. forward pass
+            p_hat_l, loss_int_gen = generator(x, y, s2v, lmb, train=False)
             sym_hat_l = torch.argmax(p_hat_l, dim=-1)
-            output_discriminator_generated = discriminator(sym_hat_l)
-            loss_generator = 0.001 * \
-                gan_loss_function(
-                    output_discriminator_generated, real_samples_labels)
+            out_disc_fake = discriminator(sym_hat_l)
+            loss_gen = 0.001 * BCE(out_disc_fake, real_ls)
+            iter_loss['gen'].append(loss_gen.item())
+            for lt in loss_int_gen:
+                loss_gen += loss_int_gen[lt]
+                iter_loss[lt].append(loss_int_gen[lt].item())
+            iter_loss['gen_full'].append(loss_gen.item())
 
-            loss_ = loss_generator.item()
-            for loss_type in internal_losses:
-                loss_generator += internal_losses[loss_type]
-                loss_ += internal_losses[loss_type].item()
-
-            running_count += np.prod(y.shape)
-            running_loss += loss_
             # update tqdm
-            Tqdm.set_description('Validation Generator {:.8f} : Discriminator {:.8f}'.format(
-                running_loss/running_count, loss_discriminator))
+            Tqdm.set_description('Val. Gen. {:.8f} : Disc. {:.8f}'.format(
+                np.mean(iter_loss['gen_full']), np.mean(iter_loss['disc'])))
             Tqdm.refresh()
 
             x = x.detach()
             y = y.detach()
-            loss_generator = loss_generator.detach()
-            loss_discriminator = loss_discriminator.detach()
+            loss_gen = loss_gen.detach()
+            loss_disc = loss_disc.detach()
             p_hat_l = p_hat_l.detach()
             sym_hat_l = sym_hat_l.detach()
 
-            # internal_losses = [i.detach() for i in internal_losses]
-            if count >= 0 and args.debug:  # debugging by overfitting
+            # Debugging by overfitting
+            if count >= 0 and args.debug:
                 break
 
-        return running_loss/running_count
+        return iter_loss
 
     num_epochs = args.num_epochs
     time_list = []
@@ -318,17 +327,34 @@ def train(args, exp_num):
     time_list.append(time)
     tqdm.write('Training up to time: {}'.format(time_list[time_list_idx]))
 
+
+    best_val_loss, best_epoch = np.inf, -1
+
     # Training Loop
     for epoch in tqdm(range(num_epochs), ncols=50):
-        train_loss = loop_train(generator, discriminator, train, epoch=epoch)
-        dev_loss = loop_eval(generator, discriminator, dev, epoch=epoch)
-        test_loss = loop_eval(generator, discriminator, test, epoch=epoch)
+
+        spl_loss = {spl: defaultdict(float) for spl in ['train', 'val', 'test']}
+        spl_loss['train'] = loop_train(generator, discriminator, train, epoch=epoch)
+        spl_loss['val'] = loop_eval(generator, discriminator, dev, epoch=epoch)
+        spl_loss['test'] = loop_eval(generator, discriminator, test, epoch=epoch)
         scheduler.step()  # Change the Learning Rate
 
+        # Log in wandb
+        wb_dict = {}
+        for spl in ['train', 'val', 'test']:
+            wb_dict = log_wb(spl_loss[spl], spl, wb_dict)
+        if wb_dict['val_gen_full'] < best_val_loss:
+            best_val_loss = wb_dict['val_gen_full']
+            best_epoch = epoch
+            wandb.run.summary['best_val_gen_full'] = best_val_loss
+            wandb.run.summary['best_val_gen_full_epoch'] = best_epoch
+        wandb.log(wb_dict, step=epoch)
+
         # save results
-        book.update_res({'epoch': epoch, 'train': train_loss,
-                         'dev': dev_loss, 'test': test_loss})
-        book._save_res()
+        book.update_res({   'epoch': epoch,
+                            'train': wb_dict['train_gen_full'],
+                            'dev': wb_dict['val_gen_full'],
+                            'test': wb_dict['test_gen_full']})
 
         # print results
         book.print_res(epoch, key_order=[
@@ -345,6 +371,12 @@ def train(args, exp_num):
                 data_obj.update_dataloaders(time_)
                 tqdm.write('Training up to time: {}'.format(time_))
 
+
+def log_wb(iter_loss, spl, wb_dict):
+    '''Wandb logging utils.'''
+    for lt in iter_loss:
+        wb_dict['{0}_{1}'.format(spl, lt)] = np.mean(iter_loss[lt])
+    return wb_dict
 
 if __name__ == '__main__':
     argparseNloop(train)
