@@ -193,7 +193,7 @@ def train(args, exp_num):
             out_disc = discriminator(all_samples)
 
             # Disc. loss
-            loss_disc = 0.001 * BCE(out_disc, all_ls)
+            loss_disc = args.lmb_D * BCE(out_disc, all_ls)
             iter_loss['disc'].append(loss_disc.item())
 
             # Disc. backward pass
@@ -210,7 +210,7 @@ def train(args, exp_num):
             out_disc_fake = discriminator(sym_hat_l)
 
             # Gen. loss
-            loss_gen = 0.001*BCE(out_disc_fake, real_ls)
+            loss_gen = args.lmb_G * BCE(out_disc_fake, real_ls)
             iter_loss['gen'].append(loss_gen.item())
             for lt in loss_int_gen:
                 loss_gen += loss_int_gen[lt]
@@ -285,14 +285,14 @@ def train(args, exp_num):
 
             # Disc. forward pass
             out_disc = discriminator(all_samples)
-            loss_disc = 0.001 * BCE(out_disc, all_ls)
+            loss_disc = args.lmb_D * BCE(out_disc, all_ls)
             iter_loss['disc'].append(loss_disc.item())
 
             # Gen. forward pass
             p_hat_l, loss_int_gen = generator(x, y, s2v, lmb, train=False)
             sym_hat_l = torch.argmax(p_hat_l, dim=-1)
             out_disc_fake = discriminator(sym_hat_l)
-            loss_gen = 0.001 * BCE(out_disc_fake, real_ls)
+            loss_gen = args.lmb_G * BCE(out_disc_fake, real_ls)
             iter_loss['gen'].append(loss_gen.item())
             for lt in loss_int_gen:
                 loss_gen += loss_int_gen[lt]
