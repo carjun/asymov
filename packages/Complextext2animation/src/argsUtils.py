@@ -21,6 +21,8 @@ def argparseNloop(loop):
                         help='name of the dataset')
     parser.add_argument('-path2data', nargs='+', type=str, default=['../dataset/kit-mocap'],
                         help='path to data')
+    parser.add_argument('-dobj_path', nargs='+', type=str, default=[None],
+                        help='path to data obj stored on disk')
     parser.add_argument('-train_frac', nargs='+', type=float, default=[0.6],
                         help='Fraction of data to be used for training')
     parser.add_argument('-dev_frac', nargs='+', type=float, default=[0.2],
@@ -31,6 +33,10 @@ def argparseNloop(loop):
                         help='minibatch size. Use batch_size=1 when using time=0')
     parser.add_argument('-time', nargs='+', type=int, default=[32],
                         help='time steps. time=0 gives the full sequence. Use with batch_size=1')
+    parser.add_argument('-vocab_size', nargs='+', type=int, default=[500],
+                        help='Number of motion tokens in dataset.')
+    parser.add_argument('-embed_size', nargs='+', type=int, default=[64],
+                        help='Embedding size. Currently matches feature size of entire pose vector.')
     parser.add_argument('-chunks', nargs='+', type=int, default=[1],
                         help='chunks of time steps. to be used with language inputs')
     parser.add_argument('-offset', nargs='+', type=int, default=[0],
@@ -110,6 +116,18 @@ def argparseNloop(loop):
     # optimization paramters
     parser.add_argument('-lr', nargs='+', type=float, default=[0.001],
                         help='learning rate')
+
+    # Loss hyper-params
+    parser.add_argument('-lmb_vel', nargs='+', type=float, default=[0.1],
+                        help='Weight on velocity loss (computed between pose embeddings of successive frames).')
+    parser.add_argument('-lmb_rec_pemb', nargs='+', type=float, default=[1.0],
+                        help='Weight on reconstruction loss of pose embeddings.')
+    parser.add_argument('-lmb_rec_sym', nargs='+', type=float, default=[0.001],
+                        help='Weight on reconstruction loss of motion symbols.')
+    parser.add_argument('-lmb_z_lang', nargs='+', type=float, default=[0.1],
+                        help='Weight on motion representation consistency loss.')
+    parser.add_argument('-lmb_z_motion', nargs='+', type=float, default=[0.001],
+                        help='Weight on motion representation consistency loss.')
 
     # dataProcessing/augmentDataset.py parameters
     parser.add_argument('-angles', nargs='+', type=literal_eval, default=[[90]],
