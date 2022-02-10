@@ -128,6 +128,10 @@ def argparseNloop(loop):
                         help='Weight on motion representation consistency loss.')
     parser.add_argument('-lmb_z_motion', nargs='+', type=float, default=[0.001],
                         help='Weight on motion representation consistency loss.')
+    parser.add_argument('-lmb_G', nargs='+', type=float, default=[0.001],
+                        help='Weight on Generator loss (due to Discriminator).')
+    parser.add_argument('-lmb_D', nargs='+', type=float, default=[0.001],
+                        help='Weight on Discriminator loss (Real vs. fake classification).')
 
     # dataProcessing/augmentDataset.py parameters
     parser.add_argument('-angles', nargs='+', type=literal_eval, default=[[90]],
