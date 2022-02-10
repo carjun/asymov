@@ -40,7 +40,7 @@ class CausalConv1d(torch.nn.Conv1d):
 class Integrator(nn.Module):
     '''
     A velocity integrator.
-    If we have displacement values for translation and such, and we know the exact timesteps of the signal, 
+    If we have displacement values for translation and such, and we know the exact timesteps of the signal,
     we can calculate the global values efficiently using a convolutional layer with weights set to 1 and kernel_size=timesteps
 
     Note: this method will not work for realtime scenarios. Although, it is efficient enough to keep adding displacements over time
@@ -137,7 +137,8 @@ class PoseEncoder(nn.Module):
             2*h2, h3, num_layers=num_layers, batch_first=True)
 
     def forward(self, P_in):
-        # poseinput is of shape [b,t,63]
+        # FIXME poseinput is of shape [b,t,63].
+        # P_in shape => (b, T, 64)
 
         # P_in, h = self.rnn(pose_input)
         right_arm = P_in[..., 22:31]
@@ -230,11 +231,77 @@ class VelDecoderCell(nn.Module):
                  torso_3_layer1 + torso_4_layer1)/4.
         torso_trunk = torso[..., :13]
         torso_root = torso[..., -3:]
+
         pred = torch.cat(
             (torso_trunk, left_arm_layer1, right_arm_layer1,
              left_leg_layer1, right_leg_layer1, torso_root), dim=-1)
 
         return pred
+
+
+class VelSymDecoderCell(nn.Module):
+    def __init__(self, h1, h2, h3, embed_size, vocab_size):
+        super(VelSymDecoderCell, self).__init__()
+        self.layer1_rarm_dec = nn.Linear(h1, 9)
+        self.layer1_larm_dec = nn.Linear(h1, 9)
+        self.layer1_rleg_dec = nn.Linear(h1, 15)
+        self.layer1_lleg_dec = nn.Linear(h1, 15)
+        self.layer1_torso_dec = nn.Linear(h1, 16)
+
+        self.layer2_rarm_dec = nn.Linear(h2, 2*h1)
+        self.layer2_larm_dec = nn.Linear(h2, 2*h1)
+        self.layer2_rleg_dec = nn.Linear(h2, 2*h1)
+        self.layer2_lleg_dec = nn.Linear(h2, 2*h1)
+
+        self.layer3_arm_dec = nn.Linear(h3, 2*h2)
+        self.layer3_leg_dec = nn.Linear(h3, 2*h2)
+
+        self.classifier = nn.Linear(embed_size, vocab_size)
+
+    def forward(self, h_upper, h_lower):
+        upper_body = self.layer3_arm_dec(h_upper)
+        lower_body = self.layer3_leg_dec(h_lower)
+        layer2_shape = int(upper_body.shape[-1]/2)
+
+        right_arm_layer2 = self.layer2_rarm_dec(upper_body[..., :layer2_shape])
+        left_arm_layer2 = self.layer2_larm_dec(upper_body[..., -layer2_shape:])
+        right_leg_layer2 = self.layer2_rleg_dec(lower_body[..., :layer2_shape])
+        left_leg_layer2 = self.layer2_lleg_dec(lower_body[..., -layer2_shape:])
+
+        layer1_shape = int(right_arm_layer2.shape[-1]/2)
+
+        right_arm_layer1 = self.layer1_rarm_dec(
+            right_arm_layer2[..., :layer1_shape])
+        torso_1_layer1 = self.layer1_torso_dec(
+            right_arm_layer2[..., -layer1_shape:])
+
+        left_arm_layer1 = self.layer1_larm_dec(
+            left_arm_layer2[..., :layer1_shape])
+        torso_2_layer1 = self.layer1_torso_dec(
+            left_arm_layer2[..., -layer1_shape:])
+
+        right_leg_layer1 = self.layer1_rleg_dec(
+            right_leg_layer2[..., :layer1_shape])
+        torso_3_layer1 = self.layer1_torso_dec(
+            right_leg_layer2[..., -layer1_shape:])
+
+        left_leg_layer1 = self.layer1_lleg_dec(
+            left_leg_layer2[..., :layer1_shape])
+        torso_4_layer1 = self.layer1_torso_dec(
+            left_leg_layer2[..., -layer1_shape:])
+        torso = (torso_1_layer1 + torso_2_layer1 +
+                 torso_3_layer1 + torso_4_layer1)/4.
+        torso_trunk = torso[..., :13]
+        torso_root = torso[..., -3:]
+
+        # pred = torch.cat(
+        body_feature = torch.cat(
+            (torso_trunk, left_arm_layer1, right_arm_layer1,
+             left_leg_layer1, right_leg_layer1, torso_root), dim=-1)
+
+        yhat = self.classifier(body_feature)
+
+        return yhat
 
 
 class VelDecoder(nn.Module):
@@ -243,6 +310,49 @@ class VelDecoder(nn.Module):
         self.rnn_upper = nn.GRUCell(34, h3)
         self.rnn_lower = nn.GRUCell(46, h3)
         self.cell = VelDecoderCell(h1, h2, h3)
+        # Hardcoded to reach 0% Teacher forcing in 10 epochs
+        self.tf = TeacherForcing(0.1)
+
+    def forward(self, h_upper, h_lower, time_steps, gt, epoch=np.inf):
+        x = gt[:, 0, :]
+        Y = []
+        for t in range(time_steps):
+            x_upper = torch.cat((x[..., :31], x[..., 61:64]), dim=-1)
+            x_lower = torch.cat((x[..., :13], x[..., 31:64]), dim=-1)
+            h_upper = self.rnn_upper(x_upper, h_upper)
+            h_lower = self.rnn_lower(x_lower, h_lower)
+            tp = self.cell(h_upper, h_lower)
+            x = tp + x
+            Y.append(x.unsqueeze(1))
+            if t > 0:
+                mask = self.tf(epoch, h_upper.shape[0]).double(
+                ).view(-1, 1).to(x.device)
+                x = mask * \
+                    gt[:, t-1, :] + (1-mask) * x
+
+        return torch.cat(Y, dim=1)
+
+    def sample(self, h_upper, h_lower, time_steps, gt):
+
+        x = gt
+        Y = []
+        for t in range(time_steps):
+            x_upper = torch.cat((x[..., :31], x[..., 61:64]), dim=-1)
+            x_lower = torch.cat((x[..., :13], x[..., 31:64]), dim=-1)
+            h_upper = self.rnn_upper(x_upper, h_upper)
+            h_lower = self.rnn_lower(x_lower, h_lower)
+            tp = self.cell(h_upper, h_lower)
+            x = tp + x
+            Y.append(x.unsqueeze(1))
+        return torch.cat(Y, dim=1)
+
+
+class VelSymDecoder(nn.Module):
+    def __init__(self, h1, h2, h3, embed_size, vocab_size):
+        super(VelSymDecoder, self).__init__()
+        self.rnn_upper = nn.GRUCell(34, h3)
+        self.rnn_lower = nn.GRUCell(46, h3)
+        self.cell = VelSymDecoderCell(h1, h2, h3, embed_size, vocab_size)
         # Hardcoded to reach 0% Teacher forcing in 10 epochs
         self.tf = TeacherForcing(0.1)
 
@@ -393,6 +503,147 @@ class PoseGenerator(nn.Module):
         return z, language_z, gp, gs
 
 
+class SymPoseGenerator(nn.Module):
+    def __init__(self, chunks, input_size, vocab_size, Seq2SeqKwargs={}, load=None):
+        super(SymPoseGenerator, self).__init__()
+        self.chunks = chunks
+        self.vocab_size = vocab_size
+        self.embed_size = 64  # same size as the pose feature
+        self.h1 = 32
+        self.h2 = 128
+        self.h3 = 512
+
+        self.embedding = nn.Embedding(num_embeddings=self.vocab_size,
+                                      embedding_dim=self.embed_size)
+        self.pose_enc = PoseEncoder(self.h1, self.h2, self.h3)
+        # self.vel_dec = VelSymDecoder(self.h1, self.h2, self.h3,
+        #                              self.embed_size,
+        #                              self.vocab_size
+        #                             )
+        self.vel_dec = VelDecoder(self.h1, self.h2, self.h3)
+        self.classifier = nn.Linear(self.embed_size, self.vocab_size)
+        self.sentence_enc = BERTSentenceEncoder(2*self.h3)
+
+        if load:
+            self.load_state_dict(torch.load(open(load, 'rb')))
+            print('PoseGenerator Model Loaded')
+        else:
+            print('PoseGenerator Model initialising randomly')
+
+    def forward(self, sym_in, gt, s2v, lmb, train=False, epoch=np.inf):
+
+        # P_in: Pose embeddings for the pose symbol seq.
+        sym_in = sym_in.squeeze()
+        P_in = self.embedding(sym_in)
+        T = P_in.shape[-2]
+
+        # z_p*: Latent representations for the pose symbol seq.
+        z_p_upper, z_p_lower = self.pose_enc(P_in)
+
+        # Decode latent rep. --> Motion token embedding
+        P_hat_m = self.vel_dec(z_p_upper, z_p_lower, T, P_in)
+        sym_hat_m = self.classifier(P_hat_m).softmax(dim=-1)
+
+        # Cycle consistency for rep. => Encode predicted motion token embeddings
+        z_gen_u, z_gen_lo = self.pose_enc(P_hat_m)
+
+        L1 = nn.SmoothL1Loss()
+        manifold_loss = L1(z_gen_u, z_p_upper) + L1(z_gen_lo, z_p_lower)
+
+        # Language encoder: Lang --> z_l
+        z_l, _ = self.sentence_enc(s2v)
+        # Decode lang. latent rep. --> motion embeddings
+        P_hat_l = self.vel_dec(z_l[..., :self.h3], z_l[..., -self.h3:], T, P_in)
+        sym_hat_l = self.classifier(P_hat_l).softmax(dim=-1)
+
+        # Language: Motion Encoder latent rep. consistency
+        encoder_loss = L1(z_p_lower, z_l[..., :self.h3]) + \
+                                            L1(z_p_upper, z_l[..., -self.h3:])
+
+        # Old reconstruction loss. Now between embeddings instead of pose feats
+        rec_loss_embed = L1(P_hat_m, P_in) + L1(P_hat_l, P_in)
+
+        # New loss
+        CE = nn.CrossEntropyLoss()
+        target = F.one_hot(sym_in, num_classes=self.vocab_size).type(torch.cuda.FloatTensor)
+        rec_loss_sym = CE(sym_hat_m, target) + CE(sym_hat_l, target)
+
+        # velocity constraint between two frames
+        # Velocity constraint is now between motion embeddings
+        v_orig = P_in[:, 1:, :] - P_in[:, :-1, :]
+        v_P_hat_m = P_hat_m[:, 1:, :] - P_hat_m[:, :-1, :]
+        v_P_hat_l = P_hat_l[:, 1:, :] - P_hat_l[:, :-1, :]
+        velocity_loss = L1(v_orig, v_P_hat_m) + L1(v_orig, v_P_hat_l)
+
+        internal_losses = { 'vel': lmb['lmb_vel']*velocity_loss,
+                            'z_motion': lmb['lmb_z_motion']*manifold_loss,
+                            'z_lang': lmb['lmb_z_lang']*encoder_loss,
+                            'rec_pemb': lmb['lmb_rec_pemb']*rec_loss_embed,
+                            'rec_sym': lmb['lmb_rec_sym']*rec_loss_sym
+                           }
+
+        return sym_hat_l, internal_losses
+
+    def encode_pose(self, P_in):
+        time_steps = P_in.shape[-2]
+        z_p_upper, z_p_lower = self.pose_enc(P_in)
+        return z_p_upper, z_p_lower
+
+    def train_pose(self, P_in):
+        time_steps = P_in.shape[-2]
+        z_p_upper, z_p_lower = self.pose_enc(P_in)
+        Q_v = self.vel_dec(
+            z_p_upper, z_p_lower, time_steps, P_in)
+        z_gen_u, z_gen_lo = self.pose_enc(Q_v)
+        manifold_loss = F.smooth_l1_loss(
+            z_gen_u, z_p_upper) + F.smooth_l1_loss(z_gen_lo, z_p_lower)
+        # velocity constraint between two frames
+        velocity_orig = P_in[:, 1:, :] - P_in[:, :-1, :]
+        velocity_Q_v = Q_v[:, 1:, :] - Q_v[:, :-1, :]
+        reconstruction_loss = F.smooth_l1_loss(Q_v, P_in)
+        velocity_loss = F.smooth_l1_loss(velocity_orig, velocity_Q_v)
+        internal_losses = [0.001*manifold_loss,
+                           reconstruction_loss,  0.1*velocity_loss]
+        return Q_v, internal_losses
+
+    def train_sentence_with_all_loss(self, z_p_upper, z_p_lower, P_in, s2v, epoch=np.inf):
+        time_steps = P_in.shape[-2]
+        language_z, _ = self.sentence_enc(s2v)
+        Q_vl = self.vel_dec(
+            language_z[..., :self.h3], language_z[..., -self.h3:], time_steps, P_in)
+        encoder_loss = F.smooth_l1_loss(
+            z_p_lower, language_z[..., :self.h3]) + F.smooth_l1_loss(z_p_upper, language_z[..., -self.h3:])
+        reconstruction_loss = F.smooth_l1_loss(Q_vl, P_in)
+        internal_losses = (0.01*encoder_loss) + (reconstruction_loss)
+        return Q_vl, internal_losses
+
+    def sample(self, s2v, time_steps, start):
+        ''' last four columns of P_in is always 0 in input so no need to train it. Just ouput zero for columns 63,64,65, 66'''
+        P_in = start[..., :-4]
+        language_z, _ = self.sentence_enc(s2v)
+
+        Q_v_lang = self.vel_dec.sample(
+            language_z[..., :self.h3], language_z[..., -self.h3:], time_steps,  P_in)
+
+        # Q_v_lang = self.wholebody(torch.cat((Q_vl_upper, Q_vl_lower), dim=-1))
+        tz = torch.zeros((Q_v_lang.shape[0], Q_v_lang.shape[1], 4)).to(
+            Q_v_lang.device).double()
+
+        predicted_pose = torch.cat((Q_v_lang, tz), dim=-1)
+        # print(predicted_pose.shape)
+        return predicted_pose, language_z
+
+    def sample_encoder(self, s2v, x):
+        ''' last four columns of P_in is always 0 in input so no need to train it. Just ouput zero for columns 63,64,65, 66'''
+        P_in = x[..., :-4]
+        z_p_upper, z_p_lower = self.pose_enc(P_in)
+        language_z, _ = self.sentence_enc(s2v)
+        z = torch.cat((z_p_upper, z_p_lower), dim=-1)
+        gs = language_z * torch.transpose(language_z, 0, 1)
+        gp = z * torch.transpose(z, 0, 1)
+        return z, language_z, gp, gs
+
+
 class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
@@ -408,6 +659,29 @@ class Discriminator(nn.Module):
                                  )
 
     def forward(self, x):
+        x, h = self.rnn(x)
+        out = self.net(h)
+        return out.squeeze(0)
+
+
+class SymDiscriminator(nn.Module):
+    def __init__(self, vocab_size, embed_size):
+        super(SymDiscriminator, self).__init__()
+        self.embedding = nn.Embedding(num_embeddings=vocab_size,
+                                      embedding_dim=embed_size)
+        self.rnn = nn.GRU(64, 64, num_layers=1, batch_first=True)
+        self.net = nn.Sequential(nn.Linear(64, 256),
+                                 nn.LeakyReLU(inplace=True),
+                                 nn.Linear(256, 128),
+                                 nn.LeakyReLU(inplace=True),
+                                 nn.Linear(128, 64),
+                                 nn.LeakyReLU(inplace=True),
+                                 nn.Linear(64, 1),
+                                 nn.Sigmoid()
+                                 )
+
+    def forward(self, sym):
+        x = self.embedding(sym)
         x, h = self.rnn(x)
         out = self.net(h)
         return out.squeeze(0)
