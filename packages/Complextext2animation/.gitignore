@@ -20,3 +20,5 @@ save
 *.experiments
 s2v
 glove.6B
+src/dataProcessing/data.h5
+src/wandb
