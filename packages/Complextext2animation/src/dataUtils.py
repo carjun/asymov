@@ -36,6 +36,9 @@ class Data():
         elif feats_kind == 'rifke':
             assert len(
                 mask) == 1, 'Rotation invariant Forward Kinematics have 3 parameters for root joint'
+        elif feats_kind == 'symbol':
+            print('In Data() for ASyMov (feats = symbols)')
+            print('TODO: Implement check?')
 
         self.raw_data = eval(dataset)(path2data)
         self.df = self.raw_data._get_df()
@@ -242,6 +245,7 @@ class MiniData(Dataset):
     def __init__(self, path2csv, lmksSubset, time, offset=0, mask=[1, 0, 1, 1, 1, 1, 1], feats_kind='quaternion', sentence_vector=None, perplexity=0.0, chunks=1, dataset='KITMocap', f_ratio=30):
         super(MiniData, self).__init__()
         self.path2csv = path2csv
+
         self.mat_full = pd.read_csv(path2csv, index_col=0)
 
         # if offset == 0; autoencoder
@@ -263,19 +267,27 @@ class MiniData(Dataset):
                 self.columns_, lmksSubset, dataset=dataset)
         elif feats_kind in {'rifke'}:
             self.columns_subset = self.columns_[3:]
+        elif feats_kind == 'symbol':
+            self.columns_subset = self.columns_
 
-        if feats_kind == 'euler' or feats_kind == 'axis-angle':
-            self.root_columns = ['root_tx', 'root_ty',
+        # Root columns
+        if feats_kind == 'symbol':
+            self.root_columns = self.columns_  # Redundant
+            self.mat = self.mat_full[self.columns_subset].values.astype(np.int32)
+            self.root = self.mat_full[self.root_columns].values.astype(np.int32)
+        else:
+            if feats_kind == 'euler' or feats_kind == 'axis-angle':
+                self.root_columns = ['root_tx', 'root_ty',
                                  'root_tz', 'root_rx', 'root_ry', 'root_rz']
-        elif feats_kind == 'quaternion':
-            self.root_columns = ['root_tx', 'root_ty', 'root_tz',
-                                 'root_rw', 'root_rx', 'root_ry', 'root_rz']
-        elif feats_kind == 'rifke':
-            self.root_columns = ['root_tx', 'root_ty', 'root_tz']
-            self.root_columns = ['root_ty']
+            elif feats_kind == 'quaternion':
+                self.root_columns = ['root_tx', 'root_ty', 'root_tz',
+                                     'root_rw', 'root_rx', 'root_ry', 'root_rz']
+            elif feats_kind == 'rifke':
+                self.root_columns = ['root_tx', 'root_ty', 'root_tz']
+                self.root_columns = ['root_ty']
 
-        self.mat = self.mat_full[self.columns_subset].values.astype(np.float64)
-        self.root = self.mat_full[self.root_columns].values.astype(np.float64)
+            self.mat = self.mat_full[self.columns_subset].values.astype(np.float64)
+            self.root = self.mat_full[self.root_columns].values.astype(np.float64)
 
         # update idx_list:: call this for MiniData to update data loader
         self.update_idx_list(time)
@@ -469,4 +481,6 @@ def get_columns(feats_kind, data):
     elif feats_kind == 'rifke':
         columns = ['root_tx', 'root_ty', 'root_tz'] + data.columns[1]
         columns = ['root_ty'] + data.columns[1]
+    elif feats_kind == 'symbol':
+        columns = data.columns[1]
     return columns
