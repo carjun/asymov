@@ -761,6 +761,68 @@ def mpjpe3d(pred_keypoints, target_keypoints):
 #-------------------------------------------------------------------------------
 
 #reconstruction-----------------------------------------------------------------
+#TODO: change the implementation to not to repeat center frame
+def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir=None):
+    '''
+    Args:
+        seq_names : name of video sequences to reconstruct
+        data_loader : data loader that yields the per frame 3d keypoints of skeleton joints of the specified video sequence name
+        contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
+        cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
+        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
+
+    Retruns:
+        The mean and per sequence mpjpe between reconstructed and original sequences.
+        If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
+    '''
+
+    ground_truth_keypoints = []
+    reconstructed_keypoints = []
+
+    contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
+    cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
+
+    for name in seq_names:
+        ground_truth_keypoints.append(data_loader.load_keypoint3d(name))
+        reconstructed_keypoint = []
+        
+        contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
+        for i in range(contiguous_cluster_seqs.shape[0]):
+            #get contiguous cluster info
+            contiguous_cluster = contiguous_cluster_seqs.iloc[i]
+            cluster, length = contiguous_cluster[['cluster', 'length']]
+            #get center frame info 
+            center_frame = cluster2frame.iloc[cluster]
+            center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
+            center_frame_complete_seq = data_loader.load_keypoint3d(center_frame_seq_name)
+            assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
+
+            #calculate left right and center frames
+            side_length = (length-1)//2
+            l_frames = min(side_length, center_frame_idx)
+            r_frames = min(side_length, center_frame_complete_seq.shape[0]-1 - center_frame_idx)
+            center_reps = length - l_frames - r_frames
+            
+            #reconstruct
+            reconstructed_keypoint.append(np.concatenate((
+                center_frame_complete_seq[center_frame_idx-l_frames:center_frame_idx], #left supporting frames
+                np.repeat(np.expand_dims(center_frame_keypoint, axis=0), center_reps, axis=0), #center frames
+                center_frame_complete_seq[center_frame_idx+1:center_frame_idx+r_frames+1]), # right supporting frames
+                axis=0
+            ))
+
+        reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+    
+    # pdb.set_trace()
+    mpjpe_per_sequence=[]
+    for name, reconstructed_keypoint, ground_truth_keypoint in zip(seq_names, reconstructed_keypoints, ground_truth_keypoints):
+        mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
+        
+        if(frames_dir):
+            viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
+    
+    return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
 
 def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, frames_dir=None):
     '''
@@ -795,7 +857,6 @@ def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path
     return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
 
 #-------------------------------------------------------------------------------
-
 if __name__ == '__main__':
     # viz_kitml_seq()
     # viz_aistpp_seq()
@@ -804,5 +865,17 @@ if __name__ == '__main__':
     # cluster_seq = d[d['seq_name']=='gWA_sFM_cAll_d25_mWA2_ch03']['cluster']
     # cluster_seq2vid(cluster_seq[:500], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl', '/content/drive/Shareddrives/vid tokenization/seq2vid', 'coco17')
 
-    aistpp_cluster2vid([i for i in range(150)], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl', '/content/drive/Shareddrives/vid tokenization/cluster2vid')
+    # aistpp_cluster2vid([i for i in range(150)], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl', '/content/drive/Shareddrives/vid tokenization/cluster2vid')
+
+    d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
+    df = pd.read_pickle('/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_150.pkl')
+    seq_names = df['name'].unique()
+    sk_type='coco17'
+    # frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_res_150.pkl'
+    # cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl'
+    # mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type)
+    contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_150.pkl'
+    cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl'
+    mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
+    print(mpjpe_mean)
 
