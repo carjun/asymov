@@ -760,6 +760,42 @@ def mpjpe3d(pred_keypoints, target_keypoints):
     return np.mean(np.sqrt(np.sum((target_keypoints - pred_keypoints) ** 2, axis=2)))
 #-------------------------------------------------------------------------------
 
+#reconstruction-----------------------------------------------------------------
+
+def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, frames_dir=None):
+    '''
+    Args:
+        seq_names : name of video sequences to reconstruct
+        data_loader : data loader that yields the per frame 3d keypoints of skeleton joints of the specified video sequence name
+        frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster
+        cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
+        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
+
+    Retruns:
+        The mean and per sequence mpjpe between reconstructed and original sequences.
+        If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
+    '''
+    # for name in seq_names:
+    # pdb.set_trace()
+    ground_truth_keypoints = [data_loader.load_keypoint3d(name) for name in seq_names]
+
+    frame2cluster = pd.read_pickle(frame2cluster_mapping_path)
+    cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
+    cluster_seqs = [frame2cluster[frame2cluster['seq_name']==name]['cluster'] for name in seq_names]
+    reconstructed_keypoints = [np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]) for cluster_seq in cluster_seqs]
+    
+    mpjpe_per_sequence=[]
+    for name, reconstructed_keypoint, ground_truth_keypoint in zip(seq_names, reconstructed_keypoints, ground_truth_keypoints):
+        mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
+        
+        if(frames_dir):
+            viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
+    
+    return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+
+#-------------------------------------------------------------------------------
+
 if __name__ == '__main__':
     # viz_kitml_seq()
     # viz_aistpp_seq()
