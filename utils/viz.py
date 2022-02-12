@@ -748,6 +748,18 @@ def cluster_seq2vid(cluster_seq, cluster2keypoint_mapping_path, frames_dir, sk_t
 
 #-------------------------------------------------------------------------------
 
+#error_metric-------------------------------------------------------------------
+def mpjpe3d(pred_keypoints, target_keypoints):
+    '''
+    pred_keypoints [T, num_joints, 3] : 3d keypoints of predicted skeleton joints
+    target_keypoints [T, num_joints, 3] : 3d keypoints of ground-truth skeleton joints
+    '''
+
+    assert pred_keypoints.shape[0]==target_keypoints.shape[0]
+
+    return np.mean(np.sqrt(np.sum((target_keypoints - pred_keypoints) ** 2, axis=2)))
+#-------------------------------------------------------------------------------
+
 if __name__ == '__main__':
     # viz_kitml_seq()
     # viz_aistpp_seq()
