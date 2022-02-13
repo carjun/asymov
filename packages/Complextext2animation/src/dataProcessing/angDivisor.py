@@ -3,12 +3,12 @@ import torch.nn as nn
 
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from dataUtils import *
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from packages.Complextext2animation.src.dataUtils import *
 
-from pycasper.name import Name
-from pycasper.BookKeeper import *
-from argsUtils import argparseNloop
+from packages.Complextext2animation.pycasper.name import Name
+from packages.Complextext2animation.pycasper.BookKeeper import *
+from packages.Complextext2animation.src.argsUtils import argparseNloop
 
 import numpy as np
 from tqdm import tqdm

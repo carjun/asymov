@@ -1,7 +1,7 @@
 import os
 import json
 import math
-from src.data.dataset.loader import AISTDataset
+from packages.acton.src.data.dataset.loader import AISTDataset
 
 genre_list = ["gBR", "gPO", "gLO", "gMH", "gLH", "gHO", "gWA", "gKR", "gJS", "gJB"]
 

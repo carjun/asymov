@@ -10,6 +10,7 @@ import os, sys
 import os.path as osp
 from os.path import join as ospj
 import pdb
+from tqdm import tqdm
 
 import random
 import numpy as np
@@ -29,16 +30,18 @@ from mpl_toolkits.mplot3d import Axes3D
 from pathlib import Path
 
 #TODO: change the import path to inside acton package
-from src.data.dataset import loader,utils
-from tqdm import tqdm
-import pdb
+# sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
+from packages.acton.src.data.dataset.loader import AISTDataset
+from packages.acton.src.data.dataset import loader,utils
 
-# sys.path.append('/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/src/')
-# import dataUtils as dutils
-# import data as d
-# import kitml_utils
-# sys.path.append('/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/src/common')
-# import mmm
+sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/Complextext2animation/src/')
+import packages.Complextext2animation.src.dataUtils as dutils
+import packages.Complextext2animation.src.data as d
+import packages.Complextext2animation.src.common.mmm as mmm
+
+sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/code/')
+import kitml_utils
+# sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/Complextext2animation/src/common/')
 
 
 """
@@ -481,8 +484,11 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
 
         # ax.view_init(75, az)
         # ax.view_init(elev=20, azim=90+az)
-        ax.view_init(elev=-90, azim=90)
-        # ax.view_init(elev=110, azim=70)
+        if sk_type == 'coco17':
+            ax.view_init(elev=-90, azim=90)
+        else:
+            ax.view_init(elev=-20, azim=az)
+
         if True==debug:
             ax.legend(bbox_to_anchor=(1.1, 1), loc='upper right')
             pass

@@ -130,8 +130,7 @@ class RawData():
         df_fke = pd.DataFrame(data=np.zeros(
             (df_quat.shape[0], len(self.fke_columns))), columns=self.fke_columns)
         # copying translation as is
-        df_fke[['root_tx', 'root_ty', 'root_tz']] = df_quat.loc[:,
-                                    ['root_tx', 'root_ty', 'root_tz']].copy()
+        df_fke[['root_tx', 'root_ty', 'root_tz']] = df_quat.loc[:,['root_tx', 'root_ty', 'root_tz']].copy()
         # (T, Num Joints * 3)
         xyz_data = quat2xyz(df_quat, self.skel)
         df_fke.loc[:, self.fke_columns] = xyz_data.reshape(
@@ -307,6 +306,7 @@ class KITMocap(RawData):
             torch.save(self.skel, open(self._SKELPATH, 'wb'))
 
         if preProcess_flag:
+            # pdb.set_trace()
             self.preProcess(path2data)
             self.preProcess_axs(path2data)
 
@@ -350,7 +350,7 @@ class KITMocap(RawData):
             self.df = pd.DataFrame(data=data, columns=[
                                    'euler', 'descriptions', 'quaternion', 'axis-angle', 'fke', 'rifke', 'perplexity'])
         else:
-            self.df = pd.read_hdf('dataProcessing/data.h5', 'df')
+            self.df = pd.read_hdf(base_path + 'dataProcessing/data.h5', 'df')
 
         self.columns = pd.read_csv(
             self.df.iloc[0].quaternion, index_col=0).columns

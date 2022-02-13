@@ -2,9 +2,9 @@ import pandas as pd
 import re
 import pdb
 
-from data import *
-from dataProcessing.meanVariance import loadMeanVariance
-from dataProcessing.angDivisor import loadAngDivisor
+from packages.Complextext2animation.src.data import *
+from packages.Complextext2animation.src.dataProcessing.meanVariance import loadMeanVariance
+from packages.Complextext2animation.src.dataProcessing.angDivisor import loadAngDivisor
 
 from tqdm import tqdm
 import json

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Utils for AIST++ Dataset."""
-import os
+import os, pdb
 import json
 import ffmpeg
 import numpy as np
@@ -21,12 +21,12 @@ import contextlib
 from PIL import Image, ImageDraw, ImageFont
 
 import aniposelib
+# pdb.set_trace()
+from packages.acton.src.data.dataset.visualizer import plot_kpt, plot_kpt_plain
+from packages.acton.src.data.dataset.cluster_misc import lexicon, get_names, genre_list, vidn_parse
 
-from src.data.dataset.visualizer import plot_kpt, plot_kpt_plain
-from src.data.dataset.cluster_misc import lexicon, get_names, genre_list, vidn_parse
-
-font = ImageFont.truetype("alata.ttf", 12)
-font_large = ImageFont.truetype("alata.ttf", 24)
+font = ImageFont.truetype("./packages/acton/alata.ttf", 12)
+font_large = ImageFont.truetype("./packages/acton/alata.ttf", 24)
 CAP_COL = (16, 16, 16)
 
 parse_keys = ["genre", "situ", "dancer", "tempo", "choreo", "name"]
