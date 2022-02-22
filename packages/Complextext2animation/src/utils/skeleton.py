@@ -7,7 +7,7 @@ from utils.quaternion import qmul_np, qmul, qrot
 
 # Debug
 import pdb
-sys.path.append('/ps/project/conditional_action_gen/language2motion/kit-molan/code')
+sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/code')
 import test_angles
 from scipy.spatial.transform import Rotation as R
 

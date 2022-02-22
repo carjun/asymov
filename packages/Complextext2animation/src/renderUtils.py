@@ -1,9 +1,9 @@
 import torch
 import pandas as pd
-from utils.kit_visualization import render, render4
-from common.parallel import parallel
-from argsUtils import argparseNloop
-from utils.quaternion import *
+from packages.Complextext2animation.src.utils.kit_visualization import render, render4
+from packages.Complextext2animation.src.common.parallel import parallel
+from packages.Complextext2animation.src.argsUtils import argparseNloop
+from packages.Complextext2animation.src.utils.quaternion import *
 import numpy as np
 import pdb
 from pathlib import Path

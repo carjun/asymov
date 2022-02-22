@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
 import torch.nn.functional as F
-from nlp.lstm import LSTMEncoder
+from packages.Complextext2animation.src.nlp.lstm import LSTMEncoder
 
 import pdb
 

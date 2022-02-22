@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import gensim
 import numpy as np
-from nlp.bert_embeddings import bert_embeddings
+from packages.Complextext2animation.src.nlp.bert_embeddings import bert_embeddings
 import pdb
 torch.backends.cudnn.enabled = False
 

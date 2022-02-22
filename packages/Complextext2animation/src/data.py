@@ -1,14 +1,14 @@
 import pdb
 import scipy.ndimage.filters as filters
 import torch
-from model.model import Integrator
-from renderUtils import *
-from common.quaternion import *
-from common.transforms3dbatch import *
-from common.mmm import parse_motions
-from utils.skeleton import Skeleton
-from utils.quaternion import *
-from utils.visualization import *
+from packages.Complextext2animation.src.model.model import Integrator
+from packages.Complextext2animation.src.renderUtils import *
+from packages.Complextext2animation.src.common.quaternion import *
+from packages.Complextext2animation.src.common.transforms3dbatch import *
+from packages.Complextext2animation.src.common.mmm import parse_motions
+from packages.Complextext2animation.src.utils.skeleton import Skeleton
+from packages.Complextext2animation.src.utils.quaternion import *
+from packages.Complextext2animation.src.utils.visualization import *
 import os
 
 import numpy as np
@@ -288,8 +288,8 @@ class KITMocap(RawData):
     def __init__(self, path2data, preProcess_flag=False):
         super(KITMocap, self).__init__()
         # load skeleton
-
-        base_path = '/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/src/'
+        # pdb.set_trace()
+        base_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/Complextext2animation/src/'
 
         # Uncomment this when running in DGX everytime
 
@@ -592,6 +592,7 @@ class KITMocap(RawData):
         return self.new_joints, new_root_pos, new_rotations
 
     def mmm2quat(self, path):
+        # pdb.set_trace()
         joints, root_pos, root_rot, values = self.mmm2csv(path)
 
         # convert to quaternions. values:  # (J, T, 4)
