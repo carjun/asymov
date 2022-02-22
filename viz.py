@@ -31,16 +31,16 @@ from pathlib import Path
 
 #TODO: change the import path to inside acton package
 # sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
-from packages.acton.src.data.dataset.loader import AISTDataset
-from packages.acton.src.data.dataset import loader,utils
+from packages.acton.src.data.dataset.loader import KITDataset
+# from packages.acton.src.data.dataset import loader,utils
 
-sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/Complextext2animation/src/')
+# sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/Complextext2animation/src/')
 import packages.Complextext2animation.src.dataUtils as dutils
 import packages.Complextext2animation.src.data as d
 import packages.Complextext2animation.src.common.mmm as mmm
 
-sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/code/')
-import kitml_utils
+# sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/code/')
+# import kitml_utils
 # sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/Complextext2animation/src/common/')
 
 
@@ -671,46 +671,49 @@ def debug_viz_kitml_seq():
 
 #specific_skeleton_viz----------------------------------------------------------
 
-def viz_kitml_seq():
-    '''
-    '''
-    kitml_fol_p = '/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/dataset/kit-mocap/'
+# def viz_kitml_seq():
+#     '''
+#     '''
+#     kitml_fol_p = '/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/dataset/kit-mocap/'
 
-    # List of seq ids to viz.
-    l_sids = list(range(1, 10))
-    for sid in l_sids:
-        fp = Path(ospj(kitml_fol_p, '{0}_mmm.xml'.format(str(sid).zfill(5))))
+#     # List of seq ids to viz.
+#     l_sids = list(range(1, 10))
+#     for sid in l_sids:
+#         fp = Path(ospj(kitml_fol_p, '{0}_mmm.xml'.format(str(sid).zfill(5))))
 
-        # Get joint position data: (T, J=21, 3)
-        K = d.KITMocap(path2data=kitml_fol_p)
-        xyz_data, skel_obj, joints, root_pos, root_rot = K.mmm2quat(fp)
+#         # Get joint position data: (T, J=21, 3)
+#         K = d.KITMocap(path2data=kitml_fol_p)
+#         xyz_data, skel_obj, joints, root_pos, root_rot = K.mmm2quat(fp)
 
-        # Normalize by root position in case it's not already.
-        # seq = (T, J, 3)
-        seq = xyz_data - np.transpose(root_pos.numpy(), axes=(1,0,2))
+#         # Normalize by root position in case it's not already.
+#         # seq = (T, J, 3)
+#         seq = xyz_data - np.transpose(root_pos.numpy(), axes=(1,0,2))
 
-        # Viz. "values" (joint positions?)
-        viz_seq(seq, './test_viz/{}'.format(sid), 'kitml', debug=True)
+#         # Viz. "values" (joint positions?)
+#         viz_seq(seq, './test_viz/{}'.format(sid), 'kitml', debug=True)
 
-def viz_aistpp_seq():
-    '''
-    '''
-    d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
-    seq=d.load_keypoint3d('gWA_sFM_cAll_d27_mWA2_ch21')
+# def viz_aistpp_seq():
+#     '''
+#     '''
+#     d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
+#     seq=d.load_keypoint3d('gWA_sFM_cAll_d27_mWA2_ch21')
 
-    frames_dir='/content/drive/Shareddrives/vid tokenization/frames2'
-    viz_seq(seq, frames_dir, 'coco17', debug=False)
+#     frames_dir='/content/drive/Shareddrives/vid tokenization/frames2'
+#     viz_seq(seq, frames_dir, 'coco17', debug=False)
 
 #-------------------------------------------------------------------------------
 
 #cluster2vid--------------------------------------------------------------------
 
-def aistpp_cluster2vid(clusters_idx, proxy_center_info_path, frames_dir, support_frames_count=20):
+def cluster2vid(clusters_idx, sk_type, proxy_center_info_path, data_dir, data_name, frames_dir, support_frames_count=20):
     '''
     clusters_idx : cluster indices to visualize
+    sk_type (str): {'kitml', 'coco17'}
     proxy_center_info_path : path to pickled Dataframe containing sequence name and frame of proxy centers
-    support_frames_count : maximum number of frames before and after the one corresponding proxy center, defaults to 60
+    data_dir : path to folder containing pickled xyz data 
+    data_name : name of the data used, subset or not
     frames_dir : Path to root folder that will contain frames folder
+    support_frames_count : maximum number of frames before and after the one corresponding proxy center, defaults to 60
 
     Return:
         None. Path of mp4 video: frames_dir/{cluster_idx}/video.mp4
@@ -722,13 +725,13 @@ def aistpp_cluster2vid(clusters_idx, proxy_center_info_path, frames_dir, support
 
     #get keypoints to visualize
     #TODO : change the path to official loader
-    d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
+    d = KITDataset(data_dir, data_name)
     for cluster_idx, center_frame_idx, seq_name in tqdm(zip(clusters_idx, center_frames_idx, seq_names), desc='clusters'):
         seq_complete = d.load_keypoint3d(seq_name)
         seq = seq_complete[max(0, center_frame_idx-support_frames_count):min(seq_complete.shape[0], center_frame_idx+support_frames_count+1)]
         
         #visualize the required fragment of complete sequence
-        viz_seq(seq, ospj(frames_dir, str(cluster_idx)), 'coco17', debug=False)
+        viz_seq(seq, ospj(frames_dir, str(cluster_idx)), sk_type, debug=False)
 
 #-------------------------------------------------------------------------------
 
@@ -871,17 +874,20 @@ if __name__ == '__main__':
     # cluster_seq = d[d['seq_name']=='gWA_sFM_cAll_d25_mWA2_ch03']['cluster']
     # cluster_seq2vid(cluster_seq[:500], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl', '/content/drive/Shareddrives/vid tokenization/seq2vid', 'coco17')
 
-    # aistpp_cluster2vid([i for i in range(150)], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl', '/content/drive/Shareddrives/vid tokenization/cluster2vid')
+    cluster2vid(clusters_idx=[i for i in range(150)], sk_type='kitml', 
+        proxy_center_info_path='/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl', 
+        data_dir='/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/', data_name='xyz',
+        frames_dir='/content/drive/Shareddrives/vid tokenization/cluster2vid')
 
-    d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
-    df = pd.read_pickle('/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_150.pkl')
-    seq_names = df['name'].unique()
-    sk_type='coco17'
+    # d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
+    # df = pd.read_pickle('/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_150.pkl')
+    # seq_names = df['name'].unique()
+    # sk_type='coco17'
     # frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_res_150.pkl'
     # cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl'
     # mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type)
-    contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_150.pkl'
-    cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl'
-    mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
-    print(mpjpe_mean)
+    # contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_150.pkl'
+    # cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl'
+    # mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
+    # print(mpjpe_mean)
 
