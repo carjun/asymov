@@ -12,19 +12,19 @@ import pandas as pd
 from pathlib import Path
 
 import pdb
+import json
 
-from src.data.dataset.loader import AISTDataset
+from src.data.dataset.loader import KITDataset
 from src import algo
-from src.data.dataset.cluster_misc import lexicon, get_names, genre_list
+from src.data.dataset.cluster_misc import lexicon#, get_names, genre_list
 
 from plb.models.self_supervised import TAN
 from plb.models.self_supervised.tan import TANEvalDataTransform, TANTrainDataTransform
-from plb.datamodules import SeqDataModule
+# from plb.datamodules import SeqDataModule
 from plb.datamodules.data_transform import body_center, euler_rodrigues_rotation
 
-KEYPOINT_NAME = ["nose", "left_eye", "right_eye", "left_ear", "right_ear",
-                 "left_shoulder", "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist",
-                 "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"]
+KEYPOINT_NAME = ['root','BP','BT','BLN','BUN','LS','LE','LW','RS','RE','RW',
+                'LH','LK','LA','LMrot','LF','RH','RK','RA','RMrot','RF']
 
 import pytorch_lightning as pl
 pl.utilities.seed.seed_everything(0)
@@ -43,9 +43,18 @@ def parse_args():
     parser.add_argument('--data_dir',
                         help='path to aistplusplus data directory from repo root',
                         type=str)
+    parser.add_argument('--data_name',
+                        help='which version of the dataset, subset or not',
+                        default=1,
+                        type=str)
     
     parser.add_argument('--seed',
                         help='seed for this run',
+                        default=1,
+                        type=int)
+    
+    parser.add_argument('--log_ver',
+                        help='version in kitml_logs',
                         default=1,
                         type=int)
 
@@ -56,6 +65,9 @@ def parse_args():
     with open(args.cfg, 'r') as stream:
         ldd = yaml.safe_load(stream)
 
+    # if args.log_ver:
+    ldd["CLUSTER"]["VERSION"] = args.log_ver
+    ldd["PRETRAIN"]["DATA"]["DATA_NAME"] = args.data_name
     if args.data_dir:
         ldd["PRETRAIN"]["DATA"]["DATA_DIR"] = args.data_dir
     pprint.pprint(ldd)
@@ -63,9 +75,11 @@ def parse_args():
 
 def main():
     
+    num_joints = 21
+
     args = parse_args()
     debug = args["NAME"] == "debug"
-    log_dir = os.path.join("./logs", args["NAME"])
+    log_dir = os.path.join("./kit_logs", args["NAME"])
 
     dirpath = Path(log_dir)
     dirpath.mkdir(parents=True, exist_ok=True)
@@ -75,27 +89,28 @@ def main():
         yaml.dump(args, stream, default_flow_style=False)
     video_dir = os.path.join(log_dir, "saved_videos")
     Path(video_dir).mkdir(parents=True, exist_ok=True)
-    official_loader = AISTDataset(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], "annotations"))
+
+    official_loader = KITDataset(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"])
     if 0:  # change this to 0 for skeleton experiment
         # get model
         load_name = args["CLUSTER"]["CKPT"] if args["CLUSTER"]["CKPT"] != -1 else args["NAME"]
         with open(os.path.join(log_dir, f"val_cluster_zrsc_scores.txt"), "a") as f:
             f.write(f"EXP: {load_name}\n")
         cfg = None
-        for fn in os.listdir(os.path.join("./logs", load_name)):
+        for fn in os.listdir(os.path.join("./kit_logs", load_name)):
             if fn.endswith(".yaml"):
                 cfg = fn
-        with open(os.path.join("./logs", load_name, cfg), 'r') as stream:
+        with open(os.path.join("./kit_logs", load_name, cfg), 'r') as stream:
             old_args = yaml.safe_load(stream)
-        cpt_name = os.listdir(os.path.join("./logs", load_name, "default/version_7/checkpoints"))[0]
+        cpt_name = os.listdir(os.path.join("./kit_logs", load_name, "default/version_" + args["CLUSTER"]["VERSION"] + "/checkpoints"))[0]
         print(f"We are using checkpoint: {cpt_name}")
-        model = eval(old_args["PRETRAIN"]["ALGO"]).load_from_checkpoint(os.path.join("./logs", load_name, "default/version_7/checkpoints", cpt_name))
+        model = eval(old_args["PRETRAIN"]["ALGO"]).load_from_checkpoint(os.path.join("./kit_logs", load_name, "default/version_" + args["CLUSTER"]["VERSION"] + "/checkpoints", cpt_name))
         model.eval()
         def ske2feat(ldd):
             ldd1 = torch.Tensor(ldd).flatten(1, -1) / 100  # [T, 51]
             ttl = ldd1.shape[0]
             ct = body_center(ldd1[0])
-            ldd1 -= ct.repeat(17).unsqueeze(0)
+            ldd1 -= ct.repeat(num_joints).unsqueeze(0)
             res1 = model(ldd1.unsqueeze(0), torch.tensor([ttl]))
             forward_feat = res1[:, 0]  # [T1, f]
             forward_feat /= torch.linalg.norm(forward_feat, dim=-1, keepdim=True, ord=2)
@@ -106,7 +121,7 @@ def main():
             ldd1 = torch.Tensor(ldd).flatten(1, -1) / 100  # [T, 51]
             ttl = ldd1.shape[0]
             ct = body_center(ldd1[0])
-            ldd1 -= ct.repeat(17).unsqueeze(0)
+            ldd1 -= ct.repeat(num_joints).unsqueeze(0)
             return ldd1
 
     # get data
@@ -118,27 +133,27 @@ def main():
     val_len_container = []
     val_feat_container = []
     val_name_container = []
-    for genre in genre_list:  # mix every genre together
-        # train data, we only have training set in this setting
-        tr_df = get_names(genre, trval="train", seed=4321)
-        tr_df = tr_df[tr_df["situ"] == "sFM"]
-        val_df = get_names(genre, trval="val", seed=4321)
-        val_df = val_df[val_df["situ"] == "sFM"]
-        for reference_name in tqdm(list(tr_df["name"]), desc='Loading training set features'):
-            # print(reference_name)
-            # if(reference_name=='gWA_sFM_cAll_d27_mWA4_ch19'):
-            #     pdb.set_trace()
-            ldd = official_loader.load_keypoint3d(reference_name)
-            tr_kpt_container.append(ldd)
-            tr_len_container.append(ldd.shape[0])
-            tr_feat_container.append(ske2feat(ldd).detach().cpu().numpy())
-            tr_name_container.append(reference_name)
-        for reference_name in tqdm(list(val_df["name"]), desc='Loading validation set features'):
-            ldd = official_loader.load_keypoint3d(reference_name)
-            val_kpt_container.append(ldd)
-            val_len_container.append(ldd.shape[0])
-            val_feat_container.append(ske2feat(ldd).detach().cpu().numpy())
-            val_name_container.append(reference_name)
+
+
+    with open(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data_split.json'), 'r') as handle:
+        data_split = json.load(handle)
+    tr_df, val_df = data_split['train'], data_split['val']
+
+    for reference_name in tqdm(tr_df, desc='Loading training set features'):
+        # print(reference_name)
+        # if(reference_name=='gWA_sFM_cAll_d27_mWA4_ch19'):
+        #     pdb.set_trace()
+        ldd = official_loader.load_keypoint3d(reference_name)
+        tr_kpt_container.append(ldd)
+        tr_len_container.append(ldd.shape[0])
+        tr_feat_container.append(ske2feat(ldd).detach().cpu().numpy())
+        tr_name_container.append(reference_name)
+    for reference_name in tqdm(val_df, desc='Loading validation set features'):
+        ldd = official_loader.load_keypoint3d(reference_name)
+        val_kpt_container.append(ldd)
+        val_len_container.append(ldd.shape[0])
+        val_feat_container.append(ske2feat(ldd).detach().cpu().numpy())
+        val_name_container.append(reference_name)
 
     # pdb.set_trace()
     tr_where_to_cut = [0, ] + list(np.cumsum(np.array(tr_len_container)))

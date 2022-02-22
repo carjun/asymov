@@ -15,12 +15,11 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TestTubeLogger
 from plb.models.self_supervised import TAN
 from plb.models.self_supervised.tan import TANEvalDataTransform, TANTrainDataTransform
-from plb.datamodules import SeqDataModule
+from plb.datamodules import KITSeqDataModule
 from pytorch_lightning.plugins import DDPPlugin
 
-KEYPOINT_NAME = ["nose", "left_eye", "right_eye", "left_ear", "right_ear",
-                 "left_shoulder", "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist",
-                 "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"]
+KEYPOINT_NAME = ['root','BP','BT','BLN','BUN','LS','LE','LW','RS','RE','RW',
+                'LH','LK','LA','LMrot','LF','RH','RK','RA','RMrot','RF']
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train classification network')
@@ -33,17 +32,23 @@ def parse_args():
     parser.add_argument('--data_dir',
                         help='path to aistplusplus data directory from repo root',
                         type=str)
+    parser.add_argument('--data_name',
+                        help='which version of the dataset, subset or not',
+                        default=1,
+                        type=str)
     
     parser.add_argument('--seed',
                         help='seed for this run',
                         default=1,
                         type=int)
 
+
     args, _ = parser.parse_known_args()
     pl.utilities.seed.seed_everything(args.seed)
     with open(args.cfg, 'r') as stream:
         ldd = yaml.safe_load(stream)
-
+    
+    ldd["PRETRAIN"]["DATA"]["DATA_NAME"] = args.data_name
     if args.data_dir:
         ldd["PRETRAIN"]["DATA"]["DATA_DIR"] = args.data_dir
     pprint.pprint(ldd)
@@ -53,7 +58,7 @@ def parse_args():
 def main():
     args = parse_args()
     debug = args["NAME"] == "debug"
-    log_dir = os.path.join("./logs", args["NAME"])
+    log_dir = os.path.join("./kit_logs", args["NAME"])
 
     dirpath = Path(log_dir)
     dirpath.mkdir(parents=True, exist_ok=True)
@@ -74,9 +79,10 @@ def main():
 
     # trainer
     trainer = pl.Trainer(
-        gpus=None,#args["PRETRAIN"]["GPUS"],
+        gpus=args["PRETRAIN"]["GPUS"],
         check_val_every_n_epoch=args["PRETRAIN"]["TRAINER"]["VAL_STEP"],
         logger=tt_logger,
+        log_every_n_steps = args["PRETRAIN"]["TRAINER"]["LOG_STEP"],
         accelerator=args["PRETRAIN"]["TRAINER"]["ACCELERATOR"],
         max_epochs=args["PRETRAIN"]["EPOCH"],
         gradient_clip_val=0.5,
@@ -84,8 +90,8 @@ def main():
         plugins=DDPPlugin(find_unused_parameters=False),
     )
 
-    j = 17
-    dm = SeqDataModule(**args["PRETRAIN"]["DATA"])
+    j = 21
+    dm = KITSeqDataModule(**args["PRETRAIN"]["DATA"])
     transform_args = {"min_length": args["PRETRAIN"]["DATA"]["MIN_LENGTH"],
                       "max_length": args["PRETRAIN"]["DATA"]["MAX_LENGTH"],
                       "aug_shift_prob": args["PRETRAIN"]["DATA"]["AUG_SHIFT_PROB"],
