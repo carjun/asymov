@@ -4,6 +4,7 @@ import torch
 
 def body_center(joint, dim=3, lhip_id=11, rhip_id=12):
     # TODO import lhip_id and rhip_id from dataset
+    # TODO change to root joint
     lhip = joint[lhip_id * dim:lhip_id * dim + dim]
     rhip = joint[rhip_id * dim:rhip_id * dim + dim]
     body_center = (lhip + rhip) * 0.5
@@ -71,15 +72,17 @@ class SkeletonTransform(object):
         # spatial translation normalization by first frame
         if joint_num == 17:
             ct = body_center(x[norm_frame])
+        elif joint_num == 21:
+            ct = body_center(x[norm_frame], lhip_id=11, rhip_id=16)
         else:
             ct = body_center(x[norm_frame], lhip_id=12, rhip_id=16)
         x -= ct.repeat(joint_num).unsqueeze(0)
 
         assert not x.isnan().any(), "After Translation Normalization"
         
-        if joint_num == 17:
+        if joint_num == 17 or joint_num == 21:
             # spatial rotation normalization by first frame
-            if joint_num == 17:
+            if joint_num == 17 or joint_num == 21:
                 lh = x[norm_frame, 33:35]  # left hip x, left hip y
             else:
                 lh = x[norm_frame, 36:38]  # left hip x, left hip y 
@@ -104,6 +107,8 @@ class SkeletonTransform(object):
         if random.random() < self.aug_shift_prob and not shut:  # let's translate
             if joint_num == 17:
                 unit = body_unit(x[self.norm_frame])
+            elif joint_num == 21:
+                unit = body_unit(x[self.norm_frame], lhip_id=11, rhip_id=16)
             else:
                 unit = body_unit(x[self.norm_frame], lhip_id=12, rhip_id=16)
             move_x = (random.random() - .5) * self.aug_shift_range * unit

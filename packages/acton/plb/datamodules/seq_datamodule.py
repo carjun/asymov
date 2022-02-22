@@ -9,7 +9,7 @@ import torch
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
-from .dataset import SkeletonDataset
+from .dataset import KITSkeletonDataset
 from .data_transform import SkeletonTransform
 
 num_cpu = multiprocessing.cpu_count()
@@ -21,7 +21,8 @@ def get_from_name(loader, seq_name):
 
 
 def select_valid_3D_skeletons(skeletons, thre):
-    # fresh out of official loader is [T, 17, 3] in centinetre
+    #TODO confirm if it's in centmeter
+    # fresh out of official loader is [T, 21, 3] in ___
     max_per_frame = np.max(np.max(skeletons, axis=-1), axis=-1)  # [T]
     sel = max_per_frame < thre
     kicks = np.sum(~(sel)).item()
@@ -142,14 +143,13 @@ class SeqDataset(Dataset):
         return self.transform(tbc)
 
 
-class SeqDataModule(LightningDataModule):
+class KITSeqDataModule(LightningDataModule):
     name = 'seq'
 
     def __init__(
             self,
             DATA_DIR,
-            GENRE,
-            SPLIT,
+            DATA_NAME,
             BS,
             AUG_SHIFT_PROB,
             AUG_SHIFT_RANGE,
@@ -164,7 +164,8 @@ class SeqDataModule(LightningDataModule):
             **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.dataset = SkeletonDataset(DATA_DIR, GENRE, SPLIT)
+        #TODO: provide seed as an argument for KITSkeletonDataset
+        self.dataset = KITSkeletonDataset(data_dir=DATA_DIR, data_name=DATA_NAME)
         self.batch_size = BS  # the batch size to show to outer modules
         self.aug_shift_prob = AUG_SHIFT_PROB
         self.aug_shift_range = AUG_SHIFT_RANGE
@@ -185,6 +186,7 @@ class SeqDataModule(LightningDataModule):
         # TODO: deal with constant
         self.num_proc = self.num_workers if self.num_workers > 0 else 1
         self.threshold = 500
+        
         name_list = self.dataset.train_split + self.dataset.validation_split
         with multiprocessing.Pool(self.num_proc) as p:
             for name, res in p.starmap(get_from_name,
@@ -194,32 +196,22 @@ class SeqDataModule(LightningDataModule):
                 if kicks > 0:
                     print(f"kicking out {kicks} frames out of {name} for train, threshold is {self.threshold}")
                     res = res[sel]
-                # let's normalize for numerical stability
-                res = res / 100.0  # originally in cm, now in m
 
-                if SPLIT == 4321:
-                    if name in self.dataset.train_split and "sFM" in name:
-                        self.train_data.append(torch.tensor(res).float().flatten(1))
-                        self.num_samples += 1  # related to simCLR or scheduling, important
-                    elif name in self.dataset.validation_split and "sFM" in name:
-                        self.val_data.append(torch.tensor(res).float().flatten(1))
-                        self.num_samples_valid += 1
-                    else:
-                        pass
-                elif SPLIT == 1234:
-                    if "sFM" in name:
-                        self.train_data.append(torch.tensor(res).float().flatten(1))
-                        self.num_samples += 1  # related to simCLR or scheduling, important
-                    elif name in self.dataset.validation_split:
-                        self.val_data.append(torch.tensor(res).float().flatten(1))
-                        self.num_samples_valid += 1
-                    else:
-                        pass
+                #TODO check for normalization
+                # let's normalize for numerical stability
+                # res = res / 100.0  # originally in cm, now in m
+
+                if name in self.dataset.train_split :
+                    self.train_data.append(torch.tensor(res).float().flatten(1))
+                    self.num_samples += 1  # related to simCLR or scheduling, important
+                elif name in self.dataset.validation_split :
+                    self.val_data.append(torch.tensor(res).float().flatten(1))
+                    self.num_samples_valid += 1
                 else:
-                    assert 0, 'unknown split, should be in [1234, 4321]'
+                    pass
 
         print(
-            f"SPLIT {SPLIT} dances loaded with {self.num_samples} training videos and {self.num_samples_valid} validation videos")
+            f"{DATA_NAME}_data_split loaded {self.num_samples} training videos and {self.num_samples_valid} validation videos")
 
     def train_dataloader(self) -> DataLoader:
         train_dataset = SeqDataset(self.train_data, transform=self.train_transforms)
@@ -233,6 +225,7 @@ class SeqDataModule(LightningDataModule):
                                     num_workers=self.num_workers)
         return val_dataloader
 
+    #TODO _default_transforms
     def _default_transforms(self) -> Callable:
         data_transforms = SkeletonTransform(self.aug_shift_prob, self.aug_shift_range, self.aug_rot_prob, self.aug_rot_range, self.min_length, self.max_length, self.aug_time_prob, self.aug_time_rate)
         return data_transforms

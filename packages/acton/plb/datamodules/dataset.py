@@ -1,47 +1,54 @@
-import os, json
-from src.data.dataset.loader import AISTDataset
+import os, sys
+import os.path as osp
+from os.path import join as ospj
+import random
+import pdb
+import json
 
-genre_list = ["gBR", "gPO", "gLO", "gMH", "gLH", "gHO", "gWA", "gKR", "gJS", "gJB"]
+from src.data.dataset.loader import KITDataset
 
-# 17 joints of COCO:
-# 0 - nose,  1 - left_eye,  2 - right_eye, 3 - left_ear, 4 - right_ear
-# 5 - left_shoulder, 6 - right_shoulder, 7 - left_elbow, 8 - right_elbow, 9 - left_wrist, 10 - right_wrist
-# 11 - left_hip, 12 - right_hip, 13 - left_knee, 14 - right_knee. 15 - left_ankle, 16 - right_ankle
-
-
-class SkeletonDataset():
-    name = 'stl10'
+class KITSkeletonDataset():
 
     def __del__(self, ):
         if hasattr(self, "official_loader"):
             del self.official_loader
 
-    def __init__(self, DATA_DIR, GENRE, SPLIT):
-        self.data_dir = DATA_DIR
-        self.genre = genre_list[:GENRE]
-        self.split = SPLIT
+    def __init__(self, data_dir, data_name, split=(0.6, 0.2), preProcess_flag=False, seed=0):
+        self.data_dir = data_dir
+        # pdb.set_trace()
         assert os.path.isdir(self.data_dir)
-        self.official_loader = AISTDataset(os.path.join(self.data_dir, "annotations"))
-        all_seq = []
-        for seq_name_np in self.official_loader.mapping_seq2env.keys():
-            seq_name = str(seq_name_np)
-            if seq_name.split("_")[0] in self.genre:
-                all_seq.append(seq_name)
-        # print(f'\n\n\nall_seq = {len(all_seq)}\n\n\n')
-        with open(os.path.join("src/data/dataset", "splits", f"split_wseed_{self.split}.json"), "r") as f:
-            ldd = json.load(f)
-            self.validation_split = []
-            for genre in self.genre:
-                self.validation_split += ldd[genre]
-        # print(f'\n\n\nvalidation_split = {len(self.validation_split)}\n\n\n')
-        self.train_split = [_ for _ in all_seq if _ not in self.validation_split]
-        # print(f'\n\n\ntrain_split = {len(self.train_split)}\n\n\n')
-        
-        # remove files officially deemed as broken
-        bad_vids = self.official_loader.filter_file + ["gHO_sFM_cAll_d20_mHO5_ch13", ]
-        # print(f'\n\n\nbad_vids = {len(bad_vids)}\n\n\n')
-        self.validation_split = [_ for _ in self.validation_split if _ not in bad_vids]
-        self.train_split = [_ for _ in self.train_split if _ not in bad_vids]
 
-        print(
-            f"{self.genre}-style dances loaded with {len(self.train_split)} training videos and {len(self.validation_split)} validation videos")
+        # self.split = tuple(map( float, split.split(',')))
+        self.data_name = data_name
+        
+        self.official_loader = KITDataset(self.data_dir, self.data_name, preProcess_flag)
+        # all_seq = self.official_loader._get_all_seq()
+        # # print(f'\n\n\nall_seq = {len(all_seq)}\n\n\n')
+        # bad_vids = self.official_loader.filter_file 
+        # # print(f'\n\n\nbad_vids = {len(bad_vids)}\n\n\n')
+        # all_seq = [_ for _ in all_seq if _ not in bad_vids]
+        # # print(f'\n\n\nall_seq without bad_vids = {len(all_seq)}\n\n\n')
+        
+        # length = len(all_seq)
+        # # pdb.set_trace()
+        # end_train = int(length*self.split[0])
+        # start_dev = end_train
+        # end_dev = int(start_dev + length*self.split[1])
+        # start_test = end_dev
+
+        # if seed:
+        #     random.seed(seed)
+        # random.shuffle(all_seq)
+        # self.train_split = all_seq[:end_train]
+        # # print(f'\n\n\ntrain_split = {len(self.train_split)}\n\n\n')
+        # self.validation_split = all_seq[start_dev:end_dev]
+        # # print(f'\n\n\nvalidation_split = {len(self.validation_split)}\n\n\n')
+        # self.test_split = all_seq[end_dev:]
+        # print(f'\n\n\test_split = {len(self.test_split)}\n\n\n')
+
+        with open(ospj(self.data_dir, self.data_name + '_data_split.json'), 'r') as handle:
+            data_split = json.load(handle)
+
+        self.train_split, self.validation_split, self.test_split = data_split['train'], data_split['val'], data_split['test']
+
+        print(f"Data loaded with {len(self.train_split)} training, {len(self.validation_split)} validation and {len(self.test_split)} testing videos")

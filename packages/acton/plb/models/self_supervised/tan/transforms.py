@@ -1,3 +1,4 @@
+import pdb
 import numpy as np
 import random
 from pl_bolts.utils import _OPENCV_AVAILABLE, _TORCHVISION_AVAILABLE
@@ -29,10 +30,14 @@ class TrainDataTransform(object):
         ttl = sample.size(0)
 
         # let's random crop
-        len = random.randint(self.min_length, min(self.max_length, ttl))
-        start = random.randint(0, ttl - len)
-        sample = sample[start:start + len]
-
+        # if ttl<self.min_length:
+        try:
+            len = random.randint(self.min_length, min(self.max_length, ttl))
+            start = random.randint(0, ttl - len)
+            sample = sample[start:start + len]
+        except:
+            print(ttl)
+        # pdb.set_trace()
         xi, veloi = transform(sample)#, shut=True)  # not do transform on one branch
         xj, veloj = transform(sample)
 

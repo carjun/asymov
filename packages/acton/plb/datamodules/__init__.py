@@ -1,5 +1,5 @@
-from plb.datamodules.seq_datamodule import SeqDataModule
+from plb.datamodules.seq_datamodule import KITSeqDataModule
 
 __all__ = [
-    'SeqDataModule',
+    'KITSeqDataModule',
 ]
