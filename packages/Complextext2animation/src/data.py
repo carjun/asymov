@@ -352,25 +352,25 @@ class KITMocap(RawData):
         else:
             self.df = pd.read_hdf(base_path + 'dataProcessing/data.h5', 'df')
 
-        self.columns = pd.read_csv(
-            self.df.iloc[0].quaternion, index_col=0).columns
-        joints = [col[:-3] for col in self.columns]
-        self.joints = []
-        self.columns_dict = {}
-        start = 0
-        for joint in joints:
-            if not self.joints:
-                self.joints.append(joint)
-                end = 1
-            elif self.joints[-1] == joint:
-                end += 1
-            else:
-                self.columns_dict.update(
-                    {self.joints[-1]: self.columns[start:end]})
-                self.joints.append(joint)
-                start = end
-                end = end + 1
-        self.columns_dict.update({self.joints[-1]: self.columns[start:end]})
+        # self.columns = pd.read_csv(
+        #     self.df.iloc[0].quaternion, index_col=0).columns
+        # joints = [col[:-3] for col in self.columns]
+        # self.joints = []
+        # self.columns_dict = {}
+        # start = 0
+        # for joint in joints:
+        #     if not self.joints:
+        #         self.joints.append(joint)
+        #         end = 1
+        #     elif self.joints[-1] == joint:
+        #         end += 1
+        #     else:
+        #         self.columns_dict.update(
+        #             {self.joints[-1]: self.columns[start:end]})
+        #         self.joints.append(joint)
+        #         start = end
+        #         end = end + 1
+        # self.columns_dict.update({self.joints[-1]: self.columns[start:end]})
 
     def _get_df(self):
         return self.df
@@ -443,25 +443,25 @@ class KITMocap(RawData):
                     df = pd.DataFrame(data=quats, columns=columns)
                     df.to_csv(axpath)
 
-    def mat2amc(self, data, filename):
-        lines = ["#!OML:ASF H:",
-                 ":FULLY-SPECIFIED",
-                 ":DEGREES"]
-        for count, row in enumerate(data):
-            start = 0
-            lines.append('{}'.format(count+1))
-            for joint in self.joints:
-                end = start + len(self.columns_dict[joint])
-                format_str = '{} ' * (len(self.columns_dict[joint]) + 1)
-                format_str = format_str[:-1]  # remove the extra space
-                lines.append(format_str.format(
-                    *([joint] + list(row[start:end]))))
-                start = end
-        lines = '\n'.join(lines) + '\n'
+    # def mat2amc(self, data, filename):
+    #     lines = ["#!OML:ASF H:",
+    #              ":FULLY-SPECIFIED",
+    #              ":DEGREES"]
+    #     for count, row in enumerate(data):
+    #         start = 0
+    #         lines.append('{}'.format(count+1))
+    #         for joint in self.joints:
+    #             end = start + len(self.columns_dict[joint])
+    #             format_str = '{} ' * (len(self.columns_dict[joint]) + 1)
+    #             format_str = format_str[:-1]  # remove the extra space
+    #             lines.append(format_str.format(
+    #                 *([joint] + list(row[start:end]))))
+    #             start = end
+    #     lines = '\n'.join(lines) + '\n'
 
-        os.makedirs(filename.parent, exist_ok=True)
-        with open(filename, 'w') as fp:
-            fp.writelines(lines)
+    #     os.makedirs(filename.parent, exist_ok=True)
+    #     with open(filename, 'w') as fp:
+    #         fp.writelines(lines)
 
     def get_new_parents(self, parents, joints_left, joints_right, joints):
         permutation, new_parents = permute(parents)
