@@ -19,7 +19,7 @@ from src import algo
 from src.data.dataset.cluster_misc import lexicon#, get_names, genre_list
 
 from plb.models.self_supervised import TAN
-from plb.models.self_supervised.tan import TANEvalDataTransform, TANTrainDataTransform
+# from plb.models.self_supervised.tan import TANEvalDataTransform, TANTrainDataTransform
 # from plb.datamodules import SeqDataModule
 from plb.datamodules.data_transform import body_center, euler_rodrigues_rotation
 
@@ -58,7 +58,13 @@ def parse_args():
                         default=1,
                         type=int)
 
+    parser.add_argument('--use_raw',
+                        help='whether to use raw skeleton for clustering',
+                        default=0,
+                        type=int)
+
     args, _ = parser.parse_known_args()
+    print(f'SEED: {args.seed}')
     pl.utilities.seed.seed_everything(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -66,7 +72,8 @@ def parse_args():
         ldd = yaml.safe_load(stream)
 
     # if args.log_ver:
-    ldd["CLUSTER"]["VERSION"] = args.log_ver
+    ldd["CLUSTER"]["VERSION"] = str(args.log_ver)
+    ldd["CLUSTER"]["USE_RAW"] = args.use_raw
     ldd["PRETRAIN"]["DATA"]["DATA_NAME"] = args.data_name
     if args.data_dir:
         ldd["PRETRAIN"]["DATA"]["DATA_DIR"] = args.data_dir
@@ -91,8 +98,9 @@ def main():
     Path(video_dir).mkdir(parents=True, exist_ok=True)
 
     official_loader = KITDataset(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"])
-    if 0:  # change this to 0 for skeleton experiment
+    if int(args["CLUSTER"]["USE_RAW"])==0:  # change this to 0 for skeleton experiment
         # get model
+        print('Using model-predicted feature vectors for clustering')
         load_name = args["CLUSTER"]["CKPT"] if args["CLUSTER"]["CKPT"] != -1 else args["NAME"]
         with open(os.path.join(log_dir, f"val_cluster_zrsc_scores.txt"), "a") as f:
             f.write(f"EXP: {load_name}\n")
@@ -107,7 +115,8 @@ def main():
         model = eval(old_args["PRETRAIN"]["ALGO"]).load_from_checkpoint(os.path.join("./kit_logs", load_name, "default/version_" + args["CLUSTER"]["VERSION"] + "/checkpoints", cpt_name))
         model.eval()
         def ske2feat(ldd):
-            ldd1 = torch.Tensor(ldd).flatten(1, -1) / 100  # [T, 51]
+            pdb.set_trace()
+            ldd1 = torch.Tensor(ldd).flatten(1, -1) #/ 100  # [T, 63]
             ttl = ldd1.shape[0]
             ct = body_center(ldd1[0])
             ldd1 -= ct.repeat(num_joints).unsqueeze(0)
@@ -116,6 +125,7 @@ def main():
             forward_feat /= torch.linalg.norm(forward_feat, dim=-1, keepdim=True, ord=2)
             return forward_feat
     else:
+        print('Using raw skeltons for clustering')
         # to get results for using raw skeleton, swap with
         def ske2feat(ldd):
             ldd1 = torch.Tensor(ldd).flatten(1, -1) / 100  # [T, 51]
@@ -137,16 +147,23 @@ def main():
 
     with open(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data_split.json'), 'r') as handle:
         data_split = json.load(handle)
-    tr_df, val_df = data_split['train'], data_split['val']
+    tr_df, val_df = data_split['train'], data_split['val'] + data_split['test'] + official_loader.filter_file
+
+    print(f"Training samples = {len(tr_df)}\nValidation samples = {len(val_df)}")
 
     for reference_name in tqdm(tr_df, desc='Loading training set features'):
-        # print(reference_name)
-        # if(reference_name=='gWA_sFM_cAll_d27_mWA4_ch19'):
-        #     pdb.set_trace()
+        # pdb.set_trace()
+        # if(reference_name=='03592'):
+        #     continue
         ldd = official_loader.load_keypoint3d(reference_name)
+        # print(reference_name, ldd.shape[0])
         tr_kpt_container.append(ldd)
         tr_len_container.append(ldd.shape[0])
-        tr_feat_container.append(ske2feat(ldd).detach().cpu().numpy())
+        try:
+            tr_feat_container.append(ske2feat(ldd).detach().cpu().numpy())
+        except:
+            print(f'{reference_name} is problematic')
+            raise NameError(reference_name)
         tr_name_container.append(reference_name)
     for reference_name in tqdm(val_df, desc='Loading validation set features'):
         ldd = official_loader.load_keypoint3d(reference_name)
@@ -236,6 +253,9 @@ def main():
             lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
             axis=1)
         proxy_centers_val = val_res_df.loc[val_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers 
+        proxy_centers_val['keypoints3d'] = proxy_centers_val[['frame_index','seq_name']].apply(   
+            lambda x: official_loader.load_keypoint3d(x['seq_name'])[x['frame_index']], axis=1)   #3d skeleton keypoints of the closest frame
+        
         sorted_proxies_val = val_res_df.groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
         val_word_df = pd.DataFrame(columns=["idx", "cluster", "length", "y", "name"])  # word index in home sequence
@@ -261,16 +281,18 @@ def main():
         print(f"advanced_val_{K}.pkl dumped to {log_dir}")  # saved tokenization of validation set
         
         # not needed
-        # val_res_df.to_pickle(dirpath / f"advanced_val_res_{K}.pkl")
-        # print(f"advanced_val_res_{K}.pkl dumped to {log_dir}") # frame wise tokenization
+        val_res_df.to_pickle(dirpath / f"advanced_val_res_{K}.pkl")
+        print(f"advanced_val_res_{K}.pkl dumped to {log_dir}") # frame wise tokenization
         
         # not needed
-        # proxy_centers_val.to_pickle(dirpath / f"proxy_centers_val_{K}.pkl")
-        # print(f"proxy_centers_val_{K}.pkl dumped to {log_dir}") # saved proxy centers
-        
-        #not needed
-        # sorted_proxies_val.to_pickle(dirpath / f"sorted_proxies_val_{K}.pkl")
-        # print(f"sorted_proxies_val_{K}.pkl dumped to {log_dir}") # saved sorted proxies
+        proxy_centers_val.to_pickle(dirpath / f"proxy_centers_val_complete_{K}.pkl")
+        print(f"proxy_centers_val_complete_{K}.pkl dumped to {log_dir}") # saved proxy centers
+        proxy_centers_val[['cluster', 'keypoints3d']].to_pickle(dirpath / f"proxy_centers_val_{K}.pkl")
+        print(f"proxy_centers_val_{K}.pkl dumped to {log_dir}")
+
+        # not needed
+        sorted_proxies_val.to_pickle(dirpath / f"sorted_proxies_val_{K}.pkl")
+        print(f"sorted_proxies_val_{K}.pkl dumped to {log_dir}") # saved sorted proxies
 
 if __name__ == '__main__':
     main()
