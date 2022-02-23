@@ -73,7 +73,7 @@ class SkeletonTransform(object):
         if joint_num == 17:
             ct = body_center(x[norm_frame])
         elif joint_num == 21:
-            ct = body_center(x[norm_frame], lhip_id=11, rhip_id=16)
+            ct = body_center(x[norm_frame], lhip_id=0, rhip_id=0) #root joint
         else:
             ct = body_center(x[norm_frame], lhip_id=12, rhip_id=16)
         x -= ct.repeat(joint_num).unsqueeze(0)
