@@ -32,7 +32,7 @@ PRETRAIN:
     LARS: False  # use only when OPTIM is sgd
   VALIDATION:
 CLUSTER:
-  VERSION: 0
+  VERSION: 0 #version of NAME in kit_logs
   TYPE: kmeans_skl
   #GENRE: 10  # the index of genre to use (0~9), 10 means all genre
   K_MIN: 150
