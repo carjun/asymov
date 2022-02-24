@@ -30,7 +30,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from pathlib import Path
 
 #TODO: change the import path to inside acton package
-# sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
+sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
 from packages.acton.src.data.dataset.loader import KITDataset
 # from packages.acton.src.data.dataset import loader,utils
 
@@ -770,7 +770,70 @@ def mpjpe3d(pred_keypoints, target_keypoints):
 #-------------------------------------------------------------------------------
 
 #reconstruction-----------------------------------------------------------------
-#TODO: change the implementation to not to repeat center frame
+#TODO: add smoothening function
+
+def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir=None):
+    '''
+    Args:
+        seq_names : name of video sequences to reconstruct
+        data_loader : data loader that yields the per frame 3d keypoints of skeleton joints of the specified video sequence name
+        contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
+        cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
+        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
+
+    Retruns:
+        The mean and per sequence mpjpe between reconstructed and original sequences.
+        If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
+    '''
+
+    ground_truth_keypoints = []
+    reconstructed_keypoints = []
+
+    contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
+    cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
+
+    for name in seq_names:
+        ground_truth_keypoints.append(data_loader.load_keypoint3d(name))
+        reconstructed_keypoint = []
+        
+        contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
+        for i in range(contiguous_cluster_seqs.shape[0]):
+            #get contiguous cluster info
+            contiguous_cluster = contiguous_cluster_seqs.iloc[i]
+            cluster, length = contiguous_cluster[['cluster', 'length']]
+            #get center frame info 
+            center_frame = cluster2frame.iloc[cluster]
+            center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
+            center_frame_complete_seq = data_loader.load_keypoint3d(center_frame_seq_name)
+            assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
+
+            center_frame_complete_seq_len = center_frame_complete_seq.shape[0]
+            if length>center_frame_complete_seq_len:
+                raise Exception(f'seq name : {name}\ncontiguous_cluster_seq : {i}\n')
+            lb = max(0,center_frame_idx - (length-1)//2) #check left boundary
+            lb = min(center_frame_complete_seq_len-length, lb) #check right boundary
+            assert lb>=0
+            assert lb<center_frame_complete_seq_len
+            
+            #reconstruct
+            reconstructed_keypoint.append(center_frame_complete_seq[lb:lb+length])
+            assert reconstructed_keypoint[-1].shape[0]==length
+
+        reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+        assert reconstructed_keypoints[-1].shape[0]==ground_truth_keypoints[-1].shape[0]
+    
+    # pdb.set_trace()
+    mpjpe_per_sequence=[]
+    for name, reconstructed_keypoint, ground_truth_keypoint in tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively (no reps) reconstructing sequences'):
+        mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
+        
+        if(frames_dir):
+            viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
+    
+    return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+
+
 def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir=None):
     '''
     Args:
@@ -825,7 +888,7 @@ def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mappin
     
     # pdb.set_trace()
     mpjpe_per_sequence=[]
-    for name, reconstructed_keypoint, ground_truth_keypoint in zip(seq_names, reconstructed_keypoints, ground_truth_keypoints):
+    for name, reconstructed_keypoint, ground_truth_keypoint in tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively reconstructing sequences'):
         mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
         
         if(frames_dir):
@@ -857,7 +920,7 @@ def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path
     reconstructed_keypoints = [np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]) for cluster_seq in cluster_seqs]
     
     mpjpe_per_sequence=[]
-    for name, reconstructed_keypoint, ground_truth_keypoint in zip(seq_names, reconstructed_keypoints, ground_truth_keypoints):
+    for name, reconstructed_keypoint, ground_truth_keypoint in tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='very naively reconstructing sequences'):
         mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
         
         if(frames_dir):
@@ -874,20 +937,33 @@ if __name__ == '__main__':
     # cluster_seq = d[d['seq_name']=='gWA_sFM_cAll_d25_mWA2_ch03']['cluster']
     # cluster_seq2vid(cluster_seq[:500], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl', '/content/drive/Shareddrives/vid tokenization/seq2vid', 'coco17')
 
-    cluster2vid(clusters_idx=[i for i in range(150)], sk_type='kitml', 
-        proxy_center_info_path='/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl', 
-        data_dir='/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/', data_name='xyz',
-        frames_dir='/content/drive/Shareddrives/vid tokenization/cluster2vid')
+    # cluster2vid(clusters_idx=[i for i in range(150)], sk_type='kitml', 
+    #     proxy_center_info_path='/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl', 
+    #     data_dir='/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/', data_name='xyz',
+    #     frames_dir='/content/drive/Shareddrives/vid tokenization/cluster2vid')
 
-    # d = loader.AISTDataset('/content/drive/Shareddrives/vid tokenization/aistpp_subset/aistplusplus/annotations')
-    # df = pd.read_pickle('/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_150.pkl')
-    # seq_names = df['name'].unique()
-    # sk_type='coco17'
-    # frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_res_150.pkl'
-    # cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl'
-    # mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type)
-    # contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_150.pkl'
-    # cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_complete_150.pkl'
-    # mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
-    # print(mpjpe_mean)
+    data_dir = '/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/'
+    data_name = 'xyz'
+    d = KITDataset(data_dir, data_name)
+
+    seq_names=['02654']
+    seq = d.load_keypoint3d('02654')
+    frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_res_150.pkl'
+    contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_150.pkl'
+    cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_150.pkl'
+    cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl'
+    sk_type = 'kitml'
+    frames_dir = '/content/drive/Shareddrives/vid tokenization/kit_reconstruction/'
+    
+    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, frames_dir+'very_naive')
+    very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type)
+    print('very naive mpjpe : ', very_naive_mpjpe_mean)
+    
+    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive')
+    naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
+    print('naive mpjpe : ', naive_mpjpe_mean)
+
+    naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive_no_rep')
+    # naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
+    print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
 
