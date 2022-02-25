@@ -179,15 +179,19 @@ def main():
     val_stacked = np.vstack(val_feat_container)
 
     for K in range(args["CLUSTER"]["K_MIN"], args["CLUSTER"]["K_MAX"], 10):
+        # get cluster centers
         argument_dict = {"distance": plain_distance, "TYPE": "vanilla", "K": K, "TOL": 1e-4}
         if not os.path.exists(os.path.join(log_dir, f"advanced_centers_{K}.npy")):
+            print('Finding cluster centers')
             c = getattr(algo, args["CLUSTER"]["TYPE"])(tr_stacked, times=args["CLUSTER"]["TIMES"], argument_dict=argument_dict)
             np.save(os.path.join(log_dir, f"advanced_centers_{K}.npy"), c.kmeans.cluster_centers_)
         else:
+            print('Loading saved cluster centers')
             ctrs = np.load(os.path.join(log_dir, f"advanced_centers_{K}.npy"))
             c = getattr(algo, args["CLUSTER"]["TYPE"] + "_clusterer")(TIMES=args["CLUSTER"]["TIMES"], K=K, TOL=1e-4)
             c.fit(tr_stacked[:K])
             c.kmeans.cluster_centers_ = ctrs
+
         # infer on training set and save
         y = np.concatenate([np.ones((l,)) * i for i, l in enumerate(tr_len_container)], axis=0)
         s = np.concatenate([np.arange(l) for i, l in enumerate(tr_len_container)], axis=0)
