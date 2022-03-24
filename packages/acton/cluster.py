@@ -117,7 +117,8 @@ def get_feats(args, ldd, model=None):
         ttl = ldd1.shape[0]
         ct = body_center(ldd1[0])
         ldd1 -= ct.repeat(args['NUM_JOINTS']).unsqueeze(0)
-        res1 = model(ldd1.unsqueeze(0), torch.tensor([ttl]))
+        res1 = model(ldd1.unsqueeze(0).to(args['DEVICE']),
+                     torch.tensor([ttl]).to(args['DEVICE']))
         forward_feat = res1[:, 0]  # [T1, f]
         forward_feat /= torch.linalg.norm(forward_feat, dim=-1, keepdim=True, ord=2)
         feats = forward_feat
@@ -145,12 +146,17 @@ def main():
     # Load KIT Dataset from stored pkl file (e.g., xyz_data.pkl)
     official_loader = KITDataset(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"])
 
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    args['DEVICE'] = device
+
     # Load model only if we are using TAN Featuers ("USE_RAW" == 0)
     model = None
     if int(args["CLUSTER"]["USE_RAW"]) == 0:
         model = get_model(args)
         torch.set_grad_enabled(False)
         model.eval()
+        model = model.to(args['DEVICE'])
 
     # Get data
     tr_kpt_container = []
@@ -168,16 +174,15 @@ def main():
 
     print(f"Training samples = {len(tr_df)}\nValidation samples = {len(val_df)}")
 
-    # FIXME: Store seqs. that cause errors
-    prob_names = ['02580', '02779']
     for reference_name in tqdm(tr_df, desc='Loading training set features'):
 
-        # FIXME: Sequences that cause a Tensor size mismatch error
-        if reference_name in prob_names:
-            continue
 
         try:
             ldd = official_loader.load_keypoint3d(reference_name)
+
+            # FIXME: Temp. debug hack -- truncate to T=5000
+            ldd = ldd[:5000, :, :]
+
             # print(reference_name, ldd.shape[0])
             tr_kpt_container.append(ldd)
             tr_len_container.append(ldd.shape[0])
@@ -185,21 +190,24 @@ def main():
             tr_feat_container.append(feats.detach().cpu().numpy())
             tr_name_container.append(reference_name)
         except:
-            prob_names.append(reference_name)
+            print(f'ERROR w/ seq. {reference_name}. In except: block')
 
     for reference_name in tqdm(val_df, desc='Loading validation set features'):
         try:
             ldd = official_loader.load_keypoint3d(reference_name)
+
+            # FIXME: Temp. debug hack -- truncate to T=5000
+            ldd = ldd[:5000, :, :]
+
             val_kpt_container.append(ldd)
             val_len_container.append(ldd.shape[0])
             feats = get_feats(args, ldd, model)
             val_feat_container.append(feats.detach().cpu().numpy())
             val_name_container.append(reference_name)
         except:
-            prob_names.append(reference_name)
+            print(f'ERROR w/ seq. {reference_name}. In except: block')
 
-    print('{0} problematic seqs.: \n{1}'.format(len(prob_names), prob_names))
-
+    print('Done loading TAN/raw position features.')
     pdb.set_trace()
 
     tr_where_to_cut = [0, ] + list(np.cumsum(np.array(tr_len_container)))
