@@ -2,7 +2,7 @@ NAME: tan_kitml  # will create a folder under ./logs with this name
 PRETRAIN:
   GPUS: 1  # default on 4 GPUs
   ALGO: TAN
-  EPOCH: 200
+  EPOCH: 500
   WARMUP: 50
   ARCH:
     ARCH: Transformer

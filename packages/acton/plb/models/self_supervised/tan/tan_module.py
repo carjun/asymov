@@ -130,7 +130,7 @@ class TAN(pl.LightningModule):
             tr_layer=6,
             tr_dim=512,
             neg_dp=0.0,
-            j=51, 
+            j=51,
             **kwargs
     ):
         """
@@ -277,9 +277,10 @@ class TAN(pl.LightningModule):
         loss = self.shared_step(batch)
 
         # log LR (LearningRateLogger callback doesn't work with LARSWrapper)
-        self.log('learning_rate', self.lr_schedule[self.trainer.global_step], on_step=True, on_epoch=False)
+        self.log('learning_rate', self.lr_schedule[self.trainer.global_step], on_step=False, on_epoch=True)
 
-        self.log('train_loss', loss, on_step=True, on_epoch=False)
+        self.log('train_loss_iter', loss, on_step=True, on_epoch=False)
+        self.log('train_loss_epoch', loss, on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
