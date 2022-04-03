@@ -26,6 +26,7 @@ import uuid
 import cv2
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from scipy.ndimage import uniform_filter1d, spline_filter1d
 
 from pathlib import Path
 
@@ -772,14 +773,15 @@ def mpjpe3d(pred_keypoints, target_keypoints):
 #reconstruction-----------------------------------------------------------------
 #TODO: add smoothening function
 
-def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir=None):
+def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter=None, frames_dir=None):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
         data_loader : data loader that yields the per frame 3d keypoints of skeleton joints of the specified video sequence name
         contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
-        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}        
+        filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
 
     Retruns:
@@ -820,7 +822,14 @@ def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster
             reconstructed_keypoint.append(center_frame_complete_seq[lb:lb+length])
             assert reconstructed_keypoint[-1].shape[0]==length
 
-        reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+        if filter is None:
+            reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+        elif filter == 'spline':
+            reconstructed_keypoints.append(spline_filter1d(np.concatenate(reconstructed_keypoint, axis=0), axis=0))
+        elif filter == 'uniform':
+            reconstructed_keypoints.append(uniform_filter1d(np.concatenate(reconstructed_keypoint, axis=0), size=60, axis=0))
+        else :
+            raise NameError(f'No such filter {filter}')
         assert reconstructed_keypoints[-1].shape[0]==ground_truth_keypoints[-1].shape[0]
     
     # pdb.set_trace()
@@ -834,7 +843,7 @@ def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster
     return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
 
 
-def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir=None):
+def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter=None, frames_dir=None):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
@@ -842,6 +851,7 @@ def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mappin
         contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
 
     Retruns:
@@ -884,7 +894,15 @@ def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mappin
                 axis=0
             ))
 
-        reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+        if filter is None:
+            reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+        elif filter == 'spline':
+            reconstructed_keypoints.append(spline_filter1d(np.concatenate(reconstructed_keypoint, axis=0), axis=0))
+        elif filter == 'uniform':
+            reconstructed_keypoints.append(uniform_filter1d(np.concatenate(reconstructed_keypoint, axis=0), size=60, axis=0))
+        else :
+            raise NameError(f'No such filter {filter}')
+        
     
     # pdb.set_trace()
     mpjpe_per_sequence=[]
@@ -896,7 +914,7 @@ def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mappin
     
     return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
 
-def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, frames_dir=None):
+def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter=None, frames_dir=None):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
@@ -904,6 +922,7 @@ def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path
         frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster
         cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
 
     Retruns:
@@ -917,10 +936,20 @@ def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path
     frame2cluster = pd.read_pickle(frame2cluster_mapping_path)
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
     cluster_seqs = [frame2cluster[frame2cluster['seq_name']==name]['cluster'] for name in seq_names]
-    reconstructed_keypoints = [np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]) for cluster_seq in cluster_seqs]
-    
+    if filter is None:
+        reconstructed_keypoints = [np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]) for cluster_seq in cluster_seqs]
+    elif filter == 'spline':
+        reconstructed_keypoints = [spline_filter1d(np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]), axis=0) for cluster_seq in cluster_seqs]
+    elif filter == 'uniform':
+        reconstructed_keypoints = [uniform_filter1d(np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]), size=60, axis=0) for cluster_seq in cluster_seqs]
+    else :
+        raise NameError(f'No such filter {filter}')
+
     mpjpe_per_sequence=[]
     for name, reconstructed_keypoint, ground_truth_keypoint in tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='very naively reconstructing sequences'):
+        # if reconstructed_keypoint.shape[0]!=reconstructed_keypoint.shape[0]:
+        #     raise NameError(name)
+        # print(name, reconstructed_keypoint.shape, reconstructed_keypoint.shape)
         mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
         
         if(frames_dir):
@@ -946,8 +975,18 @@ if __name__ == '__main__':
     data_name = 'xyz'
     d = KITDataset(data_dir, data_name)
 
-    seq_names=['02654']
-    seq = d.load_keypoint3d('02654')
+    # seq_names=['02654']
+    # seq = d.load_keypoint3d('02654')
+    seq_names = ['01699', #'02855', 
+       '00826', '02031', '01920', '02664', '01834',
+       '02859', '00398', '03886', '01302', '02053', '00898', '03592',
+       '03580', '00771', '01498', '00462', '01292', '02441', '03393',
+       '00376', '02149', '03200', '03052', '01788', '00514', '01744',
+       '02977', '00243', '02874', '00396', '03597', '02654', '03703',
+       '00456', '00812', '00979', '00724', '01443', '03401', '00548',
+       '00905', '00835', #'02612', 
+       '02388', '03788', '03870', '03181',
+       '00199']
     frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_res_150.pkl'
     contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_150.pkl'
     cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_150.pkl'
@@ -963,7 +1002,34 @@ if __name__ == '__main__':
     naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
     print('naive mpjpe : ', naive_mpjpe_mean)
 
-    naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive_no_rep')
-    # naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
+    # naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive_no_rep')
+    naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
     print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
+
+
+    #uniform filter
+    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter = 'uniform', frames_dir=frames_dir+'very_naive_ufilter')
+    very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter='uniform')
+    print('uniform filtered very naive mpjpe : ', very_naive_mpjpe_mean)
+    
+    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_ufilter')
+    naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
+    print('uniform filtered naive mpjpe : ', naive_mpjpe_mean)
+
+    # naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_no_rep_ufilter')
+    naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
+    print('uniform filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
+
+    #spline filter
+    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter = 'spline', frames_dir=frames_dir+'very_naive_sfilter')
+    very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter='spline')
+    print('spline filtered very naive mpjpe : ', very_naive_mpjpe_mean)
+    
+    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_sfilter')
+    naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
+    print('spline filtered naive mpjpe : ', naive_mpjpe_mean)
+
+    # naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_no_rep_sfilter')
+    naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
+    print('spline filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
 
