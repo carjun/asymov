@@ -770,8 +770,8 @@ def mpjpe3d(pred_keypoints, target_keypoints):
     return np.mean(np.sqrt(np.sum((target_keypoints - pred_keypoints) ** 2, axis=2)))
 #-------------------------------------------------------------------------------
 
-#reconstruction-----------------------------------------------------------------
-#TODO: add smoothening function
+#reconstruction methods-----------------------------------------------------------------
+#TODO: naive_reconstruction_no_rep implementation
 
 def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter=None, frames_dir=None):
     '''
@@ -841,7 +841,6 @@ def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster
             viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
     
     return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
-
 
 def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter=None, frames_dir=None):
     '''
@@ -977,16 +976,22 @@ if __name__ == '__main__':
 
     # seq_names=['02654']
     # seq = d.load_keypoint3d('02654')
-    seq_names = ['01699', #'02855', 
-       '00826', '02031', '01920', '02664', '01834',
-       '02859', '00398', '03886', '01302', '02053', '00898', '03592',
-       '03580', '00771', '01498', '00462', '01292', '02441', '03393',
-       '00376', '02149', '03200', '03052', '01788', '00514', '01744',
-       '02977', '00243', '02874', '00396', '03597', '02654', '03703',
-       '00456', '00812', '00979', '00724', '01443', '03401', '00548',
-       '00905', '00835', #'02612', 
-       '02388', '03788', '03870', '03181',
-       '00199']
+    # seq_names = ['01699', #'02855', 
+    #    '00826', '02031', '01920', '02664', '01834',
+    #    '02859', '00398', '03886', '01302', '02053', '00898', '03592',
+    #    '03580', '00771', '01498', '00462', '01292', '02441', '03393',
+    #    '00376', '02149', '03200', '03052', '01788', '00514', '01744',
+    #    '02977', '00243', '02874', '00396', '03597', '02654', '03703',
+    #    '00456', '00812', '00979', '00724', '01443', '03401', '00548',
+    #    '00905', '00835', #'02612', 
+    #    '02388', '03788', '03870', '03181',
+    #    '00199']
+    seq_names = ["00017",
+        "00018",
+        "00002",
+        "00014",
+        "00005",
+        "00010"]
     frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_res_150.pkl'
     contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_150.pkl'
     cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_150.pkl'

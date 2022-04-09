@@ -19,7 +19,7 @@ from plb.datamodules import KITSeqDataModule
 from pytorch_lightning.plugins import DDPPlugin
 
 import wandb
-os.environ['WANDB_API_KEY'] = 'bac3a003428df951a8e0b9e3878002a3227bbf0c'
+os.environ['WANDB_API_KEY'] = ''
 os.environ['WANDB_DISABLE_CODE'] = 'true'  # Workaround cluster error
 
 
@@ -35,11 +35,15 @@ def parse_args():
 						type=str)
 
 	parser.add_argument('--data_dir',
-						help='path to aistplusplus data directory from repo root',
+						help='path to data directory from repo root',
 						type=str)
 	parser.add_argument('--data_name',
 						help='which version of the dataset, subset or not',
 						default=1,
+						type=str)
+
+	parser.add_argument('--log_dir',
+						help='path to directory to store logs (kit_logs) directory',
 						type=str)
 
 	parser.add_argument('--seed',
@@ -56,6 +60,8 @@ def parse_args():
 	ldd["PRETRAIN"]["DATA"]["DATA_NAME"] = args.data_name
 	if args.data_dir:
 		ldd["PRETRAIN"]["DATA"]["DATA_DIR"] = args.data_dir
+	if args.log_dir:
+		ldd["PRETRAIN"]["TRAINER"]["LOG_DIR"] = args.log_dir
 	pprint.pprint(ldd)
 	return ldd
 
@@ -65,13 +71,13 @@ def main():
 
 	# Log, viz. dirs
 	timed = time.strftime("%Y%m%d_%H%M%S")
-	log_dir = os.path.join("/ps/project/conditional_action_gen/asymov/packages/acton/kit_logs", args["NAME"], timed)
+	log_dir = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"], timed)
 	dirpath = Path(log_dir)
 	dirpath.mkdir(parents=True, exist_ok=True)
 	with open(os.path.join(log_dir, "config.yaml"), "w") as stream:
 		yaml.dump(args, stream, default_flow_style=False)
-	video_dir = os.path.join(log_dir, f"saved_videos")
-	Path(video_dir).mkdir(parents=True, exist_ok=True)
+	# video_dir = os.path.join(log_dir, f"saved_videos")
+	# Path(video_dir).mkdir(parents=True, exist_ok=True)
 
 	# Model
 	j = 21
@@ -114,7 +120,7 @@ def main():
 	# Log best model (one with min lowest 3 val. losses)
 	checkpoint_callback = ModelCheckpoint(
 								monitor='val_loss',
-								dirpath=log_dir,
+								dirpath=os.path.join(log_dir,  'checkpoints'),
 								filename='best_ckpt_{epoch:03d}-{val_loss:.2f}',
 								save_top_k=3,
 								mode='min'

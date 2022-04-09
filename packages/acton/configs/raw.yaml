@@ -24,6 +24,7 @@ PRETRAIN:
     AUG_ROT_RANGE: 0.2  # take value from 0 to 2
     AUG_TIME_RATE: 1.99  # take value from 1 to 1.99
   TRAINER:
+    LOG_DIR: /ps/project/conditional_action_gen/asymov/packages/acton/kit_logs
     LOG_STEP: 10
     VAL_STEP: 5
     ACCELERATOR: ddp
@@ -32,9 +33,9 @@ PRETRAIN:
     LARS: False  # use only when OPTIM is sgd
   VALIDATION:
 CLUSTER:
-  VERSION: 0
+  VERSION: -1
   TYPE: kmeans_skl
-  USE_RAW: 0
+  USE_RAW: 1
   #GENRE: 10  # the index of genre to use (0~9), 10 means all genre
   K_MIN: 150
   K_MAX: 160  # with a step of 10
