@@ -94,8 +94,8 @@ def create_log_viz_dirs(args):
     dirname = Path(args['LOG_DIR'])
     dirname.mkdir(parents=True, exist_ok=True)
     timed = time.strftime("%Y%m%d_%H%M%S")
-    with open(os.path.join(args['LOG_DIR'], f"config_used_{timed}.yaml"), "w") as stream:
-        yaml.dump(args, stream, default_flow_style=False)
+    # with open(os.path.join(args['LOG_DIR'], f"config_used_{timed}.yaml"), "w") as stream:
+    #     yaml.dump(args, stream, default_flow_style=False)
     # video_dir = os.path.join(args['LOG_DIR'], "saved_videos")
     # Path(video_dir).mkdir(parents=True, exist_ok=True)
 
@@ -104,17 +104,17 @@ def get_model(args):
     '''Identify checkpoint to use, create log files, and  return model'''
     print('Using TAN model\'s features for clustering')
     load_name = args["CLUSTER"]["CKPT"]
-    with open(os.path.join(args['LOG_DIR'], f"val_cluster_zrsc_scores.txt"), "a") as f:
-        f.write(f"EXP: {load_name}\n")
+    # with open(os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], f"val_cluster_zrsc_scores.txt"), "a") as f:
+    #     f.write(f"EXP: {load_name}\n")
     cfg = None
-    for fn in os.listdir(os.path.join("./kit_logs", load_name)):
+    for fn in os.listdir(args['LOG_DIR']):
         if fn.endswith(".yaml"):
             cfg = fn
-    with open(os.path.join("./kit_logs", load_name, cfg), 'r') as stream:
+    with open(os.path.join(args['LOG_DIR'], cfg), 'r') as stream:
         old_args = yaml.safe_load(stream)
-    cpt_name = os.listdir(os.path.join("./kit_logs", load_name, args["CLUSTER"]["VERSION"] + "/checkpoints"))[0]
+    cpt_name = os.listdir(os.path.join(args['LOG_DIR'], "checkpoints"))[0]
     print(f"We are using checkpoint: {cpt_name}")
-    model = eval(old_args["PRETRAIN"]["ALGO"]).load_from_checkpoint(os.path.join("./kit_logs", load_name, args["CLUSTER"]["VERSION"] + "/checkpoints", cpt_name))
+    model = eval(old_args["PRETRAIN"]["ALGO"]).load_from_checkpoint(os.path.join(args["LOG_DIR"], "checkpoints", cpt_name))
     return model
 
 
@@ -147,8 +147,8 @@ def main():
 
     # KIT Dataset configs
     args['NUM_JOINTS'] = 21
-    args['LOG_DIR'] = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"])
-
+    args['LOG_DIR'] = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"], args["CLUSTER"]["VERSION"])
+    # print(args['LOG_DIR'])
     # Create log, viz. dirs
     create_log_viz_dirs(args)
 
@@ -179,7 +179,7 @@ def main():
 
     with open(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data_split.json'), 'r') as handle:
         data_split = json.load(handle)
-    tr_df, val_df = data_split['train'], data_split['val'] + data_split['test'] + official_loader.filter_file
+    tr_df, val_df = data_split['train'], data_split['val'] + data_split['test'] #+ official_loader.filter_file
 
     print(f"Training samples = {len(tr_df)}\nValidation samples = {len(val_df)}")
 

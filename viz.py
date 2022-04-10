@@ -992,6 +992,8 @@ if __name__ == '__main__':
         "00014",
         "00005",
         "00010"]
+    
+    #TODO use cofig to get viz paths
     frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_res_150.pkl'
     contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_150.pkl'
     cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_150.pkl'
