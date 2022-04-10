@@ -1,33 +1,34 @@
 import argparse
 import os
 import pprint
-import shutil
+# import shutil
 import time
-import sys
+# import sys
 import yaml
-from tqdm import tqdm
+# from tqdm import tqdm
 import numpy as np
-import torch
+# import torch
 import pandas as pd
 from pathlib import Path
 
 import pdb
-import json
+# import json
+import pickle
 
 from src.data.dataset.loader import KITDataset
 from src import algo
-from src.data.dataset.cluster_misc import lexicon#, get_names, genre_list
+# from src.data.dataset.cluster_misc import lexicon#, get_names, genre_list
 
-from plb.models.self_supervised import TAN
-# from plb.models.self_supervised.tan import TANEvalDataTransform, TANTrainDataTransform
-# from plb.datamodules import SeqDataModule
-from plb.datamodules.data_transform import body_center, euler_rodrigues_rotation
+# from plb.models.self_supervised import TAN
+# # from plb.models.self_supervised.tan import TANEvalDataTransform, TANTrainDataTransform
+# # from plb.datamodules import SeqDataModule
+# from plb.datamodules.data_transform import body_center, euler_rodrigues_rotation
 
-KEYPOINT_NAME = ['root','BP','BT','BLN','BUN','LS','LE','LW','RS','RE','RW',
-                'LH','LK','LA','LMrot','LF','RH','RK','RA','RMrot','RF']
+# KEYPOINT_NAME = ['root','BP','BT','BLN','BUN','LS','LE','LW','RS','RE','RW',
+#                 'LH','LK','LA','LMrot','LF','RH','RK','RA','RMrot','RF']
 
-import pytorch_lightning as pl
-pl.utilities.seed.seed_everything(0)
+# import pytorch_lightning as pl
+# pl.utilities.seed.seed_everything(0)
 
 def plain_distance(a, b):
     return np.linalg.norm(a - b, ord=2)
@@ -58,18 +59,18 @@ def parse_args():
 						type=str)
     parser.add_argument('--log_ver',
                         help='version in kitml_logs',
-                        type=int)
+                        type=str)
 
-    parser.add_argument('--use_raw',
-                        required=True,
-                        help='whether to use raw skeleton for clustering',
-                        type=int)
+    # parser.add_argument('--use_raw',
+    #                     required=True,
+    #                     help='whether to use raw skeleton for clustering',
+    #                     type=int)
 
     args, _ = parser.parse_known_args()
     print(f'SEED: {args.seed}')
-    pl.utilities.seed.seed_everything(args.seed)
+    # pl.utilities.seed.seed_everything(args.seed)
     np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    # torch.manual_seed(args.seed)
     with open(args.cfg, 'r') as stream:
         ldd = yaml.safe_load(stream)
 
@@ -79,7 +80,7 @@ def parse_args():
     if args.log_dir:
         ldd["PRETRAIN"]["TRAINER"]["LOG_DIR"] = args.log_dir
 
-    ldd["CLUSTER"]["USE_RAW"] = args.use_raw
+    # ldd["CLUSTER"]["USE_RAW"] = args.use_raw
     if ldd["CLUSTER"]["CKPT"] == -1 :
         ldd["CLUSTER"]["CKPT"] = ldd["NAME"]
     if args.log_ver:
@@ -89,7 +90,6 @@ def parse_args():
     pprint.pprint(ldd)
     return ldd
 
-
 def create_log_viz_dirs(args):
     dirname = Path(args['LOG_DIR'])
     dirname.mkdir(parents=True, exist_ok=True)
@@ -98,48 +98,6 @@ def create_log_viz_dirs(args):
     #     yaml.dump(args, stream, default_flow_style=False)
     # video_dir = os.path.join(args['LOG_DIR'], "saved_videos")
     # Path(video_dir).mkdir(parents=True, exist_ok=True)
-
-
-def get_model(args):
-    '''Identify checkpoint to use, create log files, and  return model'''
-    print('Using TAN model\'s features for clustering')
-    load_name = args["CLUSTER"]["CKPT"]
-    # with open(os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], f"val_cluster_zrsc_scores.txt"), "a") as f:
-    #     f.write(f"EXP: {load_name}\n")
-    cfg = None
-    for fn in os.listdir(args['LOG_DIR']):
-        if fn.endswith(".yaml"):
-            cfg = fn
-    with open(os.path.join(args['LOG_DIR'], cfg), 'r') as stream:
-        old_args = yaml.safe_load(stream)
-    cpt_name = os.listdir(os.path.join(args['LOG_DIR'], "checkpoints"))[0]
-    print(f"We are using checkpoint: {cpt_name}")
-    model = eval(old_args["PRETRAIN"]["ALGO"]).load_from_checkpoint(os.path.join(args["LOG_DIR"], "checkpoints", cpt_name))
-    return model
-
-
-def get_feats(args, ldd, model=None):
-    ''''''
-    feats = None
-    if int(args["CLUSTER"]["USE_RAW"]) == 0:
-        ldd1 = torch.Tensor(ldd).flatten(1, -1) #/ 100  # [T, 63]
-        ttl = ldd1.shape[0]
-        ct = body_center(ldd1[0])
-        ldd1 -= ct.repeat(args['NUM_JOINTS']).unsqueeze(0)
-        res1 = model(ldd1.unsqueeze(0).to(args['DEVICE']),
-                     torch.tensor([ttl]).to(args['DEVICE']))
-        forward_feat = res1[:, 0]  # [T1, f]
-        forward_feat /= torch.linalg.norm(forward_feat, dim=-1, keepdim=True, ord=2)
-        feats = forward_feat
-    else:
-        # to get results for using raw skeleton, swap with
-        ldd1 = torch.Tensor(ldd).flatten(1, -1) / 100  # [T, 51]
-        ttl = ldd1.shape[0]
-        ct = body_center(ldd1[0])
-        ldd1 -= ct.repeat(args['NUM_JOINTS']).unsqueeze(0)
-        feats = ldd1
-    return feats
-
 
 def main():
 
@@ -155,74 +113,34 @@ def main():
     # Load KIT Dataset from stored pkl file (e.g., xyz_data.pkl)
     official_loader = KITDataset(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"])
 
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    args['DEVICE'] = device
-
-    # Load model only if we are using TAN Featuers ("USE_RAW" == 0)
-    model = None
-    if int(args["CLUSTER"]["USE_RAW"]) == 0:
-        model = get_model(args)
-        torch.set_grad_enabled(False)
-        model.eval()
-        model = model.to(args['DEVICE'])
-
     # Get data
-    tr_kpt_container = []
-    tr_len_container = []
-    tr_feat_container = []
-    tr_name_container = []
-    val_kpt_container = []
-    val_len_container = []
-    val_feat_container = []
-    val_name_container = []
 
-    with open(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data_split.json'), 'r') as handle:
-        data_split = json.load(handle)
-    tr_df, val_df = data_split['train'], data_split['val'] + data_split['test'] #+ official_loader.filter_file
+    # with open(os.path.join(args['LOG_DIR'], 'tr_kpt_container.pkl'), "rb") as fp:
+    #     tr_kpt_container = pickle.load(fp)
+    with open(os.path.join(args['LOG_DIR'], 'tr_len_container.pkl'), "rb") as fp:
+        tr_len_container = pickle.load(fp)
+    # with open(os.path.join(args['LOG_DIR'], 'tr_feat_container.pkl'), "rb") as fp:
+    #     tr_feat_container = pickle.load(fp)
+    with open(os.path.join(args['LOG_DIR'], 'tr_name_container.pkl'), "rb") as fp:
+        tr_name_container = pickle.load(fp)
+    
+    # with open(os.path.join(args['LOG_DIR'], 'val_kpt_container.pkl'), "rb") as fp:
+    #     val_kpt_container = pickle.load(fp)
+    with open(os.path.join(args['LOG_DIR'], 'val_len_container.pkl'), "rb") as fp:
+        val_len_container = pickle.load(fp)
+    # with open(os.path.join(args['LOG_DIR'], 'val_feat_container.pkl'), "rb") as fp:
+    #     val_feat_container = pickle.load(fp)
+    with open(os.path.join(args['LOG_DIR'], 'val_name_container.pkl'), "rb") as fp:
+        val_name_container = pickle.load(fp)
 
-    print(f"Training samples = {len(tr_df)}\nValidation samples = {len(val_df)}")
+    with open(os.path.join(args['LOG_DIR'], 'tr_where_to_cut.pkl'), "rb") as fp:
+        tr_where_to_cut = pickle.load(fp)
+    tr_stacked = np.load(os.path.join(args['LOG_DIR'], 'tr_stacked.npy'))
+    
+    with open(os.path.join(args['LOG_DIR'], 'val_where_to_cut.pkl'), "rb") as fp:
+        val_where_to_cut = pickle.load(fp)
+    val_stacked = np.load(os.path.join(args['LOG_DIR'], 'val_stacked.npy'))
 
-    for reference_name in tqdm(tr_df, desc='Loading training set features'):
-
-
-        try:
-            ldd = official_loader.load_keypoint3d(reference_name)
-
-            # FIXME: Temp. debug hack -- truncate to T=5000
-            ldd = ldd[:5000, :, :]
-
-            # print(reference_name, ldd.shape[0])
-            tr_kpt_container.append(ldd)
-            tr_len_container.append(ldd.shape[0])
-            feats = get_feats(args, ldd, model)
-            tr_feat_container.append(feats.detach().cpu().numpy())
-            tr_name_container.append(reference_name)
-        except:
-            print(f'ERROR w/ seq. {reference_name}. In except: block')
-
-    for reference_name in tqdm(val_df, desc='Loading validation set features'):
-        try:
-            ldd = official_loader.load_keypoint3d(reference_name)
-
-            # FIXME: Temp. debug hack -- truncate to T=5000
-            ldd = ldd[:5000, :, :]
-
-            val_kpt_container.append(ldd)
-            val_len_container.append(ldd.shape[0])
-            feats = get_feats(args, ldd, model)
-            val_feat_container.append(feats.detach().cpu().numpy())
-            val_name_container.append(reference_name)
-        except:
-            print(f'ERROR w/ seq. {reference_name}. In except: block')
-
-    print('Done loading TAN/raw position features.')
-    # pdb.set_trace()
-
-    tr_where_to_cut = [0, ] + list(np.cumsum(np.array(tr_len_container)))
-    tr_stacked = np.vstack(tr_feat_container)
-    val_where_to_cut = [0, ] + list(np.cumsum(np.array(val_len_container)))
-    val_stacked = np.vstack(val_feat_container)
 
     for K in range(args["CLUSTER"]["K_MIN"], args["CLUSTER"]["K_MAX"], 10):
         # get cluster centers
