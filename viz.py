@@ -994,10 +994,10 @@ if __name__ == '__main__':
         "00010"]
     
     #TODO use cofig to get viz paths
-    frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_res_150.pkl'
-    contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/advanced_tr_150.pkl'
-    cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_150.pkl'
-    cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl'
+    frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/advanced_tr_res_150.pkl'
+    contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/advanced_tr_150.pkl'
+    cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/proxy_centers_tr_150.pkl'
+    cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/proxy_centers_tr_complete_150.pkl'
     sk_type = 'kitml'
     frames_dir = '/content/drive/Shareddrives/vid tokenization/kit_reconstruction/'
     
