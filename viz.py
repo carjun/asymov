@@ -11,6 +11,7 @@ import os.path as osp
 from os.path import join as ospj
 import pdb
 from tqdm import tqdm
+import pickle
 
 import random
 import numpy as np
@@ -773,30 +774,33 @@ def mpjpe3d(pred_keypoints, target_keypoints):
 #reconstruction methods-----------------------------------------------------------------
 #TODO: naive_reconstruction_no_rep implementation
 
-def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter=None, frames_dir=None):
+def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, per_seq_score=False, filter=None, frames_dir=None):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
-        data_loader : data loader that yields the per frame 3d keypoints of skeleton joints of the specified video sequence name
+        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
         contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}        
+        per_seq_score : If True, then also returns per sequence mpjpe, default to False
         filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
 
     Retruns:
-        The mean and per sequence mpjpe between reconstructed and original sequences.
+        The mean (and optionally per sequence) mpjpe between reconstructed and original sequences.
         If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
     '''
 
     ground_truth_keypoints = []
     reconstructed_keypoints = []
 
+    with open(data_path, 'rb') as handle:
+        ground_truth_data = pickle.load(handle)
     contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
     for name in seq_names:
-        ground_truth_keypoints.append(data_loader.load_keypoint3d(name))
+        ground_truth_keypoints.append(ground_truth_data[name])
         reconstructed_keypoint = []
         
         contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
@@ -807,7 +811,7 @@ def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster
             #get center frame info 
             center_frame = cluster2frame.iloc[cluster]
             center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
-            center_frame_complete_seq = data_loader.load_keypoint3d(center_frame_seq_name)
+            center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
             assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
 
             center_frame_complete_seq_len = center_frame_complete_seq.shape[0]
@@ -840,16 +844,20 @@ def naive_reconstruction_no_rep(seq_names, data_loader, contiguous_frame2cluster
         if(frames_dir):
             viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
     
-    return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+    if per_seq_score:
+        return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+    else:
+        return np.mean(mpjpe_per_sequence)
 
-def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter=None, frames_dir=None):
+def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, per_seq_score=False, filter=None, frames_dir=None):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
-        data_loader : data loader that yields the per frame 3d keypoints of skeleton joints of the specified video sequence name
+        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
         contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        per_seq_score : If True, then also returns per sequence mpjpe, default to False
         filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
 
@@ -861,11 +869,13 @@ def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mappin
     ground_truth_keypoints = []
     reconstructed_keypoints = []
 
+    with open(data_path, 'rb') as handle:
+        ground_truth_data = pickle.load(handle)
     contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
     for name in seq_names:
-        ground_truth_keypoints.append(data_loader.load_keypoint3d(name))
+        ground_truth_keypoints.append(ground_truth_data[name])
         reconstructed_keypoint = []
         
         contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
@@ -876,7 +886,7 @@ def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mappin
             #get center frame info 
             center_frame = cluster2frame.iloc[cluster]
             center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
-            center_frame_complete_seq = data_loader.load_keypoint3d(center_frame_seq_name)
+            center_frame_complete_seq =ground_truth_data[center_frame_seq_name]
             assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
 
             #calculate left right and center frames
@@ -911,16 +921,20 @@ def naive_reconstruction(seq_names, data_loader, contiguous_frame2cluster_mappin
         if(frames_dir):
             viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
     
-    return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+    if per_seq_score:
+        return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+    else:
+        return np.mean(mpjpe_per_sequence)
 
-def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter=None, frames_dir=None):
+def very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, per_seq_score=False, filter=None, frames_dir=None):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
-        data_loader : data loader that yields the per frame 3d keypoints of skeleton joints of the specified video sequence name
+        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
         frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster
         cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        per_seq_score : If True, then also returns per sequence mpjpe, default to False
         filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
 
@@ -930,7 +944,10 @@ def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path
     '''
     # for name in seq_names:
     # pdb.set_trace()
-    ground_truth_keypoints = [data_loader.load_keypoint3d(name) for name in seq_names]
+    with open(data_path, 'rb') as handle:
+        ground_truth_data = pickle.load(handle)
+
+    ground_truth_keypoints = [ground_truth_data[name] for name in seq_names]
 
     frame2cluster = pd.read_pickle(frame2cluster_mapping_path)
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
@@ -954,7 +971,10 @@ def very_naive_reconstruction(seq_names, data_loader, frame2cluster_mapping_path
         if(frames_dir):
             viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
     
-    return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+    if per_seq_score:
+        return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+    else:
+        return np.mean(mpjpe_per_sequence)
 
 #-------------------------------------------------------------------------------
 if __name__ == '__main__':
