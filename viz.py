@@ -542,7 +542,7 @@ def viz_seq(seq, folder_p, sk_type, debug=False):
     Args:
         seq (np.array): Array of joint positions.
         folder_p (str): Path to root folder that will contain frames folder.
-        sk_type (str): {'smpl', 'nturgbd'}
+        sk_type (str): {'smpl', 'nturgbd','kitml','coco17'}
 
     Return:
         None. Path of mp4 video: folder_p/video.mp4
@@ -975,6 +975,28 @@ def very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, 
         return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
     else:
         return np.mean(mpjpe_per_sequence)
+
+def ground_truth_construction(seq_names, data_path, sk_type, frames_dir):
+    '''
+    Constructs original video from ground truth sequences, which are used as reference for mpjpe calculation.
+
+    Args:
+        seq_names : name of video sequences to reconstruct
+        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
+        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        frames_dir : Path to root folder that will contain frames folder for visualization.
+
+    Retruns:
+        None.
+        The reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
+    '''
+    with open(data_path, 'rb') as handle:
+        ground_truth_data = pickle.load(handle)
+
+    ground_truth_keypoints = [ground_truth_data[name] for name in seq_names]
+
+    for name, ground_truth_keypoint in tqdm(zip(seq_names, ground_truth_keypoints), desc='constructing ground truth sequences'):
+        viz_seq(ground_truth_keypoint, ospj(frames_dir, name), sk_type, debug=False)
 
 #-------------------------------------------------------------------------------
 if __name__ == '__main__':

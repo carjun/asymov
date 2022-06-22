@@ -2,7 +2,7 @@ import argparse
 import os
 import yaml, pprint, json
 
-from viz import naive_reconstruction_no_rep, naive_reconstruction, very_naive_reconstruction
+from viz import naive_reconstruction_no_rep, naive_reconstruction, very_naive_reconstruction, ground_truth_construction
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train classification network')
@@ -104,7 +104,9 @@ def main():
         very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'spline', frames_dir=args["FRAMES_DIR"]+'very_naive_sfilter')
         naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline', frames_dir=args["FRAMES_DIR"]+'naive_sfilter')
         naive_no_rep_mpjpe_mean = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline', frames_dir=args["FRAMES_DIR"]+'naive_no_rep_sfilter')
-    
+        #original video
+        ground_truth_construction(seq_names, data_path, args["SK_TYPE"], frames_dir=args["FRAMES_DIR"]+'ground')
+
     #No filter
     print('very naive mpjpe : ', very_naive_mpjpe_mean)
     print('naive mpjpe : ', naive_mpjpe_mean)
