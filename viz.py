@@ -838,12 +838,15 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
     
     # pdb.set_trace()
     mpjpe_per_sequence=[]
-    for name, reconstructed_keypoint, ground_truth_keypoint in tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively (no reps) reconstructing sequences'):
+    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively (no reps) reconstructing sequences')
+    for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
+        pbar.set_description(desc=f'naively (no reps) reconstructing {name}')
         mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
         
         if(frames_dir):
             viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
-    
+    pbar.close()
+
     if per_seq_score:
         return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
     else:
@@ -915,11 +918,14 @@ def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_
     
     # pdb.set_trace()
     mpjpe_per_sequence=[]
-    for name, reconstructed_keypoint, ground_truth_keypoint in tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively reconstructing sequences'):
+    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively reconstructing sequences')
+    for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
+        pbar.set_description(desc=f'naively reconstructing {name}')
         mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
         
         if(frames_dir):
             viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
+    pbar.close()
     
     if per_seq_score:
         return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
@@ -962,7 +968,10 @@ def very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, 
         raise NameError(f'No such filter {filter}')
 
     mpjpe_per_sequence=[]
-    for name, reconstructed_keypoint, ground_truth_keypoint in tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='very naively reconstructing sequences'):
+    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='very naively reconstructing sequences')
+    for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
+        pbar.set_description(desc=f'very naively reconstructing {name}')
+        
         # if reconstructed_keypoint.shape[0]!=reconstructed_keypoint.shape[0]:
         #     raise NameError(name)
         # print(name, reconstructed_keypoint.shape, reconstructed_keypoint.shape)
@@ -970,7 +979,8 @@ def very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, 
         
         if(frames_dir):
             viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
-    
+    pbar.close()
+
     if per_seq_score:
         return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
     else:
@@ -995,8 +1005,11 @@ def ground_truth_construction(seq_names, data_path, sk_type, frames_dir):
 
     ground_truth_keypoints = [ground_truth_data[name] for name in seq_names]
 
-    for name, ground_truth_keypoint in tqdm(zip(seq_names, ground_truth_keypoints), desc='constructing ground truth sequences'):
+    pbar = tqdm(zip(seq_names, ground_truth_keypoints), desc='constructing ground truth sequences')
+    for name, ground_truth_keypoint in pbar:
+        pbar.set_description(desc=f'constructing {name}')
         viz_seq(ground_truth_keypoint, ospj(frames_dir, name), sk_type, debug=False)
+    pbar.close()
 
 #-------------------------------------------------------------------------------
 if __name__ == '__main__':
