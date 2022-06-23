@@ -31,6 +31,11 @@ def parse_args():
                         help='version in kitml_logs',
                         type=str)
 
+    parser.add_argument('--use_raw',
+                        required=True,
+                        help='whether to use raw skeleton for clustering',
+                        type=int)
+
     parser.add_argument('--frames_dir',
 						help='path to directory to store reconstructions',
 						type=str)
@@ -44,6 +49,8 @@ def parse_args():
     ldd["PRETRAIN"]["DATA"]["DATA_NAME"] = args.data_name
     ldd["PRETRAIN"]["DATA"]["DATA_SPLITS"] = args.data_splits
     
+    ldd["CLUSTER"]["USE_RAW"] = args.use_raw
+
     if args.log_dir:
         ldd["PRETRAIN"]["TRAINER"]["LOG_DIR"] = args.log_dir
     if args.log_ver:
@@ -80,7 +87,10 @@ def main():
             seq_names.extend(data_split[split])
     
     data_path = os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data.pkl')
-    log_dir = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"], args["CLUSTER"]["VERSION"])
+    if args["CLUSTER"]["USE_RAW"] :
+        log_dir = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], 'raw')
+    else :
+        log_dir = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"], args["CLUSTER"]["VERSION"])
     frame2cluster_mapping_path = os.path.join(log_dir, 'advanced_tr_res_150.pkl')
     contiguous_frame2cluster_mapping_path = os.path.join(log_dir, 'advanced_tr_150.pkl')
     cluster2keypoint_mapping_path = os.path.join(log_dir, 'proxy_centers_tr_150.pkl')
