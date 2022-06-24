@@ -772,6 +772,7 @@ def mpjpe3d(pred_keypoints, target_keypoints):
 #-------------------------------------------------------------------------------
 
 #reconstruction methods-----------------------------------------------------------------
+#TODO: reconstruct for multiple filters at once
 #TODO: naive_reconstruction_no_rep implementation
 
 def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, per_seq_score=False, filter=None, frames_dir=None):
@@ -793,6 +794,7 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
 
     ground_truth_keypoints = []
     reconstructed_keypoints = []
+    faulty = []
 
     with open(data_path, 'rb') as handle:
         ground_truth_data = pickle.load(handle)
@@ -803,39 +805,43 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
         ground_truth_keypoints.append(ground_truth_data[name])
         reconstructed_keypoint = []
         
-        contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
-        for i in range(contiguous_cluster_seqs.shape[0]):
-            #get contiguous cluster info
-            contiguous_cluster = contiguous_cluster_seqs.iloc[i]
-            cluster, length = contiguous_cluster[['cluster', 'length']]
-            #get center frame info 
-            center_frame = cluster2frame.iloc[cluster]
-            center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
-            center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
-            assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
+        try:
+            contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
+            for i in range(contiguous_cluster_seqs.shape[0]):
+                #get contiguous cluster info
+                contiguous_cluster = contiguous_cluster_seqs.iloc[i]
+                cluster, length = contiguous_cluster[['cluster', 'length']]
+                #get center frame info 
+                center_frame = cluster2frame.iloc[cluster]
+                center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
+                center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
+                assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
 
-            center_frame_complete_seq_len = center_frame_complete_seq.shape[0]
-            if length>center_frame_complete_seq_len:
-                raise Exception(f'seq name : {name}\ncontiguous_cluster_seq : {i}\n')
-            lb = max(0,center_frame_idx - (length-1)//2) #check left boundary
-            lb = min(center_frame_complete_seq_len-length, lb) #check right boundary
-            assert lb>=0
-            assert lb<center_frame_complete_seq_len
-            
-            #reconstruct
-            reconstructed_keypoint.append(center_frame_complete_seq[lb:lb+length])
-            assert reconstructed_keypoint[-1].shape[0]==length
+                center_frame_complete_seq_len = center_frame_complete_seq.shape[0]
+                if length>center_frame_complete_seq_len:
+                    raise Exception(f'seq name : {name}\ncontiguous_cluster_seq : {i}\n')
+                lb = max(0,center_frame_idx - (length-1)//2) #check left boundary
+                lb = min(center_frame_complete_seq_len-length, lb) #check right boundary
+                assert lb>=0
+                assert lb<center_frame_complete_seq_len
+                
+                #reconstruct
+                reconstructed_keypoint.append(center_frame_complete_seq[lb:lb+length])
+                assert reconstructed_keypoint[-1].shape[0]==length
 
-        if filter is None:
-            reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
-        elif filter == 'spline':
-            reconstructed_keypoints.append(spline_filter1d(np.concatenate(reconstructed_keypoint, axis=0), axis=0))
-        elif filter == 'uniform':
-            reconstructed_keypoints.append(uniform_filter1d(np.concatenate(reconstructed_keypoint, axis=0), size=60, axis=0))
-        else :
-            raise NameError(f'No such filter {filter}')
-        assert reconstructed_keypoints[-1].shape[0]==ground_truth_keypoints[-1].shape[0]
-    
+            if filter is None:
+                reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+            elif filter == 'spline':
+                reconstructed_keypoints.append(spline_filter1d(np.concatenate(reconstructed_keypoint, axis=0), axis=0))
+            elif filter == 'uniform':
+                reconstructed_keypoints.append(uniform_filter1d(np.concatenate(reconstructed_keypoint, axis=0), size=60, axis=0))
+            else :
+                raise NameError(f'No such filter {filter}')
+            assert reconstructed_keypoints[-1].shape[0]==ground_truth_keypoints[-1].shape[0]
+        except NameError:
+            ground_truth_keypoints.pop()
+            faulty.append(name)
+            print(f'{name} cannot be reconstructed naively (no rep)')
     # pdb.set_trace()
     mpjpe_per_sequence=[]
     pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively (no reps) reconstructing sequences')
@@ -848,9 +854,9 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
     pbar.close()
 
     if per_seq_score:
-        return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+        return np.mean(mpjpe_per_sequence), mpjpe_per_sequence, faulty
     else:
-        return np.mean(mpjpe_per_sequence)
+        return np.mean(mpjpe_per_sequence), faulty
 
 def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, per_seq_score=False, filter=None, frames_dir=None):
     '''
