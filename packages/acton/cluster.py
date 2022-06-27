@@ -5,7 +5,7 @@ import pprint
 import time
 # import sys
 import yaml
-# from tqdm import tqdm
+from tqdm import tqdm
 import numpy as np
 # import torch
 import pandas as pd
@@ -182,7 +182,7 @@ def main():
         # sorted_proxies_tr = tr_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
         tr_word_df = pd.DataFrame(columns=["idx", "cluster", "length", "y", "name"])  # word index in home sequence
-        for sequence_idx in range(len(tr_len_container)):
+        for sequence_idx in tqdm(range(len(tr_len_container))):
             name = tr_name_container[sequence_idx]
             cluster_seq = list(cluster_l[tr_where_to_cut[sequence_idx]: tr_where_to_cut[sequence_idx + 1]]) + [-1, ]
             running_idx = 0
@@ -237,7 +237,7 @@ def main():
         # # sorted_proxies_val = val_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
         # val_word_df = pd.DataFrame(columns=["idx", "cluster", "length", "y", "name"])  # word index in home sequence
-        # for sequence_idx in range(len(val_len_container)):
+        # for sequence_idx in tqdm(range(len(val_len_container))):
         #     name = val_name_container[sequence_idx]
         #     cluster_seq = list(cluster_l[val_where_to_cut[sequence_idx]: val_where_to_cut[sequence_idx + 1]]) + [-1, ]
         #     running_idx = 0
