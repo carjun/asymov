@@ -159,23 +159,20 @@ def main():
         torch.set_grad_enabled(False)
         model.eval()
         model = model.to(args['DEVICE'])
+    
+    with open(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data_split.json'), 'r') as handle:
+        data_split = json.load(handle)
 
     # Get data
     tr_kpt_container = []
     tr_len_container = []
     tr_feat_container = []
     tr_name_container = []
-    val_kpt_container = []
-    val_len_container = []
-    val_feat_container = []
-    val_name_container = []
 
-    with open(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data_split.json'), 'r') as handle:
-        data_split = json.load(handle)
-    tr_df, val_df = data_split['train'], data_split['val'] + data_split['test'] #+ official_loader.filter_file
-
-    print(f"Training samples = {len(tr_df)}\nValidation samples = {len(val_df)}")
-
+    
+    tr_df = data_split['train']
+    print(f"Training samples = {len(tr_df)}")
+    
     for reference_name in tqdm(tr_df, desc='Loading training set features'):
         try:
             ldd = official_loader.load_keypoint3d(reference_name)
@@ -191,28 +188,9 @@ def main():
             tr_name_container.append(reference_name)
         except:
             print(f'ERROR w/ seq. {reference_name}. In except: block')
-
-    for reference_name in tqdm(val_df, desc='Loading validation set features'):
-        try:
-            ldd = official_loader.load_keypoint3d(reference_name)
-
-            # FIXME: Temp. debug hack -- truncate to T=5000
-            ldd = ldd[:5000, :, :]
-
-            val_kpt_container.append(ldd)
-            val_len_container.append(ldd.shape[0])
-            feats = get_feats(args, ldd, model)
-            val_feat_container.append(feats.detach().cpu().numpy())
-            val_name_container.append(reference_name)
-        except:
-            print(f'ERROR w/ seq. {reference_name}. In except: block')
-
-    print('Done loading TAN/raw position features.')
-
+    
     tr_where_to_cut = [0, ] + list(np.cumsum(np.array(tr_len_container)))
     tr_stacked = np.vstack(tr_feat_container)
-    val_where_to_cut = [0, ] + list(np.cumsum(np.array(val_len_container)))
-    val_stacked = np.vstack(val_feat_container)
 
     #Save data
 
@@ -229,19 +207,6 @@ def main():
         pickle.dump(tr_name_container, fp)
     print(f"tr_name_container.pkl dumped to {args['EMBED_DIR']}")
 
-    # with open(os.path.join(args['EMBED_DIR'], 'val_kpt_container.pkl'), "wb") as fp: 
-    #     pickle.dump(val_kpt_container, fp)
-    # print(f"val_kpt_container.pkl dumped to {args['EMBED_DIR']}")
-    with open(os.path.join(args['EMBED_DIR'], 'val_len_container.pkl'), "wb") as fp: 
-        pickle.dump(val_len_container, fp)
-    print(f"val_len_container.pkl dumped to {args['EMBED_DIR']}")
-    # with open(os.path.join(args['EMBED_DIR'], 'val_feat_container.pkl'), "wb") as fp: 
-    #     pickle.dump(val_feat_container, fp)
-    # print(f"val_feat_container.pkl dumped to {args['EMBED_DIR']}")
-    with open(os.path.join(args['EMBED_DIR'], 'val_name_container.pkl'), "wb") as fp: 
-        pickle.dump(val_name_container, fp)
-    print(f"val_name_container.pkl dumped to {args['EMBED_DIR']}")
-    
     #TODO: check np.savez
     with open(os.path.join(args['EMBED_DIR'], 'tr_where_to_cut.pkl'), "wb") as fp: 
         pickle.dump(tr_where_to_cut, fp)
@@ -249,11 +214,57 @@ def main():
     np.save(os.path.join(args['EMBED_DIR'], 'tr_stacked.npy'), tr_stacked)
     print(f"tr_stacked.npy dumped to {args['EMBED_DIR']}")
 
-    with open(os.path.join(args['EMBED_DIR'], 'val_where_to_cut.pkl'), "wb") as fp: 
-        pickle.dump(val_where_to_cut, fp)
-    print(f"val_where_to_cut.pkl dumped to {args['EMBED_DIR']}")
-    np.save(os.path.join(args['EMBED_DIR'], 'val_stacked.npy'), val_stacked)
-    print(f"val_stacked.npy dumped to {args['EMBED_DIR']}")
+#-------------------- TODO: handle more than one splits --------------------#
+
+    # val_kpt_container = []
+    # val_len_container = []
+    # val_feat_container = []
+    # val_name_container = []
+    # val_df = data_split['val'] + data_split['test']
+    # print(f"Validation samples = {len(val_df)}")
+
+
+    # for reference_name in tqdm(val_df, desc='Loading validation set features'):
+    #     try:
+    #         ldd = official_loader.load_keypoint3d(reference_name)
+
+    #         # FIXME: Temp. debug hack -- truncate to T=5000
+    #         ldd = ldd[:5000, :, :]
+
+    #         val_kpt_container.append(ldd)
+    #         val_len_container.append(ldd.shape[0])
+    #         feats = get_feats(args, ldd, model)
+    #         val_feat_container.append(feats.detach().cpu().numpy())
+    #         val_name_container.append(reference_name)
+    #     except:
+    #         print(f'ERROR w/ seq. {reference_name}. In except: block')
+
+
+    # val_where_to_cut = [0, ] + list(np.cumsum(np.array(val_len_container)))
+    # val_stacked = np.vstack(val_feat_container)
+
+
+    # # with open(os.path.join(args['EMBED_DIR'], 'val_kpt_container.pkl'), "wb") as fp: 
+    # #     pickle.dump(val_kpt_container, fp)
+    # # print(f"val_kpt_container.pkl dumped to {args['EMBED_DIR']}")
+    # with open(os.path.join(args['EMBED_DIR'], 'val_len_container.pkl'), "wb") as fp: 
+    #     pickle.dump(val_len_container, fp)
+    # print(f"val_len_container.pkl dumped to {args['EMBED_DIR']}")
+    # # with open(os.path.join(args['EMBED_DIR'], 'val_feat_container.pkl'), "wb") as fp: 
+    # #     pickle.dump(val_feat_container, fp)
+    # # print(f"val_feat_container.pkl dumped to {args['EMBED_DIR']}")
+    # with open(os.path.join(args['EMBED_DIR'], 'val_name_container.pkl'), "wb") as fp: 
+    #     pickle.dump(val_name_container, fp)
+    # print(f"val_name_container.pkl dumped to {args['EMBED_DIR']}")
+    
+
+    # with open(os.path.join(args['EMBED_DIR'], 'val_where_to_cut.pkl'), "wb") as fp: 
+    #     pickle.dump(val_where_to_cut, fp)
+    # print(f"val_where_to_cut.pkl dumped to {args['EMBED_DIR']}")
+    # np.save(os.path.join(args['EMBED_DIR'], 'val_stacked.npy'), val_stacked)
+    # print(f"val_stacked.npy dumped to {args['EMBED_DIR']}")
+
+#---------------------------------------------------------------------------#
 
 if __name__ == '__main__':
     main()
