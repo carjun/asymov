@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import pandas as pd
 from pathlib import Path
+from sklearn.decomposition import IncrementalPCA
 
 import pdb
 import json
@@ -166,32 +167,56 @@ def main():
     # Get data
     tr_kpt_container = []
     tr_len_container = []
-    tr_feat_container = []
     tr_name_container = []
 
     
     tr_df = data_split['train']
-    print(f"Training samples = {len(tr_df)}")
+    tr_size = len(tr_df)
+    batch_size = 100
+    print(f"Training samples = {tr_size}")
     
-    for reference_name in tqdm(tr_df, desc='Loading training set features'):
-        try:
-            ldd = official_loader.load_keypoint3d(reference_name)
-
-            # FIXME: Temp. debug hack -- truncate to T=5000
-            ldd = ldd[:5000, :, :]
-
-            # print(reference_name, ldd.shape[0])
-            tr_kpt_container.append(ldd)
-            tr_len_container.append(ldd.shape[0])
-            feats = get_feats(args, ldd, model)
-            tr_feat_container.append(feats.detach().cpu().numpy())
-            tr_name_container.append(reference_name)
-        except:
-            print(f'ERROR w/ seq. {reference_name}. In except: block')
+    pca_comp = 64 
+    ipca = IncrementalPCA(n_components=pca_comp)
     
+    for i in tqdm(range(0, tr_size, batch_size)):
+        tr_feat_container = []
+        for reference_name in tqdm(tr_df[i:min(i+batch_size, tr_size)], desc='Loading training set features', leave=False):
+            try:
+                ldd = official_loader.load_keypoint3d(reference_name)
+
+                # FIXME: Temp. debug hack -- truncate to T=5000
+                ldd = ldd[:5000, :, :]
+
+                # print(reference_name, ldd.shape[0])
+                tr_kpt_container.append(ldd)
+                tr_len_container.append(ldd.shape[0])
+                feats = get_feats(args, ldd, model)
+                tr_feat_container.append(feats.detach().cpu().numpy())
+                tr_name_container.append(reference_name)
+            except:
+                print(f'ERROR w/ seq. {reference_name}. In except: block')
+    
+        ipca.partial_fit(np.vstack(tr_feat_container))
+
     tr_where_to_cut = [0, ] + list(np.cumsum(np.array(tr_len_container)))
-    tr_stacked = np.vstack(tr_feat_container)
+    tr_stacked = []
+    for i in tqdm(range(0, tr_size, batch_size)):
+        tr_feat_container = []
+        for reference_name in tqdm(tr_df[i:min(i+batch_size, tr_size)], leave=False):
+            try:
+                ldd = official_loader.load_keypoint3d(reference_name)
 
+                # FIXME: Temp. debug hack -- truncate to T=5000
+                ldd = ldd[:5000, :, :]
+
+                # print(reference_name, ldd.shape[0])
+                feats = get_feats(args, ldd, model)
+                tr_feat_container.append(feats.detach().cpu().numpy())
+            except:
+                print(f'ERROR w/ seq. {reference_name}. In except: block')
+    
+        tr_stacked.append(ipca.transform(np.vstack(tr_feat_container)))
+    tr_stacked = np.vstack(tr_stacked)
     #Save data
 
     # with open(os.path.join(args['EMBED_DIR'], 'tr_kpt_container.pkl'), "wb") as fp: 
