@@ -5,7 +5,7 @@ import pprint
 import time
 # import sys
 import yaml
-# from tqdm import tqdm
+from tqdm import tqdm
 import numpy as np
 # import torch
 import pandas as pd
@@ -61,10 +61,10 @@ def parse_args():
                         help='version in kitml_logs',
                         type=str)
 
-    # parser.add_argument('--use_raw',
-    #                     required=True,
-    #                     help='whether to use raw skeleton for clustering',
-    #                     type=int)
+    parser.add_argument('--use_raw',
+                        required=True,
+                        help='whether to use raw skeleton for clustering',
+                        type=int)
 
     args, _ = parser.parse_known_args()
     print(f'SEED: {args.seed}')
@@ -80,7 +80,7 @@ def parse_args():
     if args.log_dir:
         ldd["PRETRAIN"]["TRAINER"]["LOG_DIR"] = args.log_dir
 
-    # ldd["CLUSTER"]["USE_RAW"] = args.use_raw
+    ldd["CLUSTER"]["USE_RAW"] = args.use_raw
     if ldd["CLUSTER"]["CKPT"] == -1 :
         ldd["CLUSTER"]["CKPT"] = ldd["NAME"]
     if args.log_ver:
@@ -91,12 +91,12 @@ def parse_args():
     return ldd
 
 def create_log_viz_dirs(args):
-    dirname = Path(args['LOG_DIR'])
+    dirname = Path(args['CLUSTER_DIR'])
     dirname.mkdir(parents=True, exist_ok=True)
     timed = time.strftime("%Y%m%d_%H%M%S")
-    # with open(os.path.join(args['LOG_DIR'], f"config_used_{timed}.yaml"), "w") as stream:
+    # with open(os.path.join(args['CLUSTER_DIR'], f"config_used_{timed}.yaml"), "w") as stream:
     #     yaml.dump(args, stream, default_flow_style=False)
-    # video_dir = os.path.join(args['LOG_DIR'], "saved_videos")
+    # video_dir = os.path.join(args['CLUSTER_DIR'], "saved_videos")
     # Path(video_dir).mkdir(parents=True, exist_ok=True)
 
 def main():
@@ -105,8 +105,11 @@ def main():
 
     # KIT Dataset configs
     args['NUM_JOINTS'] = 21
-    args['LOG_DIR'] = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"], args["CLUSTER"]["VERSION"])
-    # print(args['LOG_DIR'])
+    if args["CLUSTER"]["USE_RAW"] :
+        args['CLUSTER_DIR'] = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], 'raw')
+    else :
+        args['CLUSTER_DIR'] = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"], args["CLUSTER"]["VERSION"])
+    # print(args['CLUSTER_DIR'])
     # Create log, viz. dirs
     create_log_viz_dirs(args)
 
@@ -115,43 +118,45 @@ def main():
 
     # Get data
 
-    # with open(os.path.join(args['LOG_DIR'], 'tr_kpt_container.pkl'), "rb") as fp:
+    # with open(os.path.join(args['CLUSTER_DIR'], 'tr_kpt_container.pkl'), "rb") as fp:
     #     tr_kpt_container = pickle.load(fp)
-    with open(os.path.join(args['LOG_DIR'], 'tr_len_container.pkl'), "rb") as fp:
+    with open(os.path.join(args['CLUSTER_DIR'], 'tr_len_container.pkl'), "rb") as fp:
         tr_len_container = pickle.load(fp)
-    # with open(os.path.join(args['LOG_DIR'], 'tr_feat_container.pkl'), "rb") as fp:
+    # with open(os.path.join(args['CLUSTER_DIR'], 'tr_feat_container.pkl'), "rb") as fp:
     #     tr_feat_container = pickle.load(fp)
-    with open(os.path.join(args['LOG_DIR'], 'tr_name_container.pkl'), "rb") as fp:
+    with open(os.path.join(args['CLUSTER_DIR'], 'tr_name_container.pkl'), "rb") as fp:
         tr_name_container = pickle.load(fp)
-    
-    # with open(os.path.join(args['LOG_DIR'], 'val_kpt_container.pkl'), "rb") as fp:
-    #     val_kpt_container = pickle.load(fp)
-    with open(os.path.join(args['LOG_DIR'], 'val_len_container.pkl'), "rb") as fp:
-        val_len_container = pickle.load(fp)
-    # with open(os.path.join(args['LOG_DIR'], 'val_feat_container.pkl'), "rb") as fp:
-    #     val_feat_container = pickle.load(fp)
-    with open(os.path.join(args['LOG_DIR'], 'val_name_container.pkl'), "rb") as fp:
-        val_name_container = pickle.load(fp)
-
-    with open(os.path.join(args['LOG_DIR'], 'tr_where_to_cut.pkl'), "rb") as fp:
+    with open(os.path.join(args['CLUSTER_DIR'], 'tr_where_to_cut.pkl'), "rb") as fp:
         tr_where_to_cut = pickle.load(fp)
-    tr_stacked = np.load(os.path.join(args['LOG_DIR'], 'tr_stacked.npy'))
-    
-    with open(os.path.join(args['LOG_DIR'], 'val_where_to_cut.pkl'), "rb") as fp:
-        val_where_to_cut = pickle.load(fp)
-    val_stacked = np.load(os.path.join(args['LOG_DIR'], 'val_stacked.npy'))
+    tr_stacked = np.load(os.path.join(args['CLUSTER_DIR'], 'tr_stacked.npy'))
+
+#-------------------- TODO: handle more than one splits --------------------#
+
+    # # with open(os.path.join(args['CLUSTER_DIR'], 'val_kpt_container.pkl'), "rb") as fp:
+    # #     val_kpt_container = pickle.load(fp)
+    # with open(os.path.join(args['CLUSTER_DIR'], 'val_len_container.pkl'), "rb") as fp:
+    #     val_len_container = pickle.load(fp)
+    # # with open(os.path.join(args['CLUSTER_DIR'], 'val_feat_container.pkl'), "rb") as fp:
+    # #     val_feat_container = pickle.load(fp)
+    # with open(os.path.join(args['CLUSTER_DIR'], 'val_name_container.pkl'), "rb") as fp:
+    #     val_name_container = pickle.load(fp)
+    # with open(os.path.join(args['CLUSTER_DIR'], 'val_where_to_cut.pkl'), "rb") as fp:
+    #     val_where_to_cut = pickle.load(fp)
+    # val_stacked = np.load(os.path.join(args['CLUSTER_DIR'], 'val_stacked.npy'))
+
+#---------------------------------------------------------------------------#
 
 
     for K in range(args["CLUSTER"]["K_MIN"], args["CLUSTER"]["K_MAX"], 10):
         # get cluster centers
         argument_dict = {"distance": plain_distance, "TYPE": "vanilla", "K": K, "TOL": 1e-4}
-        if not os.path.exists(os.path.join(args['LOG_DIR'], f"advanced_centers_{K}.npy")):
+        if not os.path.exists(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy")):
             print('Finding cluster centers')
             c = getattr(algo, args["CLUSTER"]["TYPE"])(tr_stacked, times=args["CLUSTER"]["TIMES"], argument_dict=argument_dict)
-            np.save(os.path.join(args['LOG_DIR'], f"advanced_centers_{K}.npy"), c.kmeans.cluster_centers_)
+            np.save(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"), c.kmeans.cluster_centers_)
         else:
             print('Loading saved cluster centers')
-            ctrs = np.load(os.path.join(args['LOG_DIR'], f"advanced_centers_{K}.npy"))
+            ctrs = np.load(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"))
             c = getattr(algo, args["CLUSTER"]["TYPE"] + "_clusterer")(TIMES=args["CLUSTER"]["TIMES"], K=K, TOL=1e-4)
             c.fit(tr_stacked[:K])
             c.kmeans.cluster_centers_ = ctrs
@@ -177,7 +182,7 @@ def main():
         # sorted_proxies_tr = tr_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
         tr_word_df = pd.DataFrame(columns=["idx", "cluster", "length", "y", "name"])  # word index in home sequence
-        for sequence_idx in range(len(tr_len_container)):
+        for sequence_idx in tqdm(range(len(tr_len_container))):
             name = tr_name_container[sequence_idx]
             cluster_seq = list(cluster_l[tr_where_to_cut[sequence_idx]: tr_where_to_cut[sequence_idx + 1]]) + [-1, ]
             running_idx = 0
@@ -195,75 +200,77 @@ def main():
                 prev = cc
         tr_word_df = tr_word_df[tr_word_df["idx"] > 0]
 
-        tr_word_df.to_pickle(Path(args['LOG_DIR']) / f"advanced_tr_{K}.pkl")
-        print(f"advanced_tr_{K}.pkl dumped to {args['LOG_DIR']}")  # saved tokenization of training set
+        tr_word_df.to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_tr_{K}.pkl")
+        print(f"advanced_tr_{K}.pkl dumped to {args['CLUSTER_DIR']}")  # saved tokenization of training set
 
-        tr_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['LOG_DIR']) / f"advanced_tr_res_{K}.pkl")
-        print(f"advanced_tr_res_{K}.pkl dumped to {args['LOG_DIR']}") # frame wise tokenization
+        tr_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_tr_res_{K}.pkl")
+        print(f"advanced_tr_res_{K}.pkl dumped to {args['CLUSTER_DIR']}") # frame wise tokenization
 
-        proxy_centers_tr.to_pickle(Path(args['LOG_DIR']) / f"proxy_centers_tr_complete_{K}.pkl")
-        print(f"proxy_centers_tr_complete_{K}.pkl dumped to {args['LOG_DIR']}") # saved complete proxy cluster center info
-        proxy_centers_tr[['cluster', 'keypoints3d']].to_pickle(Path(args['LOG_DIR']) / f"proxy_centers_tr_{K}.pkl")
-        print(f"proxy_centers_tr_{K}.pkl dumped to {args['LOG_DIR']}") # saved proxy centers to feature vector mapping
+        proxy_centers_tr.to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_tr_complete_{K}.pkl")
+        print(f"proxy_centers_tr_complete_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved complete proxy cluster center info
+        proxy_centers_tr[['cluster', 'keypoints3d']].to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_tr_{K}.pkl")
+        print(f"proxy_centers_tr_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved proxy centers to feature vector mapping
 
         # not needed
-        # sorted_proxies_tr.to_pickle(Path(args['LOG_DIR']) / f"sorted_proxies_tr_{K}.pkl")
-        # print(f"sorted_proxies_tr_{K}.pkl dumped to {args['LOG_DIR']}") # saved sorted proxies
+        # sorted_proxies_tr.to_pickle(Path(args['CLUSTER_DIR']) / f"sorted_proxies_tr_{K}.pkl")
+        # print(f"sorted_proxies_tr_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved sorted proxies
+
+#-------------------- TODO: handle more than one splits --------------------#
 
         # infer on validation set and save
-        y = np.concatenate([np.ones((l,)) * i for i, l in enumerate(val_len_container)], axis=0)
-        s = np.concatenate([np.arange(l) for i, l in enumerate(val_len_container)], axis=0)
-        val_res_df = pd.DataFrame(y, columns=["y"])  # from which sequence
-        cluster_l = c.get_assignment(val_stacked)  # assigned to which cluster
-        val_res_df['cluster'] = cluster_l
-        val_res_df['frame_index'] = s  # the frame index in home sequence
-        val_res_df['seq_name'] = np.concatenate([[name] * val_len_container[i] for i, name in enumerate(val_name_container)], axis=0)
-        val_res_df['feat_vec'] = [[vec] for vec in val_stacked]
-        val_res_df['dist'] = val_res_df[['feat_vec', 'cluster']].apply(
-            lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
-            axis=1)
-        proxy_centers_val = val_res_df.loc[val_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers
-        proxy_centers_val['keypoints3d'] = proxy_centers_val[['frame_index','seq_name']].apply(
-            lambda x: official_loader.load_keypoint3d(x['seq_name'])[x['frame_index']], axis=1)   #3d skeleton keypoints of the closest frame
+        # y = np.concatenate([np.ones((l,)) * i for i, l in enumerate(val_len_container)], axis=0)
+        # s = np.concatenate([np.arange(l) for i, l in enumerate(val_len_container)], axis=0)
+        # val_res_df = pd.DataFrame(y, columns=["y"])  # from which sequence
+        # cluster_l = c.get_assignment(val_stacked)  # assigned to which cluster
+        # val_res_df['cluster'] = cluster_l
+        # val_res_df['frame_index'] = s  # the frame index in home sequence
+        # val_res_df['seq_name'] = np.concatenate([[name] * val_len_container[i] for i, name in enumerate(val_name_container)], axis=0)
+        # val_res_df['feat_vec'] = [[vec] for vec in val_stacked]
+        # val_res_df['dist'] = val_res_df[['feat_vec', 'cluster']].apply(
+        #     lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
+        #     axis=1)
+        # proxy_centers_val = val_res_df.loc[val_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers
+        # proxy_centers_val['keypoints3d'] = proxy_centers_val[['frame_index','seq_name']].apply(
+        #     lambda x: official_loader.load_keypoint3d(x['seq_name'])[x['frame_index']], axis=1)   #3d skeleton keypoints of the closest frame
 
-        # not needed
-        # sorted_proxies_val = val_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
+        # # not needed
+        # # sorted_proxies_val = val_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
 
-        val_word_df = pd.DataFrame(columns=["idx", "cluster", "length", "y", "name"])  # word index in home sequence
-        for sequence_idx in range(len(val_len_container)):
-            name = val_name_container[sequence_idx]
-            cluster_seq = list(cluster_l[val_where_to_cut[sequence_idx]: val_where_to_cut[sequence_idx + 1]]) + [-1, ]
-            running_idx = 0
-            prev = -1
-            current_len = 0
-            for cc in cluster_seq:
-                if cc == prev:
-                    current_len += 1
-                else:
-                    val_word_df = val_word_df.append(
-                        {"idx": int(running_idx), "cluster": prev, "length": current_len, "y": sequence_idx,
-                         "name": name}, ignore_index=True)
-                    running_idx += 1
-                    current_len = 1
-                prev = cc
-        val_word_df = val_word_df[val_word_df["idx"] > 0]
+        # val_word_df = pd.DataFrame(columns=["idx", "cluster", "length", "y", "name"])  # word index in home sequence
+        # for sequence_idx in tqdm(range(len(val_len_container))):
+        #     name = val_name_container[sequence_idx]
+        #     cluster_seq = list(cluster_l[val_where_to_cut[sequence_idx]: val_where_to_cut[sequence_idx + 1]]) + [-1, ]
+        #     running_idx = 0
+        #     prev = -1
+        #     current_len = 0
+        #     for cc in cluster_seq:
+        #         if cc == prev:
+        #             current_len += 1
+        #         else:
+        #             val_word_df = val_word_df.append(
+        #                 {"idx": int(running_idx), "cluster": prev, "length": current_len, "y": sequence_idx,
+        #                  "name": name}, ignore_index=True)
+        #             running_idx += 1
+        #             current_len = 1
+        #         prev = cc
+        # val_word_df = val_word_df[val_word_df["idx"] > 0]
 
-        val_word_df.to_pickle(Path(args['LOG_DIR']) / f"advanced_val_{K}.pkl")
-        print(f"advanced_val_{K}.pkl dumped to {args['LOG_DIR']}")  # saved tokenization of validation set
+        # val_word_df.to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_val_{K}.pkl")
+        # print(f"advanced_val_{K}.pkl dumped to {args['CLUSTER_DIR']}")  # saved tokenization of validation set
 
-        # not needed
-        # val_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['LOG_DIR']) / f"advanced_val_res_{K}.pkl")
-        # print(f"advanced_val_res_{K}.pkl dumped to {args['LOG_DIR']}") # frame wise tokenization
+        # val_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_val_res_{K}.pkl")
+        # print(f"advanced_val_res_{K}.pkl dumped to {args['CLUSTER_DIR']}") # frame wise tokenization
 
-        # not needed
-        # proxy_centers_val.to_pickle(Path(args['LOG_DIR']) / f"proxy_centers_val_complete_{K}.pkl")
-        # print(f"proxy_centers_val_complete_{K}.pkl dumped to {args['LOG_DIR']}") # saved proxy centers
-        # proxy_centers_val[['cluster', 'keypoints3d']].to_pickle(Path(args['LOG_DIR']) / f"proxy_centers_val_{K}.pkl")
-        # print(f"proxy_centers_val_{K}.pkl dumped to {args['LOG_DIR']}")
+        # proxy_centers_val.to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_complete_{K}.pkl")
+        # print(f"proxy_centers_val_complete_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved proxy centers
+        # proxy_centers_val[['cluster', 'keypoints3d']].to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_{K}.pkl")
+        # print(f"proxy_centers_val_{K}.pkl dumped to {args['CLUSTER_DIR']}")
 
-        # not needed
-        # sorted_proxies_val.to_pickle(Path(args['LOG_DIR']) / f"sorted_proxies_val_{K}.pkl")
-        # print(f"sorted_proxies_val_{K}.pkl dumped to {args['LOG_DIR']}") # saved sorted proxies
+        # # not needed
+        # # sorted_proxies_val.to_pickle(Path(args['CLUSTER_DIR']) / f"sorted_proxies_val_{K}.pkl")
+        # # print(f"sorted_proxies_val_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved sorted proxies
+
+#---------------------------------------------------------------------------#
 
 if __name__ == '__main__':
     main()
