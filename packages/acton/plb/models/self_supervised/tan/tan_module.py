@@ -20,7 +20,9 @@ from pl_bolts.transforms.dataset_normalizations import (
     stl10_normalization,
 )
 
-from plb.models.encoder import Transformer, Transformer_wote
+from plb.models.encoder import Transformer, Transformer_wote, Transformer_fc
+
+import pdb
 
 dump_time = False
 big_number = 2 ** 13  # a number >> T
@@ -84,11 +86,15 @@ class SyncFunction(torch.autograd.Function):
 
 class Projection(nn.Module):
 
-    def __init__(self, input_dim=2048, hidden_dim=2048, output_dim=128):
+    def __init__(self, input_dim=2048, hidden_dim=2048, output_dim=128, out_dim=-1):
         super().__init__()
         self.output_dim = output_dim
-        self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+
+        # Check if Transformer output is further compressed
+        self.input_dim = input_dim
+        if out_dim != -1:
+            self.input_dim = out_dim
 
         self.model = nn.Sequential(
             nn.Linear(self.input_dim, self.hidden_dim), nn.BatchNorm1d(self.hidden_dim), nn.ReLU(),
@@ -111,7 +117,7 @@ class TAN(pl.LightningModule):
             num_nodes: int = 1,
             arch: str = 'resnet50',
             hidden_mlp: int = 512,  # 2048, this is revised
-            feat_dim: int = 128,
+            feat_dim: int = 64,
             warmup_epochs: int = 10,
             max_epochs: int = 100,
             temperature: float = 0.1,
@@ -129,6 +135,7 @@ class TAN(pl.LightningModule):
             protection=0,
             tr_layer=6,
             tr_dim=512,
+            out_dim: int = -1,
             neg_dp=0.0,
             j=51,
             **kwargs
@@ -157,6 +164,7 @@ class TAN(pl.LightningModule):
         self.feat_dim = feat_dim
         self.first_conv = first_conv
         self.maxpool1 = maxpool1
+        self.out_dim = out_dim
 
         self.optim = optimizer
         self.lars_wrapper = lars_wrapper
@@ -178,7 +186,11 @@ class TAN(pl.LightningModule):
 
         self.encoder = self.init_model(tr_layer=tr_layer, tr_dim=tr_dim, j=j)
 
-        self.projection = Projection(input_dim=tr_dim, hidden_dim=tr_dim, output_dim=self.feat_dim)
+        self.projection = Projection(input_dim=tr_dim,
+                                     hidden_dim=tr_dim,
+                                     output_dim=self.feat_dim,
+                                     out_dim=self.out_dim)
+
         # originally using hidden_mlp for input_dim and hidden_dim
         self.dropout = nn.Dropout(p=neg_dp)
 
@@ -227,6 +239,9 @@ class TAN(pl.LightningModule):
             return get_tconv_net(config)
         elif self.arch == "Transformer_wote":
             return Transformer_wote(tr_layer, tr_dim, j)
+        elif self.arch == "Transformer_fc":
+            Tx = Transformer_fc(tr_layer, tr_dim, j, out_dim=self.out_dim)
+            return Tx
         else:
             assert 0, "Unknown model!"
 

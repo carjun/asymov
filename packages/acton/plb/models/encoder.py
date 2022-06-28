@@ -67,3 +67,26 @@ class Transformer_wote(nn.Module):
         points = self.encoder(points, src_key_padding_mask=mask)  # [T, N, 512]
         # points = points[:, 0]  # use the first token as a summary of whole
         return points
+
+class Transformer_fc(nn.Module):
+    def __init__(self, tr_layer=6, tr_dim=512, j=51, out_dim=64):
+        super(Transformer_fc, self).__init__()
+        self.layers = tr_layer
+        self.d_model = tr_dim
+        self.pos_encoder = PositionalEncoding(self.d_model, 0)
+        self.embedder = nn.Sequential(nn.Linear(j, inter_dim_dict[self.d_model]), nn.Linear(inter_dim_dict[self.d_model], self.d_model))
+        encoder_layer = nn.TransformerEncoderLayer(d_model=self.d_model, nhead=8)
+        self.encoder = nn.TransformerEncoder(encoder_layer, tr_layer)  # [L, B, F] --> [L, B, F]
+        self.out_layer = nn.Linear(tr_dim, out_dim)
+        self.activation = nn.ReLU()
+
+    def forward(self, point_bank, len):
+        # point_bank, [N, T, 51]
+        max_len = point_bank.size(1)  # collate fuction collate across GPUs, so the padded length might not larger than the max in this GPU
+        points = self.embedder(point_bank) * math.sqrt(self.d_model)
+        points = self.pos_encoder(points.transpose(0, 1))  # [T, N, 512], transpose should be before pos_encoder
+        mask = torch.stack([(torch.arange(max_len, device=len.device) >= _) for _ in len]).to(points.device)
+        points = self.encoder(points, src_key_padding_mask=mask)  # [T, N, 512]
+        out = self.out_layer(self.activation(points))
+        # points = points[:, 0]  # use the first token as a summary of whole
+        return out

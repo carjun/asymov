@@ -109,6 +109,7 @@ def main():
 		lars_wrapper=args["PRETRAIN"]["TRAINER"]["LARS"],
 		tr_layer=args["PRETRAIN"]["ARCH"]["LAYER"],
 		tr_dim=args["PRETRAIN"]["ARCH"]["DIM"],
+        out_dim=args["PRETRAIN"]["ARCH"]["OUT_DIM"],
 		neg_dp=args["PRETRAIN"]["ARCH"]["DROPOUT"],
 		j=j*3,
 	)
