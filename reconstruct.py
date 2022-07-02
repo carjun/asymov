@@ -36,9 +36,15 @@ def parse_args():
                         help='whether to use raw skeleton for clustering',
                         type=int)
 
+    parser.add_argument('--K',
+						help='k used for k means',
+						type=int)
     parser.add_argument('--frames_dir',
 						help='path to directory to store reconstructions',
 						type=str)
+    parser.add_argument('--ground',
+						help='whether to construct ground truth sequences',
+						type=int)
 
     args, _ = parser.parse_known_args()
     with open(args.cfg, 'r') as stream:
@@ -59,6 +65,8 @@ def parse_args():
         ldd["CLUSTER"]["VERSION"] = sorted([f.name for f in os.scandir(os.path.join(args.log_dir, ldd["CLUSTER"]["CKPT"])) if f.is_dir()], reverse=True)[0]
     
     ldd["FRAMES_DIR"] = args.frames_dir
+    ldd["GROUND"] = args.ground
+    ldd["K"] = args.K
     ldd["SK_TYPE"] = 'kitml'
     pprint.pprint(ldd)
     return ldd
@@ -84,17 +92,17 @@ def main():
             data_split = json.load(handle)
         seq_names = []
         for split in args["PRETRAIN"]["DATA"]["DATA_SPLITS"]:
-            seq_names.extend(data_split[split])
+            seq_names.extend(data_split[split][:10])
     
     data_path = os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data.pkl')
     if args["CLUSTER"]["USE_RAW"] :
         log_dir = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], 'raw')
     else :
         log_dir = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"], args["CLUSTER"]["VERSION"])
-    frame2cluster_mapping_path = os.path.join(log_dir, 'advanced_tr_res_150.pkl')
-    contiguous_frame2cluster_mapping_path = os.path.join(log_dir, 'advanced_tr_150.pkl')
-    cluster2keypoint_mapping_path = os.path.join(log_dir, 'proxy_centers_tr_150.pkl')
-    cluster2frame_mapping_path = os.path.join(log_dir, 'proxy_centers_tr_complete_150.pkl')
+    frame2cluster_mapping_path = os.path.join(log_dir, f'advanced_tr_res_{args["K"]}.pkl')
+    contiguous_frame2cluster_mapping_path = os.path.join(log_dir, f'advanced_tr_{args["K"]}.pkl')
+    cluster2keypoint_mapping_path = os.path.join(log_dir, f'proxy_centers_tr_{args["K"]}.pkl')
+    cluster2frame_mapping_path = os.path.join(log_dir, f'proxy_centers_tr_complete_{args["K"]}.pkl')
 
     
     if args["FRAMES_DIR"] == None:
@@ -102,58 +110,51 @@ def main():
         very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"])
         naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"])
         naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"])
-        print('very naive mpjpe : ', very_naive_mpjpe_mean)
-        print('naive mpjpe : ', naive_mpjpe_mean)
-        print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
-        print(f'faulty seqs : {faulty}')
-        print('----------------------------------------------------')
+        
         #uniform filter
-        very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'uniform')
-        naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='uniform')
-        naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='uniform')
-        print('uniform filtered very naive mpjpe : ', very_naive_mpjpe_mean)
-        print('uniform filtered naive mpjpe : ', naive_mpjpe_mean)
-        print('uniform filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
-        print(f'faulty seqs : {faulty}')
-        print('----------------------------------------------------')
+        uni_very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'uniform')
+        uni_naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='uniform')
+        uni_naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='uniform')
+        
         #spline filter
-        very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'spline')
-        naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline')
-        naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline')
-        print('spline filtered very naive mpjpe : ', very_naive_mpjpe_mean)
-        print('spline filtered naive mpjpe : ', naive_mpjpe_mean)
-        print('spline filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
-        print(f'faulty seqs : {faulty}')
+        spline_very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'spline')
+        spline_naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline')
+        spline_naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline')
 
     else:
         #No filter
         very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], frames_dir=args["FRAMES_DIR"]+'very_naive')
         naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], frames_dir=args["FRAMES_DIR"]+'naive')
         naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], frames_dir=args["FRAMES_DIR"]+'naive_no_rep')
-        print('very naive mpjpe : ', very_naive_mpjpe_mean)
-        print('naive mpjpe : ', naive_mpjpe_mean)
-        print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
-        print(f'faulty seqs : {faulty}')
-        print('----------------------------------------------------')
+        
         #uniform filter
-        very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'uniform', frames_dir=args["FRAMES_DIR"]+'very_naive_ufilter')
-        naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='uniform', frames_dir=args["FRAMES_DIR"]+'naive_ufilter')
-        naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='uniform', frames_dir=args["FRAMES_DIR"]+'naive_no_rep_ufilter')
-        print('uniform filtered very naive mpjpe : ', very_naive_mpjpe_mean)
-        print('uniform filtered naive mpjpe : ', naive_mpjpe_mean)
-        print('uniform filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
-        print(f'faulty seqs : {faulty}')
-        print('----------------------------------------------------')
+        uni_very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'uniform', frames_dir=args["FRAMES_DIR"]+'very_naive_ufilter')
+        uni_naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='uniform', frames_dir=args["FRAMES_DIR"]+'naive_ufilter')
+        uni_naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='uniform', frames_dir=args["FRAMES_DIR"]+'naive_no_rep_ufilter')
+        
         #spline filter
-        very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'spline', frames_dir=args["FRAMES_DIR"]+'very_naive_sfilter')
-        naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline', frames_dir=args["FRAMES_DIR"]+'naive_sfilter')
-        naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline', frames_dir=args["FRAMES_DIR"]+'naive_no_rep_sfilter')
-        print('spline filtered very naive mpjpe : ', very_naive_mpjpe_mean)
-        print('spline filtered naive mpjpe : ', naive_mpjpe_mean)
-        print('spline filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
-        print(f'faulty seqs : {faulty}')
+        spline_very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, cluster2keypoint_mapping_path, args["SK_TYPE"], filter = 'spline', frames_dir=args["FRAMES_DIR"]+'very_naive_sfilter')
+        spline_naive_mpjpe_mean = naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline', frames_dir=args["FRAMES_DIR"]+'naive_sfilter')
+        spline_naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, args["SK_TYPE"], filter='spline', frames_dir=args["FRAMES_DIR"]+'naive_no_rep_sfilter')
+    
+    if args["GROUND"]:
         #original video
         ground_truth_construction(seq_names, data_path, args["SK_TYPE"], frames_dir=args["FRAMES_DIR"]+'ground')
+
+    print('very naive mpjpe : ', very_naive_mpjpe_mean)
+    print('naive mpjpe : ', naive_mpjpe_mean)
+    print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
+    print(f'faulty seqs : {faulty}')
+    print('----------------------------------------------------')
+    print('uniform filtered very naive mpjpe : ', uni_very_naive_mpjpe_mean)
+    print('uniform filtered naive mpjpe : ', uni_naive_mpjpe_mean)
+    print('uniform filtered naive (no rep) mpjpe : ', uni_naive_no_rep_mpjpe_mean)
+    print(f'faulty seqs : {faulty}')
+    print('----------------------------------------------------')
+    print('spline filtered very naive mpjpe : ', spline_very_naive_mpjpe_mean)
+    print('spline filtered naive mpjpe : ', spline_naive_mpjpe_mean)
+    print('spline filtered naive (no rep) mpjpe : ', spline_naive_no_rep_mpjpe_mean)
+    print(f'faulty seqs : {faulty}')
 
 if __name__ == '__main__':
     main()

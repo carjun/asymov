@@ -450,7 +450,8 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     # az = calc_angle_from_y(seq[0]-np.array([xroot, yroot, zroot]))
 
     # Viz. skeleton for each frame
-    for t in tqdm(range(seq.shape[0]), desc='frames'):
+    # for t in tqdm(range(seq.shape[0]), desc='frames', position=1, leave=False):
+    for t in range(seq.shape[0]):
         # pdb.set_trace()
         # Fig. settings
         fig = plt.figure(figsize=(7, 6)) if debug else \
@@ -838,13 +839,13 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
             else :
                 raise NameError(f'No such filter {filter}')
             assert reconstructed_keypoints[-1].shape[0]==ground_truth_keypoints[-1].shape[0]
-        except NameError:
+        except :
             ground_truth_keypoints.pop()
             faulty.append(name)
             print(f'{name} cannot be reconstructed naively (no rep)')
     # pdb.set_trace()
     mpjpe_per_sequence=[]
-    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively (no reps) reconstructing sequences')
+    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively (no reps) reconstructing sequences', position=0)
     for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
         pbar.set_description(desc=f'naively (no reps) reconstructing {name}')
         mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
@@ -924,7 +925,7 @@ def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_
     
     # pdb.set_trace()
     mpjpe_per_sequence=[]
-    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively reconstructing sequences')
+    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively reconstructing sequences', position=0)
     for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
         pbar.set_description(desc=f'naively reconstructing {name}')
         mpjpe_per_sequence.append(mpjpe3d(reconstructed_keypoint, ground_truth_keypoint))
@@ -974,7 +975,7 @@ def very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, 
         raise NameError(f'No such filter {filter}')
 
     mpjpe_per_sequence=[]
-    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='very naively reconstructing sequences')
+    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='very naively reconstructing sequences', position=0)
     for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
         pbar.set_description(desc=f'very naively reconstructing {name}')
         
@@ -1011,7 +1012,7 @@ def ground_truth_construction(seq_names, data_path, sk_type, frames_dir):
 
     ground_truth_keypoints = [ground_truth_data[name] for name in seq_names]
 
-    pbar = tqdm(zip(seq_names, ground_truth_keypoints), desc='constructing ground truth sequences')
+    pbar = tqdm(zip(seq_names, ground_truth_keypoints), desc='constructing ground truth sequences', position=0)
     for name, ground_truth_keypoint in pbar:
         pbar.set_description(desc=f'constructing {name}')
         viz_seq(ground_truth_keypoint, ospj(frames_dir, name), sk_type, debug=False)
