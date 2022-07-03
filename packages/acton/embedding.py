@@ -170,7 +170,7 @@ def main():
     tr_name_container = []
 
     
-    tr_df = data_split['train']+data_split['val']+data_split['test']
+    tr_df = data_split['train']
     print(f"Training samples = {len(tr_df)}")
     
     for reference_name in tqdm(tr_df, desc='Loading training set features'):
