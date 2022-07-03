@@ -164,7 +164,7 @@ def main():
         data_split = json.load(handle)
 
     # Get data
-    tr_kpt_container = []
+    # tr_kpt_container = []
     tr_len_container = []
     tr_feat_container = []
     tr_name_container = []
@@ -181,7 +181,7 @@ def main():
             ldd = ldd[:5000, :, :]
 
             # print(reference_name, ldd.shape[0])
-            tr_kpt_container.append(ldd)
+            # tr_kpt_container.append(ldd)
             tr_len_container.append(ldd.shape[0])
             feats = get_feats(args, ldd, model)
             tr_feat_container.append(feats.detach().cpu().numpy())
@@ -214,55 +214,56 @@ def main():
     np.save(os.path.join(args['EMBED_DIR'], 'tr_stacked.npy'), tr_stacked)
     print(f"tr_stacked.npy dumped to {args['EMBED_DIR']}")
 
+    del tr_stacked, tr_where_to_cut, tr_len_container, tr_name_container
 #-------------------- TODO: handle more than one splits --------------------#
 
     # val_kpt_container = []
-    # val_len_container = []
-    # val_feat_container = []
-    # val_name_container = []
-    # val_df = data_split['val'] + data_split['test']
-    # print(f"Validation samples = {len(val_df)}")
+    val_len_container = []
+    val_feat_container = []
+    val_name_container = []
+    val_df = data_split['val'] + data_split['test']
+    print(f"Validation samples = {len(val_df)}")
 
 
-    # for reference_name in tqdm(val_df, desc='Loading validation set features'):
-    #     try:
-    #         ldd = official_loader.load_keypoint3d(reference_name)
+    for reference_name in tqdm(val_df, desc='Loading validation set features'):
+        try:
+            ldd = official_loader.load_keypoint3d(reference_name)
 
-    #         # FIXME: Temp. debug hack -- truncate to T=5000
-    #         ldd = ldd[:5000, :, :]
+            # FIXME: Temp. debug hack -- truncate to T=5000
+            ldd = ldd[:5000, :, :]
 
-    #         val_kpt_container.append(ldd)
-    #         val_len_container.append(ldd.shape[0])
-    #         feats = get_feats(args, ldd, model)
-    #         val_feat_container.append(feats.detach().cpu().numpy())
-    #         val_name_container.append(reference_name)
-    #     except:
-    #         print(f'ERROR w/ seq. {reference_name}. In except: block')
-
-
-    # val_where_to_cut = [0, ] + list(np.cumsum(np.array(val_len_container)))
-    # val_stacked = np.vstack(val_feat_container)
+            # val_kpt_container.append(ldd)
+            val_len_container.append(ldd.shape[0])
+            feats = get_feats(args, ldd, model)
+            val_feat_container.append(feats.detach().cpu().numpy())
+            val_name_container.append(reference_name)
+        except:
+            print(f'ERROR w/ seq. {reference_name}. In except: block')
 
 
-    # # with open(os.path.join(args['EMBED_DIR'], 'val_kpt_container.pkl'), "wb") as fp: 
-    # #     pickle.dump(val_kpt_container, fp)
-    # # print(f"val_kpt_container.pkl dumped to {args['EMBED_DIR']}")
-    # with open(os.path.join(args['EMBED_DIR'], 'val_len_container.pkl'), "wb") as fp: 
-    #     pickle.dump(val_len_container, fp)
-    # print(f"val_len_container.pkl dumped to {args['EMBED_DIR']}")
-    # # with open(os.path.join(args['EMBED_DIR'], 'val_feat_container.pkl'), "wb") as fp: 
-    # #     pickle.dump(val_feat_container, fp)
-    # # print(f"val_feat_container.pkl dumped to {args['EMBED_DIR']}")
-    # with open(os.path.join(args['EMBED_DIR'], 'val_name_container.pkl'), "wb") as fp: 
-    #     pickle.dump(val_name_container, fp)
-    # print(f"val_name_container.pkl dumped to {args['EMBED_DIR']}")
+    val_where_to_cut = [0, ] + list(np.cumsum(np.array(val_len_container)))
+    val_stacked = np.vstack(val_feat_container)
+
+
+    # with open(os.path.join(args['EMBED_DIR'], 'val_kpt_container.pkl'), "wb") as fp: 
+    #     pickle.dump(val_kpt_container, fp)
+    # print(f"val_kpt_container.pkl dumped to {args['EMBED_DIR']}")
+    with open(os.path.join(args['EMBED_DIR'], 'val_len_container.pkl'), "wb") as fp: 
+        pickle.dump(val_len_container, fp)
+    print(f"val_len_container.pkl dumped to {args['EMBED_DIR']}")
+    # with open(os.path.join(args['EMBED_DIR'], 'val_feat_container.pkl'), "wb") as fp: 
+    #     pickle.dump(val_feat_container, fp)
+    # print(f"val_feat_container.pkl dumped to {args['EMBED_DIR']}")
+    with open(os.path.join(args['EMBED_DIR'], 'val_name_container.pkl'), "wb") as fp: 
+        pickle.dump(val_name_container, fp)
+    print(f"val_name_container.pkl dumped to {args['EMBED_DIR']}")
     
 
-    # with open(os.path.join(args['EMBED_DIR'], 'val_where_to_cut.pkl'), "wb") as fp: 
-    #     pickle.dump(val_where_to_cut, fp)
-    # print(f"val_where_to_cut.pkl dumped to {args['EMBED_DIR']}")
-    # np.save(os.path.join(args['EMBED_DIR'], 'val_stacked.npy'), val_stacked)
-    # print(f"val_stacked.npy dumped to {args['EMBED_DIR']}")
+    with open(os.path.join(args['EMBED_DIR'], 'val_where_to_cut.pkl'), "wb") as fp: 
+        pickle.dump(val_where_to_cut, fp)
+    print(f"val_where_to_cut.pkl dumped to {args['EMBED_DIR']}")
+    np.save(os.path.join(args['EMBED_DIR'], 'val_stacked.npy'), val_stacked)
+    print(f"val_stacked.npy dumped to {args['EMBED_DIR']}")
 
 #---------------------------------------------------------------------------#
 
