@@ -65,7 +65,12 @@ def parse_args():
                         required=True,
                         help='whether to use raw skeleton for clustering',
                         type=int)
-
+    parser.add_argument('--batch_size',
+                        required=True,
+                        default=-1,
+                        help='batch size for clustering',
+                        type=int)
+    #TODO arg k for clusters
     args, _ = parser.parse_known_args()
     print(f'SEED: {args.seed}')
     # pl.utilities.seed.seed_everything(args.seed)
@@ -81,6 +86,9 @@ def parse_args():
         ldd["PRETRAIN"]["TRAINER"]["LOG_DIR"] = args.log_dir
 
     ldd["CLUSTER"]["USE_RAW"] = args.use_raw
+    ldd["CLUSTER"]["BATCH_SIZE"] = args.batch_size
+    if args.batch_size > 0:
+        ldd["CLUSTER"]["TYPE"] = "batch_kmeans_skl"
     if ldd["CLUSTER"]["CKPT"] == -1 :
         ldd["CLUSTER"]["CKPT"] = ldd["NAME"]
     if args.log_ver:
@@ -149,16 +157,17 @@ def main():
 
     for K in range(args["CLUSTER"]["K_MIN"], args["CLUSTER"]["K_MAX"], 10):
         # get cluster centers
-        argument_dict = {"distance": plain_distance, "TYPE": "vanilla", "K": K, "TOL": 1e-4}
+        argument_dict = {"distance": plain_distance, "TYPE": "vanilla", "K": K, "TOL": 1e-4, "BATCH_SIZE": args["CLUSTER"]["BATCH_SIZE"]}
         if not os.path.exists(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy")):
             print('Finding cluster centers')
-            c = getattr(algo, args["CLUSTER"]["TYPE"])(tr_stacked, times=args["CLUSTER"]["TIMES"], argument_dict=argument_dict)
+            c, scores = getattr(algo, args["CLUSTER"]["TYPE"])(tr_stacked, times=args["CLUSTER"]["TIMES"], argument_dict=argument_dict)
             np.save(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"), c.kmeans.cluster_centers_)
+            np.save(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}_scores.npy"), scores)
         else:
             print('Loading saved cluster centers')
             ctrs = np.load(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"))
             c = getattr(algo, args["CLUSTER"]["TYPE"] + "_clusterer")(TIMES=args["CLUSTER"]["TIMES"], K=K, TOL=1e-4)
-            c.fit(tr_stacked[:K])
+            # c.fit(tr_stacked[:K])
             c.kmeans.cluster_centers_ = ctrs
 
         # infer on training set and save
