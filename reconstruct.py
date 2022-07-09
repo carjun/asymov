@@ -92,17 +92,22 @@ def main():
             data_split = json.load(handle)
         seq_names = []
         for split in args["PRETRAIN"]["DATA"]["DATA_SPLITS"]:
-            seq_names.extend(data_split[split][:10])
+            #TODO fraction of data to create reconstructions
+            seq_names.extend(data_split[split])
     
     data_path = os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data.pkl')
     if args["CLUSTER"]["USE_RAW"] :
         log_dir = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], 'raw')
     else :
         log_dir = os.path.join(args["PRETRAIN"]["TRAINER"]["LOG_DIR"], args["NAME"], args["CLUSTER"]["VERSION"])
-    frame2cluster_mapping_path = os.path.join(log_dir, f'advanced_tr_res_{args["K"]}.pkl')
-    contiguous_frame2cluster_mapping_path = os.path.join(log_dir, f'advanced_tr_{args["K"]}.pkl')
-    cluster2keypoint_mapping_path = os.path.join(log_dir, f'proxy_centers_tr_{args["K"]}.pkl')
-    cluster2frame_mapping_path = os.path.join(log_dir, f'proxy_centers_tr_complete_{args["K"]}.pkl')
+    if(args["PRETRAIN"]["DATA"]["DATA_SPLITS"]==['train']):
+        split='tr'
+    else:
+        split='val'
+    frame2cluster_mapping_path = os.path.join(log_dir, f'advanced_{split}_res_{args["K"]}.pkl')
+    contiguous_frame2cluster_mapping_path = os.path.join(log_dir, f'advanced_{split}_{args["K"]}.pkl')
+    cluster2keypoint_mapping_path = os.path.join(log_dir, f'proxy_centers_{split}_{args["K"]}.pkl')
+    cluster2frame_mapping_path = os.path.join(log_dir, f'proxy_centers_{split}_complete_{args["K"]}.pkl')
 
     
     if args["FRAMES_DIR"] == None:

@@ -803,7 +803,7 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
     for name in seq_names:
-        ground_truth_keypoints.append(ground_truth_data[name])
+        ground_truth_keypoints.append(ground_truth_data[name][:5000, :, :])
         reconstructed_keypoint = []
         
         try:
@@ -885,7 +885,7 @@ def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
     for name in seq_names:
-        ground_truth_keypoints.append(ground_truth_data[name])
+        ground_truth_keypoints.append(ground_truth_data[name][:5000, :, :])
         reconstructed_keypoint = []
         
         contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
@@ -960,7 +960,7 @@ def very_naive_reconstruction(seq_names, data_path, frame2cluster_mapping_path, 
     with open(data_path, 'rb') as handle:
         ground_truth_data = pickle.load(handle)
 
-    ground_truth_keypoints = [ground_truth_data[name] for name in seq_names]
+    ground_truth_keypoints = [ground_truth_data[name][:5000, :, :] for name in seq_names]
 
     frame2cluster = pd.read_pickle(frame2cluster_mapping_path)
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
@@ -1010,7 +1010,7 @@ def ground_truth_construction(seq_names, data_path, sk_type, frames_dir):
     with open(data_path, 'rb') as handle:
         ground_truth_data = pickle.load(handle)
 
-    ground_truth_keypoints = [ground_truth_data[name] for name in seq_names]
+    ground_truth_keypoints = [ground_truth_data[name][:5000, :, :] for name in seq_names]
 
     pbar = tqdm(zip(seq_names, ground_truth_keypoints), desc='constructing ground truth sequences', position=0)
     for name, ground_truth_keypoint in pbar:
