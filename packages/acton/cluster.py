@@ -10,6 +10,7 @@ import numpy as np
 # import torch
 import pandas as pd
 from pathlib import Path
+from sklearn.metrics import pairwise_distances_argmin_min
 
 import pdb
 # import json
@@ -66,7 +67,6 @@ def parse_args():
                         help='whether to use raw skeleton for clustering',
                         type=int)
     parser.add_argument('--batch_size',
-                        required=True,
                         default=-1,
                         help='batch size for clustering',
                         type=int)
@@ -166,8 +166,8 @@ def main():
         else:
             print('Loading saved cluster centers')
             ctrs = np.load(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"))
-            c = getattr(algo, args["CLUSTER"]["TYPE"] + "_clusterer")(TIMES=args["CLUSTER"]["TIMES"], K=K, TOL=1e-4)
-            # c.fit(tr_stacked[:K])
+            c = getattr(algo, args["CLUSTER"]["TYPE"] + "_clusterer")(TIMES=args["CLUSTER"]["TIMES"], K=K, TOL=1e-4, BATCH_SIZE=args["CLUSTER"]["BATCH_SIZE"])
+            c.fit(tr_stacked[:K])
             c.kmeans.cluster_centers_ = ctrs
 
         # infer on training set and save
@@ -186,6 +186,13 @@ def main():
         proxy_centers_tr = tr_res_df.loc[tr_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers
         proxy_centers_tr['keypoints3d'] = proxy_centers_tr[['frame_index','seq_name']].apply(
             lambda x: official_loader.load_keypoint3d(x['seq_name'])[x['frame_index']], axis=1)   #3d skeleton keypoints of the closest frame
+
+        non_empty_clusters = proxy_centers_tr['cluster'].unique()
+        empty_clusters = [i for i in range(K) if i not in non_empty_clusters]
+        closest_non_empty, _ = pairwise_distances_argmin_min(c.kmeans.cluster_centers_[empty_clusters], c.kmeans.cluster_centers_[non_empty_clusters])
+        non_empty_centers = proxy_centers_tr[proxy_centers_tr['cluster'].isin(closest_non_empty)]
+        non_empty_centers.loc[:,('cluster', 'dist')]=np.array([ empty_clusters, [None]*len(empty_clusters)]).transpose()
+        proxy_centers_tr = proxy_centers_tr.append(non_empty_centers, ignore_index=True)
 
         # not needed
         # sorted_proxies_tr = tr_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
@@ -238,9 +245,17 @@ def main():
         val_res_df['dist'] = val_res_df[['feat_vec', 'cluster']].apply(
             lambda x: plain_distance(x['feat_vec'][0],c.kmeans.cluster_centers_[x['cluster']]), #euclidean distance from cluster center
             axis=1)
-        proxy_centers_val = val_res_df.loc[val_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers
-        proxy_centers_val['keypoints3d'] = proxy_centers_val[['frame_index','seq_name']].apply(
-            lambda x: official_loader.load_keypoint3d(x['seq_name'])[x['frame_index']], axis=1)   #3d skeleton keypoints of the closest frame
+        
+        # proxy_centers_val = val_res_df.loc[val_res_df.groupby('cluster')['dist'].idxmin()].reset_index(drop=True)  #frames with feature vectors closest to cluster centers
+        # proxy_centers_val['keypoints3d'] = proxy_centers_val[['frame_index','seq_name']].apply(
+        #     lambda x: official_loader.load_keypoint3d(x['seq_name'])[x['frame_index']], axis=1)   #3d skeleton keypoints of the closest frame
+
+        # non_empty_clusters = proxy_centers_val['cluster'].unique()
+        # empty_clusters = [i for i in range(K) if i not in non_empty_clusters]
+        # closest_non_empty, _ = pairwise_distances_argmin_min(c.kmeans.cluster_centers_[empty_clusters], c.kmeans.cluster_centers_[non_empty_clusters])
+        # non_empty_centers = proxy_centers_val[proxy_centers_val['cluster'].isin(closest_non_empty)]
+        # non_empty_centers.loc[:,('cluster', 'dist')]=np.array([ empty_clusters, [None]*len(empty_clusters)]).transpose()
+        # proxy_centers_val = proxy_centers_val.append(non_empty_centers, ignore_index=True)
 
         # not needed
         # sorted_proxies_val = val_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
@@ -270,10 +285,10 @@ def main():
         val_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_val_res_{K}.pkl")
         print(f"advanced_val_res_{K}.pkl dumped to {args['CLUSTER_DIR']}") # frame wise tokenization
 
-        proxy_centers_val.to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_complete_{K}.pkl")
-        print(f"proxy_centers_val_complete_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved proxy centers
-        proxy_centers_val[['cluster', 'keypoints3d']].to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_{K}.pkl")
-        print(f"proxy_centers_val_{K}.pkl dumped to {args['CLUSTER_DIR']}")
+        # proxy_centers_val.to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_complete_{K}.pkl")
+        # print(f"proxy_centers_val_complete_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved proxy centers
+        # proxy_centers_val[['cluster', 'keypoints3d']].to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_{K}.pkl")
+        # print(f"proxy_centers_val_{K}.pkl dumped to {args['CLUSTER_DIR']}")
 
         # not needed
         # sorted_proxies_val.to_pickle(Path(args['CLUSTER_DIR']) / f"sorted_proxies_val_{K}.pkl")
