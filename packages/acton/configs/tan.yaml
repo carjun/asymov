@@ -37,7 +37,7 @@ CLUSTER:
   TYPE: kmeans_skl
   USE_RAW: 0
   #GENRE: 10  # the index of genre to use (0~9), 10 means all genre
-  K_MIN: 150
-  K_MAX: 160  # with a step of 10
+  K_MIN: 1000
+  K_MAX: 1010  # with a step of 10
   TIMES: 10  # how many kmeans is run
   CKPT: -1  # NAME want to evaluate, if -1 use NAME in this config
