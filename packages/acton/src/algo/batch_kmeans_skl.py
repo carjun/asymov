@@ -5,13 +5,13 @@ from tqdm import tqdm
 import pdb
 
 class Clusterer:
-    def __init__(self, TIMES, K, TOL, BATCH_SIZE):
+    def __init__(self, TIMES, argument_dict):
         # cannot use custom distance
-        self.K = K
+        self.K = argument_dict["K"]
         self.num_init = TIMES
-        self.batch_size = BATCH_SIZE
+        self.batch_size = argument_dict["BATCH_SIZE"]
         self.kmeans = MiniBatchKMeans(
-            n_clusters=self.K, n_init=self.num_init, verbose=1, tol=TOL, batch_size=self.batch_size)
+            n_clusters=self.K, n_init=self.num_init, verbose=1, tol=argument_dict["TOL"], batch_size=self.batch_size)
         # tol: Relative tolerance with regards to Frobenius norm of the difference 
         # in the cluster centers of two consecutive iterations to declare convergence
 
@@ -47,6 +47,6 @@ class Clusterer:
             yield self.kmeans.cluster_centers_[idx]
 
 def get_best_clusterer(nodes, times, argument_dict):
-    c = Clusterer(TIMES=times, K=argument_dict["K"], TOL=argument_dict["TOL"], BATCH_SIZE=argument_dict["BATCH_SIZE"])
+    c = Clusterer(TIMES=times, argument_dict=argument_dict)
     scores = c.fit(nodes)
     return c, scores
