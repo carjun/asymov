@@ -3,7 +3,7 @@ hydra:
     dir: outputs/${data.dataname}/${experiment}/${run_id}
 
 # Global configurations shared between different modules
-experiment: baseline
+experiment: complete_baseline
 
 seed: 1234
 

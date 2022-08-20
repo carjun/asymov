@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Tuple
 import pytorch_lightning as pl
 
 import torch.nn as nn
@@ -43,7 +43,7 @@ class DistilbertEncoderBase(pl.LightningModule):
 
     def get_last_hidden_state(self, texts: List[str],
                               return_mask: bool = False
-                              ) -> Union[Tensor, tuple[Tensor, Tensor]]:
+                              ) -> Union[Tensor, Tuple[Tensor, Tensor]]:
         encoded_inputs = self.tokenizer(texts, return_tensors="pt", padding=True)
         output = self.text_model(**encoded_inputs.to(self.text_model.device))
         if not return_mask:
