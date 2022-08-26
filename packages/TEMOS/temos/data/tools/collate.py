@@ -43,3 +43,30 @@ def collate_text_and_length(lst_elements: Dict) -> Dict:
     for key in otherkeys:
         batch[key] = [x[key] for x in lst_elements]
     return batch
+
+def motion_words_padding(batch: List[Tensor], vocab_size: int) -> Tensor:
+    dims = batch[0].dim()
+    max_size = [max([b.size(i) for b in batch]) for i in range(dims)]
+    size = (len(batch),) + tuple(max_size)
+    canvas = batch[0].new_ones(size=size)*vocab_size
+    for i, b in enumerate(batch):
+        sub_tensor = canvas[i]
+        for d in range(dims):
+            sub_tensor = sub_tensor.narrow(d, 0, b.size(d))
+        sub_tensor.add_(b-vocab_size)
+    return canvas
+
+def collate_motion_words_and_text(lst_elements: List, vocab_size: int) -> Dict:
+    batch = {
+        # Collate with padding for the datastruct
+        "motion_words": motion_words_padding([x["motion_words"] for x in lst_elements], vocab_size),
+        # Collate normally for the length
+        "length": [x["length"] for x in lst_elements],
+        # Collate the text
+        "text": [x["text"] for x in lst_elements]}
+    
+    otherkeys = [x for x in lst_elements[0].keys() if x not in batch]
+    for key in otherkeys:
+        batch[key] = [x[key] for x in lst_elements]
+
+    return batch

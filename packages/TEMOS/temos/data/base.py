@@ -1,20 +1,21 @@
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
+from typing import Callable
 
 class BASEDataModule(pl.LightningDataModule):
     def __init__(self, batch_size: int,
-                 num_workers: int):
+                 num_workers: int,
+                 collate_fn: Callable):
         super().__init__()
 
-        from temos.data.tools import collate_datastruct_and_text
         self.dataloader_options = {"batch_size": batch_size, "num_workers": num_workers,
-                                   "collate_fn": collate_datastruct_and_text}
+                                   "collate_fn": collate_fn}
         # need to be overloaded:
         # - self.Dataset
         # - self._sample_set => load only a small subset
         #   There is an helper bellow (get_sample_set)
-        # - self.nfeats
+        # - self.nfeats or self.vocab_size
         # - self.transforms
 
     def get_sample_set(self, overrides={}):

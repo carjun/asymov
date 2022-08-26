@@ -5,7 +5,7 @@ import numpy as np
 def subsample(num_frames, last_framerate, new_framerate):
     step = int(last_framerate / new_framerate)
     assert step >= 1
-    frames = np.arange(0, num_frames, step)
+    frames = np.arange(0, num_frames, step, dtype='int32')
     return frames
 
 

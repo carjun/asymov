@@ -1,7 +1,7 @@
 import json
 import os
 from glob import glob
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable
 import logging
 
 import numpy as np
@@ -16,6 +16,7 @@ from temos.tools.easyconvert import matrix_to, axis_angle_to
 from temos.transforms import Transform
 from temos.data.sampling import subsample
 from temos.data.tools.smpl import smpl_data_to_matrix_and_trans
+from temos.data.tools.collate import *
 
 from .base import BASEDataModule
 from .utils import get_split_keyids
@@ -27,9 +28,11 @@ class KITDataModule(BASEDataModule):
     def __init__(self, data_dir: str = "",
                  batch_size: int = 32,
                  num_workers: int = 16,
+                 collate_fn: Callable = collate_datastruct_and_text,
                  **kwargs):
         super().__init__(batch_size=batch_size,
-                         num_workers=num_workers)
+                         num_workers=num_workers,
+                         collate_fn=collate_fn)
         self.save_hyperparameters(logger=False)
         self.Dataset = KIT
 
