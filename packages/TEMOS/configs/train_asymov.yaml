@@ -1,0 +1,32 @@
+hydra:
+  run:
+    dir: outputs/${data.dataname}/${experiment}/${run_id}
+
+# Global configurations shared between different modules
+experiment: asymov
+
+seed: 1234
+
+logger_level: INFO
+run_id: ${generate_id:}
+resume_ckpt_path: None
+
+# Composing nested config with default
+defaults:
+  - data: kit-xyz-motion-word
+  - model: asymov
+  - machine: server
+  - trainer: gpu
+  - sampler: variable_conseq
+  # - logger: none
+  - callback: base
+  - /path@path
+  - override hydra/job_logging: custom
+  - override hydra/hydra_logging: custom
+  - _self_
+
+data:
+  transforms:
+    normalization: true
+
+# transforms: ${data.transforms}

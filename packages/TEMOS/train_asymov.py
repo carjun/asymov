@@ -3,14 +3,14 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 import temos.launch.prepare  # noqa
 
-from pprint import pprint
+# from pprint import pprint
 
 logger = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="configs", config_name="train")
+@hydra.main(config_path="configs", config_name="train_asymov")
 def _train(cfg: DictConfig):
-    pprint(cfg)
+    # print(OmegaConf.to_yaml(cfg))
     cfg.trainer.enable_progress_bar = True
     return train(cfg)
 
@@ -37,21 +37,22 @@ def train(cfg: DictConfig) -> None:
 
     logger.info("Loading model")
     model = instantiate(cfg.model,
-                        nfeats=data_module.nfeats,
+                        # nfeats=data_module.nfeats,
                         nvids_to_save=None,
                         _recursive_=False)
     logger.info(f"Model '{cfg.model.modelname}' loaded")
 
     logger.info("Loading callbacks")
     metric_monitor = {
-        "Train_jf": "recons/text2jfeats/train",
-        "Val_jf": "recons/text2jfeats/val",
-        "Train_rf": "recons/text2rfeats/train",
-        "Val_rf": "recons/text2rfeats/val",
-        "APE root": "Metrics/APE_root",
-        "APE mean pose": "Metrics/APE_mean_pose",
-        "AVE root": "Metrics/AVE_root",
-        "AVE mean pose": "Metrics/AVE_mean_pose"
+        # "Train_jf": "recons/text2jfeats/train",
+        # "Val_jf": "recons/text2jfeats/val",
+        # "Train_rf": "recons/text2rfeats/train",
+        # "Val_rf": "recons/text2rfeats/val",
+        # "APE root": "Metrics/APE_root",
+        # "APE mean pose": "Metrics/APE_mean_pose",
+        # "AVE root": "Metrics/AVE_root",
+        # "AVE mean pose": "Metrics/AVE_mean_pose"
+        "Accuracy": "Metrics/Accuracy"
     }
     callbacks = [
         instantiate(cfg.callback.progress, metric_monitor=metric_monitor),
@@ -69,7 +70,9 @@ def train(cfg: DictConfig) -> None:
     logger.info("Trainer initialized")
 
     logger.info("Fitting the model..")
-    trainer.fit(model, datamodule=data_module)
+    if cfg.resume_ckpt_path is not None :
+        print(f'Resuming training from checkpoint {cfg.resume_ckpt_path}')
+    trainer.fit(model, datamodule=data_module, ckpt_path=cfg.resume_ckpt_path)
     logger.info("Fitting done")
 
     checkpoint_folder = trainer.checkpoint_callback.dirpath
