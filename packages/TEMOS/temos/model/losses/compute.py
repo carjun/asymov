@@ -34,6 +34,10 @@ class TemosComputeLosses(Metric):
             if not ablation_no_motionencoder:
                 losses.append("recons_rfeats2rfeats")
             losses.append("recons_text2rfeats")
+        elif mode == "motion_word":
+            if not ablation_no_motionencoder:
+                losses.append("recons_mw2mw")
+            losses.append("recons_text2mw")
         else:
             ValueError("This mode is not recognized.")
 
@@ -78,6 +82,11 @@ class TemosComputeLosses(Metric):
                 total += self._update_loss("recons_rfeats2rfeats", ds_motion.rfeats, ds_ref.rfeats)
             total += self._update_loss("recons_text2rfeats", ds_text.rfeats, ds_ref.rfeats)
 
+        if self.mode == "motion_word":
+            if not self.ablation_no_motionencoder:
+                total += self._update_loss("recons_mw2mw", ds_motion, ds_ref)
+            total += self._update_loss("recons_text2mw", ds_text, ds_ref)
+        
         if self.vae or self.loss_on_both:
             if not self.ablation_no_kl_combine and not self.ablation_no_motionencoder:
                 total += self._update_loss("kl_text2motion", dis_text, dis_motion)
