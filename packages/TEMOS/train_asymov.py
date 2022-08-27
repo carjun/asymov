@@ -2,11 +2,12 @@ import logging
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import temos.launch.prepare  # noqa
+import os
 
 # from pprint import pprint
 
 logger = logging.getLogger(__name__)
-
+os.environ['WANDB_API_KEY'] = '57f6d5aab6f1a78b78fb181dcf32dfeca0e65f79'
 
 @hydra.main(config_path="configs", config_name="train_asymov")
 def _train(cfg: DictConfig):
@@ -64,7 +65,7 @@ def train(cfg: DictConfig) -> None:
     logger.info("Loading trainer")
     trainer = pl.Trainer(
         **OmegaConf.to_container(cfg.trainer, resolve=True),
-        logger=None,
+        logger=instantiate_logger(cfg),
         callbacks=callbacks,
     )
     logger.info("Trainer initialized")

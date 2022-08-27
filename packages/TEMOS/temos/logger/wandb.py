@@ -12,7 +12,7 @@ class WandbLogger(_pl_WandbLogger):
         assert rank_zero_only.rank == 0, "experiment tried to log from global_rank != 0"
 
         wandb_step = int(metrics["epoch"])
-        metrics = self._add_prefix(metrics)
+        # metrics = self._add_prefix(metrics)
         if step is not None:
             self.experiment.log({**metrics, "trainer/global_step": step},
                                 step=wandb_step)

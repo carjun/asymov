@@ -2,9 +2,9 @@ logger_name: wandb
 version: ${run_id}
 
 save_dir: wandb
-project: TEMOS
+project: ${experiment}
 
-offline: true
-resume: false
+offline: false
+resume: allow
 save_code: false
 log_model: false
