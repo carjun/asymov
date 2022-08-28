@@ -9,7 +9,7 @@ seed: 1234
 
 logger_level: INFO
 run_id: ${generate_id:}
-resume_ckpt_path: None
+resume_ckpt_path: 
 
 # Composing nested config with default
 defaults:
@@ -18,7 +18,7 @@ defaults:
   - machine: server
   - trainer: gpu
   - sampler: variable_conseq
-  # - logger: none
+  - logger: wandb
   - callback: base
   - /path@path
   - override hydra/job_logging: custom
@@ -29,4 +29,4 @@ data:
   transforms:
     normalization: true
 
-# transforms: ${data.transforms}
+transforms: ${data.transforms}
