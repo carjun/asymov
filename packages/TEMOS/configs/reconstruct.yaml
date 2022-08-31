@@ -1,0 +1,17 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
+logger_level: INFO
+folder: ???
+
+reconstruct: False
+reconstruct_ground: False
+
+defaults:
+  - /path@path
+
+data_dir: ${path.datasets}/kit
+vocab_size: 1000
+sk_type: 'kitml'

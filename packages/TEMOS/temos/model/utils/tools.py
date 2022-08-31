@@ -4,3 +4,6 @@ def detach_to_numpy(tensor):
 
 def remove_padding(tensors, lengths):
     return [tensor[:tensor_length] for tensor, tensor_length in zip(tensors, lengths)]
+
+def remove_padding_asymov(tensors, lengths):
+    return [tensor[:, :tensor_length] for tensor, tensor_length in zip(tensors, lengths)]

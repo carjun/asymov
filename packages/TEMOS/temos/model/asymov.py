@@ -6,7 +6,7 @@ from hydra.utils import instantiate
 
 from torch import Tensor
 from omegaconf import DictConfig
-from temos.model.utils.tools import remove_padding
+from temos.model.utils.tools import remove_padding_asymov
 
 from temos.model.metrics import ComputeMetrics
 from torchmetrics import MetricCollection, Accuracy
@@ -58,7 +58,7 @@ class Asymov(BaseModel):
         probs_from_text = self.text_to_motion_forward(batch["text"],
                                                            batch["length"])
 
-        return remove_padding(probs_from_text.joints, batch["length"])
+        return remove_padding_asymov(probs_from_text, batch["length"])
 
     def sample_from_distribution(self, distribution: Distribution, *,
                                  fact: Optional[bool] = None,
