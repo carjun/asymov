@@ -3,6 +3,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 import temos.launch.prepare  # noqa
 import os
+import pdb
 
 # from pprint import pprint
 
@@ -69,15 +70,16 @@ def train(cfg: DictConfig) -> None:
         callbacks=callbacks,
     )
     logger.info("Trainer initialized")
+    checkpoint_folder = trainer.checkpoint_callback.dirpath
+    logger.info(f"The checkpoints are stored in {checkpoint_folder}")
 
+    # pdb.set_trace()
     logger.info("Fitting the model..")
     if cfg.resume_ckpt_path is not None :
         print(f'Resuming training from checkpoint {cfg.resume_ckpt_path}')
     trainer.fit(model, datamodule=data_module, ckpt_path=cfg.resume_ckpt_path)
     logger.info("Fitting done")
 
-    checkpoint_folder = trainer.checkpoint_callback.dirpath
-    logger.info(f"The checkpoints are stored in {checkpoint_folder}")
     logger.info(f"Training done. The outputs of this experiment are stored in:\n{working_dir}")
 
 
