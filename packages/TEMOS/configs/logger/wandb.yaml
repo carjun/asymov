@@ -1,7 +1,7 @@
 logger_name: wandb
 version: ${run_id}
 
-save_dir: ${hydra.run.dir}
+save_dir: ${path.working_dir}
 project: ${experiment}
 
 offline: false
