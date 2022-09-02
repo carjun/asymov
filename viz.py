@@ -802,10 +802,11 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
         If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
     '''
 
-    if filter is None:
-        frames_dir = frames_dir / f"naive_no_rep"
-    else:
-        frames_dir = frames_dir / f"naive_no_rep_{filter}"
+    if frames_dir is not None:
+        if filter is None:
+            frames_dir = frames_dir / f"naive_no_rep"
+        else:
+            frames_dir = frames_dir / f"naive_no_rep_{filter}"
     ground_truth_keypoints = []
     reconstructed_keypoints = []
     faulty = []
@@ -855,7 +856,7 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
         except :
             ground_truth_keypoints.pop()
             faulty.append(name)
-            print(f'{name} cannot be reconstructed naively (no rep)')
+            # print(f'{name} cannot be reconstructed naively (no rep)')
     # pdb.set_trace()
     mpjpe_per_sequence=[]
     pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively (no reps) reconstructing sequences', position=0)
@@ -891,10 +892,11 @@ def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_
         If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
     '''
 
-    if filter is None:
-        frames_dir = frames_dir / f"naive"
-    else:
-        frames_dir = frames_dir / f"naive_{filter}"
+    if frames_dir is not None:
+        if filter is None:
+            frames_dir = frames_dir / f"naive"
+        else:
+            frames_dir = frames_dir / f"naive_{filter}"
     ground_truth_keypoints = []
     reconstructed_keypoints = []
 
@@ -979,10 +981,11 @@ def very_naive_reconstruction(seq_names, data_path, cluster2keypoint_mapping_pat
     # for name in seq_names:
     # pdb.set_trace()
 
-    if filter is None:
-        frames_dir = frames_dir / f"very_naive"
-    else:
-        frames_dir = frames_dir / f"very_naive_{filter}"
+    if frames_dir is not None:
+        if filter is None:
+            frames_dir = frames_dir / f"very_naive"
+        else:
+            frames_dir = frames_dir / f"very_naive_{filter}"
 
     with open(data_path, 'rb') as handle:
         ground_truth_data = pickle.load(handle)

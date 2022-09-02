@@ -2,15 +2,18 @@ import logging
 import hydra
 from omegaconf import DictConfig, OmegaConf
 import temos.launch.prepare  # noqa
+import os
+import pdb
 
 from pprint import pprint
 
 logger = logging.getLogger(__name__)
+os.environ['WANDB_API_KEY'] = '57f6d5aab6f1a78b78fb181dcf32dfeca0e65f79'
 
 
 @hydra.main(config_path="configs", config_name="train")
 def _train(cfg: DictConfig):
-    pprint(cfg)
+    # pprint(cfg)
     cfg.trainer.enable_progress_bar = True
     return train(cfg)
 
@@ -63,17 +66,19 @@ def train(cfg: DictConfig) -> None:
     logger.info("Loading trainer")
     trainer = pl.Trainer(
         **OmegaConf.to_container(cfg.trainer, resolve=True),
-        logger=None,
+        logger=instantiate_logger(cfg),
         callbacks=callbacks,
     )
     logger.info("Trainer initialized")
-
-    logger.info("Fitting the model..")
-    trainer.fit(model, datamodule=data_module)
-    logger.info("Fitting done")
-
     checkpoint_folder = trainer.checkpoint_callback.dirpath
     logger.info(f"The checkpoints are stored in {checkpoint_folder}")
+
+    logger.info("Fitting the model..")
+    if cfg.resume_ckpt_path is not None :
+        print(f'Resuming training from checkpoint {cfg.resume_ckpt_path}')
+    trainer.fit(model, datamodule=data_module, ckpt_path=cfg.resume_ckpt_path)
+    logger.info("Fitting done")
+
     logger.info(f"Training done. The outputs of this experiment are stored in:\n{working_dir}")
 
 

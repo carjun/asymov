@@ -3,12 +3,13 @@ hydra:
     dir: outputs/${data.dataname}/${experiment}/${run_id}
 
 # Global configurations shared between different modules
-experiment: complete_baseline
+experiment: baseline
 
 seed: 1234
 
 logger_level: INFO
 run_id: ${generate_id:}
+resume_ckpt_path: 
 
 # Composing nested config with default
 defaults:
@@ -17,7 +18,7 @@ defaults:
   - machine: server
   - trainer: gpu
   - sampler: variable_conseq
-  - logger: none
+  - logger: wandb
   - callback: base
   - /path@path
   - override hydra/job_logging: custom
