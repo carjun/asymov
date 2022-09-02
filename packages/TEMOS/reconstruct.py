@@ -36,6 +36,7 @@ def reconstruct(cfg: DictConfig) -> None:
 
     seq_names = sorted([i[:-4] for i in os.listdir(pred_dir) if i.endswith('.npy')])
     logger.info(f"Total sequences: {len(seq_names)}")
+    recons_names = seq_names[:10]
     
     frame2cluster_mapping_dir = pred_dir
     contiguous_frame2cluster_mapping_path = pred_dir / "contiguous_frame2cluster_mapping.pkl"
@@ -48,48 +49,53 @@ def reconstruct(cfg: DictConfig) -> None:
         recons_dir.mkdir(exist_ok=True, parents=True)
         logger.info("Reconstructed vdeos will be stored in:")
         logger.info(f"{recons_dir}")
-        recons_names = seq_names[:10]
     else:
         recons_dir = None
         logger.info("Reconstructed videos will not be generated")
-        recons_names = []
+        # recons_names = []
     
     #No filter
     very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, ground_truth_path, cluster2keypoint_mapping_path, cfg.sk_type, frames_dir=recons_dir, frame2cluster_mapping_dir=frame2cluster_mapping_dir, recons_names=recons_names)
     naive_mpjpe_mean = naive_reconstruction(seq_names, ground_truth_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, cfg.sk_type, frames_dir=recons_dir, recons_names=recons_names)
     naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, ground_truth_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, cfg.sk_type, frames_dir=recons_dir, recons_names=recons_names)
 
-    print('very naive mpjpe : ', very_naive_mpjpe_mean)
-    print('naive mpjpe : ', naive_mpjpe_mean)
-    print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
-    print(f'faulty seqs : {faulty}')
-    print('----------------------------------------------------')
 
     #uniform filter
     uni_very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, ground_truth_path, cluster2keypoint_mapping_path, cfg.sk_type, filter = 'uniform', frames_dir=recons_dir, frame2cluster_mapping_dir=frame2cluster_mapping_dir, recons_names=recons_names)
     uni_naive_mpjpe_mean = naive_reconstruction(seq_names, ground_truth_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, cfg.sk_type, filter='uniform', frames_dir=recons_dir, recons_names=recons_names)
     uni_naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, ground_truth_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, cfg.sk_type, filter='uniform', frames_dir=recons_dir, recons_names=recons_names)
     
-    print('uniform filtered very naive mpjpe : ', uni_very_naive_mpjpe_mean)
-    print('uniform filtered naive mpjpe : ', uni_naive_mpjpe_mean)
-    print('uniform filtered naive (no rep) mpjpe : ', uni_naive_no_rep_mpjpe_mean)
-    print(f'faulty seqs : {faulty}')
-    print('----------------------------------------------------')
     
     #spline filter
     spline_very_naive_mpjpe_mean = very_naive_reconstruction(seq_names, ground_truth_path, cluster2keypoint_mapping_path, cfg.sk_type, filter = 'spline', frames_dir=recons_dir, frame2cluster_mapping_dir=frame2cluster_mapping_dir, recons_names=recons_names)
     spline_naive_mpjpe_mean = naive_reconstruction(seq_names, ground_truth_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, cfg.sk_type, filter='spline', frames_dir=recons_dir, recons_names=recons_names)
     spline_naive_no_rep_mpjpe_mean, faulty = naive_reconstruction_no_rep(seq_names, ground_truth_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, cfg.sk_type, filter='spline', frames_dir=recons_dir, recons_names=recons_names)
     
+    if cfg.reconstruct_ground:
+        #original video
+        ground_truth_construction(recons_names, ground_truth_path, cfg.sk_type, frames_dir= data_dir / 'constructions')
+    
+    print('very naive mpjpe : ', very_naive_mpjpe_mean)
+    print('naive mpjpe : ', naive_mpjpe_mean)
+    print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
+    print(f'{len(faulty)} faulty seqs : {faulty}')
+    print('----------------------------------------------------')
+    print('uniform filtered very naive mpjpe : ', uni_very_naive_mpjpe_mean)
+    print('uniform filtered naive mpjpe : ', uni_naive_mpjpe_mean)
+    print('uniform filtered naive (no rep) mpjpe : ', uni_naive_no_rep_mpjpe_mean)
+    print(f'{len(faulty)} faulty seqs : {faulty}')
+    print('----------------------------------------------------')
     print('spline filtered very naive mpjpe : ', spline_very_naive_mpjpe_mean)
     print('spline filtered naive mpjpe : ', spline_naive_mpjpe_mean)
     print('spline filtered naive (no rep) mpjpe : ', spline_naive_no_rep_mpjpe_mean)
-    print(f'faulty seqs : {faulty}')
+    print(f'{len(faulty)} faulty seqs : {faulty}')
     
-    if cfg.reconstruct_ground:
-        #original video
-        ground_truth_construction(seq_names, ground_truth_path, cfg.sk_type, frames_dir= data_dir / 'constructions')
-
-
+    mpjpe_table = { 'filter': ['none', 'uniform', 'spline'], 
+                    'very_naive':[very_naive_mpjpe_mean, uni_very_naive_mpjpe_mean, spline_very_naive_mpjpe_mean],
+                    'naive':[naive_mpjpe_mean, uni_naive_mpjpe_mean, spline_naive_mpjpe_mean],
+                    'naive_no_rep':[naive_no_rep_mpjpe_mean, uni_naive_no_rep_mpjpe_mean, spline_naive_no_rep_mpjpe_mean]
+                    }
+    
+    pd.DataFrame.from_dict(mpjpe_table).to_csv(pred_dir / "mpjpe_scores.csv")
 if __name__ == '__main__':
     _reconstruct()
