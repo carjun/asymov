@@ -8,12 +8,16 @@ __pycache__/
 outputs/
 gifs/
 deps/distilbert-base-uncased/
-# datasets/
+datasets/kit
 *.ckpt
 *.gif
 *.csv
 wandb/
 *.mp4
+*.pkl
+*.zip
+*.err
+*.out
 
 # C extensions
 *.so
