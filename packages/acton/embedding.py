@@ -177,7 +177,7 @@ def main():
         try:
             ldd = official_loader.load_keypoint3d(reference_name)
 
-            # FIXME: Temp. debug hack -- truncate to T=5000
+            # TODO: Temp. debug hack -- truncate to T=5000
             ldd = ldd[:5000, :, :]
 
             # print(reference_name, ldd.shape[0])

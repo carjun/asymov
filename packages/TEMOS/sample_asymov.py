@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
+import pdb
 
 import torch
 import pytorch_lightning as pl
@@ -69,6 +70,7 @@ def sample(newcfg: DictConfig) -> None:
     # Load previous config
     prevcfg = OmegaConf.load(output_dir / ".hydra/config.yaml")
     # Overload it
+    # pdb.set_trace()
     cfg = OmegaConf.merge(prevcfg, newcfg)
     onesample = cfg_mean_nsamples_resolution(cfg)
 
@@ -153,10 +155,10 @@ def sample(newcfg: DictConfig) -> None:
                 #     # no upsampling here to keep memory
                 #     # vertices = upsample(vertices, cfg.data.framerate, 100)
                 # else:
-                probs = model(batch)[0].permute(1, 0) #[Frames, Classes]
+                probs = model(batch)[0].permute(1, 0).numpy() #[Frames, Classes]
                 # upscaling to compare with other methods
-                probs = upsample(probs.numpy(), cfg.data.framerate, 100)
-                assert probs.shape[1] == cfg.data.vocab_size #(duration, cfg.data.vocab_size)
+                # probs = upsample(probs, cfg.data.framerate, 100)
+                assert probs.shape == (duration, cfg.data.vocab_size)
                 
                 clusters = np.argmax(probs, axis=1)
                 assert np.max(clusters) < cfg.data.vocab_size
@@ -186,8 +188,8 @@ def sample(newcfg: DictConfig) -> None:
                         running_idx += 1
                         current_len = 1
                     prev = cc
-
     contiguous_frame2cluster_mapping = pd.DataFrame.from_dict(contiguous_frame2cluster_mapping)
+    contiguous_frame2cluster_mapping = contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping["idx"]>0]
     contiguous_frame2cluster_mapping.to_pickle(path/"contiguous_frame2cluster_mapping.pkl")
 
     logger.info("All the sampling are done")
