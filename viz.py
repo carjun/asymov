@@ -12,6 +12,9 @@ from os.path import join as ospj
 import pdb
 from tqdm import tqdm
 import pickle
+from multiprocessing import cpu_count, Pool, Process
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 import random
 import numpy as np
@@ -26,6 +29,7 @@ import wandb
 import uuid
 import cv2
 from matplotlib import pyplot as plt
+plt.rcParams.update({'figure.max_open_warning': 0})
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.ndimage import uniform_filter1d, spline_filter1d
 
@@ -449,6 +453,9 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     # az = calc_angle_from_x(seq[0]-np.array([xroot, yroot, zroot]))
     # az = calc_angle_from_y(seq[0]-np.array([xroot, yroot, zroot]))
 
+    # Create folder for frames
+    os.makedirs(osp.join(folder_p, 'frames'))
+
     # Viz. skeleton for each frame
     # for t in tqdm(range(seq.shape[0]), desc='frames', position=1, leave=False):
     for t in range(seq.shape[0]):
@@ -535,39 +542,100 @@ def write_vid_from_imgs(folder_p, fps):
         print('*******ValueError(Error {0} executing command: {1}*********'.format(retcode, ' '.join(cmd)))
     shutil.rmtree(osp.join(folder_p, 'frames'))
 
+#TODO take fps dynamically
+# def joint2vid(name_keypoint, sk_type, frames_dir, fps):
+#     name, keypoint = name_keypoint
+#     folder_p = ospj(frames_dir, name)
+#     viz_skeleton(keypoint, folder_p, sk_type, 1.2)
+#     write_vid_from_imgs(folder_p, fps)
+#     return None
 
-def viz_seq(seq, folder_p, sk_type, debug=False):
+def viz_skeleton_mp(seq_folder_p, sk_type, radius):
+    return viz_skeleton(*seq_folder_p, sk_type, radius)
+
+def viz_seq(seq_names, keypoints, frames_dir, sk_type, force=False):
     '''1. Dumps sequence of skeleton images for the given sequence of joints.
     2. Collates the sequence of images into an mp4 video.
 
     Args:
-        seq (np.array): Array of joint positions.
-        folder_p (str): Path to root folder that will contain frames folder.
+        seq_names (List(str)): name of sequences to visualize 
+        keypoints (np.array([T, num_joints, 3])): Joint positions for each frame
+        frames_dir (str): Path to dir where visualizations will be dumped.
         sk_type (str): {'smpl', 'nturgbd','kitml','coco17'}
+        force (Bool): If True visualizes all sequences even if already exists in frames_dir. 
+                    Defaults to False, only visualizes incomplete or un-visualized sequences.  
 
     Return:
         None. Path of mp4 video: folder_p/video.mp4
     '''
     # pdb.set_trace()
+    if sk_type == 'kitml':
+        fps = 100.0 
+    elif sk_type == 'coco17':
+        fps = 60.0 
+    else:
+        fps = 30.0
 
     # Delete folder if exists
-    if osp.exists(folder_p):
-        if osp.exists(ospj(folder_p, 'video.mp4')):
-            print(f'Video for {folder_p[-5:]} already exists')
-            return None
-        else:
-            print('Deleting existing folder ', folder_p)
-            shutil.rmtree(folder_p)
-
-    # Create folder for frames
-    os.makedirs(osp.join(folder_p, 'frames'))
-
-    # Dump frames into folder. Args: (data, radius, frames path)
-    viz_skeleton(seq, folder_p=folder_p, sk_type=sk_type, radius=1.2, debug=debug)
-    if sk_type == 'kitml' or sk_type == 'coco17':
-        write_vid_from_imgs(folder_p, 60.0)
+    if force:
+        _ = [shutil.rmtree(ospj(frames_dir, name)) for name in seq_names if osp.exists(ospj(frames_dir, name))]
+        viz_names = seq_names
     else:
-        write_vid_from_imgs(folder_p, 30.0)
+        viz_names=[]
+        for name in seq_names:
+            folder_p = ospj(frames_dir, name)
+            if osp.exists(folder_p):
+                if osp.exists(ospj(folder_p, 'video.mp4')):
+                    # print(f'Video for {folder_p[-5:]} already exists')
+                    continue
+                else:
+                    # print('Deleting existing folder ', folder_p)
+                    shutil.rmtree(folder_p)
+            viz_names.append(name)
+    # print(f'Sequences to visualize: {len(viz_names)}')
+    
+    # joint2img_procs = []
+    # img2vid_procs = []
+    # with tqdm(zip(viz_names, keypoints), desc='joint2img', total=len(viz_names), position=0) as pbar:
+    #     for name, keypoint in pbar:
+    #         pbar.set_description(desc=f'joint2img {name}')
+    #         folder_p = ospj(frames_dir, name)
+            
+    #         viz_skeleton(keypoint, folder_p, sk_type, 1.2)
+    #         # joint2img_proc = Process(target=viz_skeleton, args=(keypoint, folder_p, sk_type, 1.2))
+    #         # joint2img_proc.start()
+    #         # joint2img_procs.append(joint2img_proc)
+    
+    # with tqdm(enumerate(viz_names), desc='img2vid', total=len(viz_names), position=0) as pbar:
+    #     for i, name in pbar:
+    #         pbar.set_description(desc=f'img2vid {name}')
+    #         folder_p = ospj(frames_dir, name)
+    #         write_vid_from_imgs(folder_p, fps)
+    #         # joint2img_procs[i].join()
+    #         # img2vid_proc = Process(target=write_vid_from_imgs, args=(folder_p, fps))
+    #         # img2vid_proc.start()
+    #         # img2vid_procs.append(img2vid_proc)
+    # _ = [p.join() for p in tqdm(img2vid_procs, 'generating vids')]
+    
+    # #option 1: new process for each seq_name (with Pool, concurrent operations)
+    # n = len(viz_names)
+
+    # with Pool(15) as p:
+    #     iter = zip(viz_names, keypoints)
+    #     with tqdm(total=n) as pbar:
+    #         _ = [pbar.update() for _ in p.imap_unordered(partial(joint2vid, sk_type=sk_type, frames_dir=frames_dir, fps=fps), iter)]
+    
+    #option 2: new process for each seq_name for each operation (with Pool, sequential operations)
+    n = len(viz_names)
+    folders_p = [ospj(frames_dir, name) for name in viz_names]
+    with Pool(cpu_count()) as p:
+        chunk_size = 5
+        iter = zip(keypoints, folders_p)
+        with tqdm(desc='joint2img', total=n) as pbar:
+            _ = [pbar.update() for _ in p.imap_unordered(partial(viz_skeleton_mp, sk_type=sk_type, radius=1.2), iter, chunk_size)]
+
+        with tqdm(desc='img2vid', total=n) as pbar:
+            _ = [pbar.update() for _ in p.imap_unordered(partial(write_vid_from_imgs, fps=fps), folders_p, chunk_size)]
 
     return None
 
@@ -733,12 +801,14 @@ def cluster2vid(clusters_idx, sk_type, proxy_center_info_path, data_dir, data_na
     #get keypoints to visualize
     #TODO : change the path to official loader
     d = KITDataset(data_dir, data_name)
-    for cluster_idx, center_frame_idx, seq_name in tqdm(zip(clusters_idx, center_frames_idx, seq_names), desc='clusters'):
+    procs = []
+    for cluster_idx, center_frame_idx, seq_name in tqdm(zip(clusters_idx, center_frames_idx, seq_names), desc='clusters', total = len(seq_names)):
         seq_complete = d.load_keypoint3d(seq_name)
         seq = seq_complete[max(0, center_frame_idx-support_frames_count):min(seq_complete.shape[0], center_frame_idx+support_frames_count+1)]
         
         #visualize the required fragment of complete sequence
-        viz_seq(seq, ospj(frames_dir, str(cluster_idx)), sk_type, debug=False)
+        procs.append(viz_seq(seq, ospj(frames_dir, str(cluster_idx)), sk_type, debug=False))
+    _ = [p.join() for p in tqdm([p for p in procs if p is not None], 'generating vids')]
 
 #-------------------------------------------------------------------------------
 
@@ -760,53 +830,172 @@ def cluster_seq2vid(cluster_seq, cluster2keypoint_mapping_path, frames_dir, sk_t
 
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
     skeleton_keypoints = np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]) 
-    viz_seq(skeleton_keypoints, frames_dir, sk_type, debug=False)
+    viz_seq(skeleton_keypoints, frames_dir, sk_type, debug=False).join()
 
 #-------------------------------------------------------------------------------
 
 #error_metric-------------------------------------------------------------------
-def mpjpe3d(name, pred_keypoints, target_keypoints):
+def mpjpe3d(seq_names, pred_keypoints, target_keypoints):
     '''
-    pred_keypoints [T, num_joints, 3] : 3d keypoints of predicted skeleton joints
-    target_keypoints [T, num_joints, 3] : 3d keypoints of ground-truth skeleton joints
+    seq_names List(str): names of sequences to calculate mpjpe for
+    pred_keypoints List([T, num_joints, 3]) : 3d keypoints of predicted skeleton joints for each sequence
+    target_keypoints List([T, num_joints, 3]) : 3d keypoints of ground-truth skeleton joints for each sequence
     '''
     # pdb.set_trace()
-    if pred_keypoints.shape[0]!=target_keypoints.shape[0]:
-        # print(f'Reconstruction of {name} had {pred_keypoints.shape[0]-target_keypoints.shape[0]} more frames')
-        assert pred_keypoints.shape[0]!=0
-        mn = min(pred_keypoints.shape[0], target_keypoints.shape[0])
-        target_keypoints = target_keypoints[:mn]
-        pred_keypoints = pred_keypoints[:mn]
-    return np.mean(np.sqrt(np.sum((target_keypoints - pred_keypoints) ** 2, axis=2)))
+    mpjpe_per_sequence=[]
+    with tqdm(zip(seq_names, pred_keypoints, target_keypoints), desc='calculating mpjpe', total=len(seq_names), position=0, leave=False) as pbar:
+        for name, pred_keypoint, target_keypoint in pbar:
+            pbar.set_description(desc=f'calculating mpjpe for {name}')
+            
+            if pred_keypoint.shape[0]!=target_keypoint.shape[0]:
+                # if abs(pred_keypoint.shape[0]-target_keypoint.shape[0]) > 100:
+                #     print(f'Reconstruction of {name} had {pred_keypoint.shape[0]-target_keypoint.shape[0]} more frames')
+                assert pred_keypoint.shape[0]!=0
+        
+            mn = min(pred_keypoint.shape[0], target_keypoint.shape[0])
+            mpjpe_per_sequence.append(np.mean(np.sqrt(np.sum((target_keypoint[:mn] - pred_keypoint[:mn]) ** 2, axis=2))))
+    
+    return mpjpe_per_sequence
+#-------------------------------------------------------------------------------
+
+#upsampling---------------------------------------------------------------------
+def upsample(motion, ratio):
+    assert ratio >= 1.0
+    motion = np.array(motion)
+
+    if ratio == 1.0:
+        return motion
+    step = int(ratio)
+    assert step >= 1
+
+    # Alpha blending => interpolation
+    alpha = np.linspace(0, 1, step+1)
+    last = np.einsum("l,...->l...", 1-alpha, motion[:-1])
+    new = np.einsum("l,...->l...", alpha, motion[1:])
+
+    chuncks = (last + new)[:-1]
+    output = np.concatenate(chuncks.swapaxes(1, 0))
+    # Don't forget the last one
+    output = np.concatenate((output, motion[[-1]]))
+    return output
+
+def downsample(motion, ratio):
+    assert ratio <= 1.0
+    motion = np.array(motion)
+    num_frames = len(motion)
+    if ratio == 1.0:
+        return motion
+
+    step = int(1 / ratio)
+    assert step >= 1
+    subsampled_frames = np.arange(0, num_frames, step, dtype='int32')
+    # Don't forget the last one
+    output = motion[subsampled_frames]
+    return output
 #-------------------------------------------------------------------------------
 
 #reconstruction methods-----------------------------------------------------------------
 #TODO: reconstruct for multiple filters at once
-#TODO: naive_reconstruction_no_rep implementation
 
-def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, per_seq_score=False, filter=None, frames_dir=None, recons_names=[]):
+def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_upsample_ratio=1.0, gt_downsample_ratio=1.0, frames_dir=None, viz_names=[], force=False, **kwargs):
+    '''
+    Args:
+        recons_type (str) : reconstruction technique to be used
+        filters (List[str]) : smoothing filters to apply on reconstructions. Use string 'none' for no filter.
+        seq_names : name of video sequences to reconstruct
+        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
+        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}        
+        recons_upsample_ratio : Float(desired_fps/recons_fps), should be >=1.0. Default = 1.0. 
+        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 1.0. 
+        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
+        viz_names : name of video sequences to visualize
+        force : If True, visualize all viz_names overwriting existing ones. Defaults to False, visualizing only those whose .mp4 videos do not already exist.
+        **kwargs: Must contain
+            if recons_type == 'naive_no_rep' or 'naive':
+                contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
+                cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
+            if recons_type == 'very_naive': 
+                cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
+                frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster. 
+                frame2cluster_mapping_dir: Path of directory containing .npy files for TEMOS-asymov variant.
+    '''
+
+    assert recons_upsample_ratio>=1.0, "recons_upsample_ratio cannot be less than 1"   
+    assert gt_downsample_ratio<=1.0, "gt_downsample_ratio cannot be greater than 1"   
+
+    print('----------------------------------------------------')
+    # print(recons_type+'_reconstruction')
+    if recons_type == 'naive_no_rep' or recons_type  == 'naive':
+        contiguous_frame2cluster_mapping_path = kwargs['contiguous_frame2cluster_mapping_path']
+        cluster2frame_mapping_path = kwargs['cluster2frame_mapping_path']
+
+        output = eval(recons_type+'_reconstruction')(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path)
+        if recons_type == 'naive_no_rep':
+            recons, gt, faulty = output
+        else:
+            recons, gt = output
+    elif recons_type == 'very_naive':
+        cluster2keypoint_mapping_path = kwargs['cluster2keypoint_mapping_path']
+        if 'frame2cluster_mapping_path' in kwargs.keys():
+            frame2cluster_mapping_path = kwargs['frame2cluster_mapping_path']
+        else:
+            frame2cluster_mapping_path = None
+        if 'frame2cluster_mapping_dir' in kwargs.keys():
+            frame2cluster_mapping_dir = kwargs['frame2cluster_mapping_dir']
+        else:
+            frame2cluster_mapping_dir = None
+        
+        recons, gt = eval(recons_type+'_reconstruction')(seq_names, data_path, cluster2keypoint_mapping_path, frame2cluster_mapping_path, frame2cluster_mapping_dir)
+    
+    # recons and gt in desired fps
+    recons = [upsample(keypoint, recons_upsample_ratio) for keypoint in recons]
+    gt = [downsample(keypoint, gt_downsample_ratio) for keypoint in gt]
+    
+    print('----------------------------------------------------')
+    # print("MPJPE")
+    for filter in filters:
+        if filter == 'none':
+            pass
+        elif filter == 'spline':
+            recons = [spline_filter1d(keypoint, axis=0) for keypoint in recons]
+        elif filter == 'uniform':
+            recons = [uniform_filter1d(keypoint, size=100, axis=0) for keypoint in recons]
+        else :
+            raise NameError(f'No such filter {filter}')
+        print(f"Using {filter} filter")
+
+        mpjpe_per_sequence=mpjpe3d(seq_names, recons, gt)
+        print(f'{recons_type}_{filter} mpjpe: ', np.mean(mpjpe_per_sequence))
+
+        if frames_dir is not None:
+            if filter == 'none':
+                frames_dir_temp = frames_dir / f"{recons_type}"
+            else:
+                frames_dir_temp = frames_dir / f"{recons_type}_{filter}"
+            viz_seq(viz_names, recons, frames_dir_temp, sk_type, force)
+        print('----------------------------------------------------')
+    print('----------------------------------------------------')
+    # if per_seq_score:
+    #     return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+    # else:
+    #     return np.mean(mpjpe_per_sequence)
+    return None
+
+
+#TODO: naive_no_rep_reconstruction implementation
+def naive_no_rep_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
         contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
-        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}        
-        per_seq_score : If True, then also returns per sequence mpjpe, default to False
-        filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
-        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
-        recons_names : name of video sequences to reconstruct
 
     Retruns:
         The mean (and optionally per sequence) mpjpe between reconstructed and original sequences.
         If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
     '''
 
-    if frames_dir is not None:
-        if filter is None:
-            frames_dir = frames_dir / f"naive_no_rep"
-        else:
-            frames_dir = frames_dir / f"naive_no_rep_{filter}"
     ground_truth_keypoints = []
     reconstructed_keypoints = []
     faulty = []
@@ -816,11 +1005,13 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
     contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
-    for name in seq_names:
-        ground_truth_keypoints.append(ground_truth_data[name][:5000, :, :])
-        reconstructed_keypoint = []
-        
-        try:
+    with tqdm(seq_names, desc='naive_no_rep reconstruction') as pbar:
+        for name in pbar:
+            pbar.set_description(f'naive_no_rep reconstruction - {name}')
+            ground_truth_keypoints.append(ground_truth_data[name][:5000, :, :])
+            reconstructed_keypoint = []
+            
+            # try:
             contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
             for i in range(contiguous_cluster_seqs.shape[0]):
                 #get contiguous cluster info
@@ -830,73 +1021,42 @@ def naive_reconstruction_no_rep(seq_names, data_path, contiguous_frame2cluster_m
                 center_frame = cluster2frame.iloc[cluster]
                 center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
                 center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
-                assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
+                assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx]), "Incorrect center frame sequence"
 
                 center_frame_complete_seq_len = center_frame_complete_seq.shape[0]
-                if length>center_frame_complete_seq_len:
-                    raise Exception(f'seq name : {name}\ncontiguous_cluster_seq : {i}\n')
+                # if length>center_frame_complete_seq_len:
+                #     raise Exception(f'seq name : {name}\ncontiguous_cluster_seq : {i}\n')
                 lb = max(0,center_frame_idx - (length-1)//2) #check left boundary
                 lb = min(center_frame_complete_seq_len-length, lb) #check right boundary
-                assert lb>=0
-                assert lb<center_frame_complete_seq_len
+                assert lb>=0, f"{name} - Negative left boundary"
+                assert lb<center_frame_complete_seq_len, f"{name} - Exceeding right boundary"
                 
                 #reconstruct
-                reconstructed_keypoint.append(center_frame_complete_seq[lb:lb+length])
-                assert reconstructed_keypoint[-1].shape[0]==length
+                reconstructed_keypoint.append(center_frame_complete_seq[lb:lb+min(length, center_frame_complete_seq_len)])
+                assert reconstructed_keypoint[-1].shape[0]==length, f"{name} - {reconstructed_keypoint[-1].shape[0]-length} extra frames i reconstruction"
 
-            if filter is None:
-                reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
-            elif filter == 'spline':
-                reconstructed_keypoints.append(spline_filter1d(np.concatenate(reconstructed_keypoint, axis=0), axis=0))
-            elif filter == 'uniform':
-                reconstructed_keypoints.append(uniform_filter1d(np.concatenate(reconstructed_keypoint, axis=0), size=60, axis=0))
-            else :
-                raise NameError(f'No such filter {filter}')
-            assert reconstructed_keypoints[-1].shape[0]==ground_truth_keypoints[-1].shape[0]
-        except :
-            ground_truth_keypoints.pop()
-            faulty.append(name)
-            # print(f'{name} cannot be reconstructed naively (no rep)')
-    # pdb.set_trace()
-    mpjpe_per_sequence=[]
-    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively (no reps) reconstructing sequences', position=0)
-    for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
-        pbar.set_description(desc=f'naively (no reps) reconstructing {name}')
-        mpjpe_per_sequence.append(mpjpe3d(name, reconstructed_keypoint, ground_truth_keypoint))
-        
-        if frames_dir:
-            if name in recons_names:
-                viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
-    pbar.close()
+            reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+            # assert reconstructed_keypoints[-1].shape[0]==ground_truth_keypoints[-1].shape[0]
+            # except :
+            #     ground_truth_keypoints.pop()
+            #     faulty.append(name)
+            #     # print(f'{name} cannot be reconstructed naively (no rep)')
 
-    if per_seq_score:
-        return np.mean(mpjpe_per_sequence), mpjpe_per_sequence, faulty
-    else:
-        return np.mean(mpjpe_per_sequence), faulty
+    return reconstructed_keypoints, ground_truth_keypoints, faulty
 
-def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, per_seq_score=False, filter=None, frames_dir=None, recons_names=[]):
+def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path):
     '''
     Args:
-        seq_names : name of video sequences to calculate mpjpe for
+        seq_names : name of video sequences to reconstruct
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
         contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
-        cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
-        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
-        per_seq_score : If True, then also returns per sequence mpjpe, default to False
-        filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
-        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
-        recons_names : name of video sequences to reconstruct
+        cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
 
     Retruns:
         The mean and per sequence mpjpe between reconstructed and original sequences.
         If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
     '''
 
-    if frames_dir is not None:
-        if filter is None:
-            frames_dir = frames_dir / f"naive"
-        else:
-            frames_dir = frames_dir / f"naive_{filter}"
     ground_truth_keypoints = []
     reconstructed_keypoints = []
 
@@ -905,74 +1065,49 @@ def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_
     contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
-    for name in seq_names:
-        ground_truth_keypoints.append(ground_truth_data[name][:5000, :, :])
-        reconstructed_keypoint = []
-        
-        contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
-        for i in range(contiguous_cluster_seqs.shape[0]):
-            #get contiguous cluster info
-            contiguous_cluster = contiguous_cluster_seqs.iloc[i]
-            cluster, length = contiguous_cluster[['cluster', 'length']]
-            #get center frame info 
-            center_frame = cluster2frame.iloc[cluster]
-            center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
-            center_frame_complete_seq =ground_truth_data[center_frame_seq_name]
-            assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
-
-            #calculate left right and center frames
-            side_length = (length-1)//2
-            l_frames = min(side_length, center_frame_idx)
-            r_frames = min(side_length, center_frame_complete_seq.shape[0]-1 - center_frame_idx)
-            center_reps = length - l_frames - r_frames
+    with tqdm(seq_names, desc='naive reconstruction') as pbar:
+        for name in pbar:
+            pbar.set_description(f'naive reconstruction - {name}')
+            ground_truth_keypoints.append(ground_truth_data[name][:5000, :, :])
+            reconstructed_keypoint = []
             
-            #reconstruct
-            reconstructed_keypoint.append(np.concatenate((
-                center_frame_complete_seq[center_frame_idx-l_frames:center_frame_idx], #left supporting frames
-                np.repeat(np.expand_dims(center_frame_keypoint, axis=0), center_reps, axis=0), #center frames
-                center_frame_complete_seq[center_frame_idx+1:center_frame_idx+r_frames+1]), # right supporting frames
-                axis=0
-            ))
+            contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
+            for i in range(contiguous_cluster_seqs.shape[0]):
+                #get contiguous cluster info
+                contiguous_cluster = contiguous_cluster_seqs.iloc[i]
+                cluster, length = contiguous_cluster[['cluster', 'length']]
+                #get center frame info 
+                center_frame = cluster2frame.iloc[cluster]
+                center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
+                center_frame_complete_seq =ground_truth_data[center_frame_seq_name]
+                assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
 
-        if filter is None:
+                #calculate left right and center frames
+                side_length = (length-1)//2
+                l_frames = min(side_length, center_frame_idx)
+                r_frames = min(side_length, center_frame_complete_seq.shape[0]-1 - center_frame_idx)
+                center_reps = length - l_frames - r_frames
+                
+                #reconstruct
+                reconstructed_keypoint.append(np.concatenate((
+                    center_frame_complete_seq[center_frame_idx-l_frames:center_frame_idx], #left supporting frames
+                    np.repeat(np.expand_dims(center_frame_keypoint, axis=0), center_reps, axis=0), #center frames
+                    center_frame_complete_seq[center_frame_idx+1:center_frame_idx+r_frames+1]), # right supporting frames
+                    axis=0
+                ))
+
             reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
-        elif filter == 'spline':
-            reconstructed_keypoints.append(spline_filter1d(np.concatenate(reconstructed_keypoint, axis=0), axis=0))
-        elif filter == 'uniform':
-            reconstructed_keypoints.append(uniform_filter1d(np.concatenate(reconstructed_keypoint, axis=0), size=60, axis=0))
-        else :
-            raise NameError(f'No such filter {filter}')
-        
-    
-    mpjpe_per_sequence=[]
-    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='naively reconstructing sequences', position=0)
-    for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
-        pbar.set_description(desc=f'naively reconstructing {name}')
-        mpjpe_per_sequence.append(mpjpe3d(name, reconstructed_keypoint, ground_truth_keypoint))
-        
-        if frames_dir:
-            if name in recons_names:
-                viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
-    pbar.close()
-    
-    if per_seq_score:
-        return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
-    else:
-        return np.mean(mpjpe_per_sequence)
 
-def very_naive_reconstruction(seq_names, data_path, cluster2keypoint_mapping_path, sk_type, per_seq_score=False, filter=None, frames_dir=None, frame2cluster_mapping_path=None, frame2cluster_mapping_dir=None, recons_names=[]):
+    return reconstructed_keypoints, ground_truth_keypoints
+
+def very_naive_reconstruction(seq_names, data_path, cluster2keypoint_mapping_path, frame2cluster_mapping_path=None, frame2cluster_mapping_dir=None):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
         cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
-        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
-        per_seq_score : If True, then also returns per sequence mpjpe, default to False
-        filter : {'spline', 'uniform'} Smoothening filter to apply on reconstructed keypoints. Defaults to None.
-        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
         frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster. 
         frame2cluster_mapping_dir: Path of directory containing .npy files for TEMOS-asymov variant.
-        recons_names : name of video sequences to reconstruct
 
     Retruns:
         The mean and per sequence mpjpe between reconstructed and original sequences.
@@ -980,12 +1115,6 @@ def very_naive_reconstruction(seq_names, data_path, cluster2keypoint_mapping_pat
     '''
     # for name in seq_names:
     # pdb.set_trace()
-
-    if frames_dir is not None:
-        if filter is None:
-            frames_dir = frames_dir / f"very_naive"
-        else:
-            frames_dir = frames_dir / f"very_naive_{filter}"
 
     with open(data_path, 'rb') as handle:
         ground_truth_data = pickle.load(handle)
@@ -1001,60 +1130,41 @@ def very_naive_reconstruction(seq_names, data_path, cluster2keypoint_mapping_pat
         ValueError('frame2cluster not given')
     
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
-    
-    if filter is None:
-        reconstructed_keypoints = [np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]) for cluster_seq in cluster_seqs]
-    elif filter == 'spline':
-        reconstructed_keypoints = [spline_filter1d(np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]), axis=0) for cluster_seq in cluster_seqs]
-    elif filter == 'uniform':
-        reconstructed_keypoints = [uniform_filter1d(np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]), size=60, axis=0) for cluster_seq in cluster_seqs]
-    else :
-        raise NameError(f'No such filter {filter}')
+    reconstructed_keypoints = []
+    with tqdm(zip(seq_names, cluster_seqs), desc='very_naive reconstruction', total=len(seq_names)) as pbar:
+        for name, cluster_seq in pbar:
+            pbar.set_description(f'very_naive reconstruction - {name}')
+            reconstructed_keypoints.append(np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]))
 
-    mpjpe_per_sequence=[]
-    pbar = tqdm(zip(seq_names, reconstructed_keypoints, ground_truth_keypoints), desc='very naively reconstructing sequences', position=0)
-    for name, reconstructed_keypoint, ground_truth_keypoint in pbar:
-        pbar.set_description(desc=f'very naively reconstructing {name}')
-        
-        # if reconstructed_keypoint.shape[0]!=reconstructed_keypoint.shape[0]:
-        #     raise NameError(name)
-        # print(name, reconstructed_keypoint.shape, reconstructed_keypoint.shape)
-        mpjpe_per_sequence.append(mpjpe3d(name, reconstructed_keypoint, ground_truth_keypoint))
-        
-        if frames_dir:
-            if name in recons_names:
-                viz_seq(reconstructed_keypoint, ospj(frames_dir, name), sk_type, debug=False)
-    pbar.close()
+    return reconstructed_keypoints, ground_truth_keypoints
 
-    if per_seq_score:
-        return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
-    else:
-        return np.mean(mpjpe_per_sequence)
-
-def ground_truth_construction(seq_names, data_path, sk_type, frames_dir):
+def ground_truth_construction(seq_names, data_path, sk_type, frames_dir, force):
     '''
     Constructs original video from ground truth sequences, which are used as reference for mpjpe calculation.
 
     Args:
-        seq_names : name of video sequences to reconstruct
+        seq_names : name of video sequences to construct and visualize ground truth
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
         frames_dir : Path to root folder that will contain frames folder for visualization.
-
+        force (Bool): If True visualizes all sequences even if already exists in frames_dir. 
+                    Defaults to False, only visualizes incomplete or un-visualized sequences. 
     Retruns:
         None.
         The reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
     '''
+    assert frames_dir is not None
+
     with open(data_path, 'rb') as handle:
         ground_truth_data = pickle.load(handle)
 
-    ground_truth_keypoints = [ground_truth_data[name][:5000, :, :] for name in seq_names]
+    print('----------------------------------------------------')
+    #TODO: remove 5000 limit
+    ground_truth_keypoints = [ground_truth_data[name][:5000, :, :] for name in tqdm(seq_names, 'Ground Truth construction')]
+    print('----------------------------------------------------')
 
-    pbar = tqdm(zip(seq_names, ground_truth_keypoints), desc='constructing ground truth sequences', position=0)
-    for name, ground_truth_keypoint in pbar:
-        pbar.set_description(desc=f'constructing {name}')
-        viz_seq(ground_truth_keypoint, ospj(frames_dir, name), sk_type, debug=False)
-    pbar.close()
+    viz_seq(seq_names, ground_truth_keypoints, frames_dir, sk_type, force)
+    print('----------------------------------------------------')
 
 #-------------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -1109,8 +1219,8 @@ if __name__ == '__main__':
     naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
     print('naive mpjpe : ', naive_mpjpe_mean)
 
-    # naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive_no_rep')
-    naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
+    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive_no_rep')
+    naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
     print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
 
 
@@ -1123,8 +1233,8 @@ if __name__ == '__main__':
     naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
     print('uniform filtered naive mpjpe : ', naive_mpjpe_mean)
 
-    # naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_no_rep_ufilter')
-    naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
+    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_no_rep_ufilter')
+    naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
     print('uniform filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
 
     #spline filter
@@ -1136,7 +1246,7 @@ if __name__ == '__main__':
     naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
     print('spline filtered naive mpjpe : ', naive_mpjpe_mean)
 
-    # naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_no_rep_sfilter')
-    naive_no_rep_mpjpe_mean, _ = naive_reconstruction_no_rep(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
+    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_no_rep_sfilter')
+    naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
     print('spline filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
 

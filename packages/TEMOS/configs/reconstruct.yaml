@@ -6,12 +6,28 @@ hydra:
 logger_level: INFO
 folder: ???
 
-reconstruct: False
-reconstruct_ground: False
-
 defaults:
   - /path@path
 
-data_dir: ${path.datasets}/kit
+datapath: ${path.datasets}
+splitpath: ${path.datasets}/kit-splits
+split: recons
 vocab_size: 1000
-sk_type: 'kitml'
+sk_type: kitml
+
+gt: xyz_data.pkl
+contiguous_frame2cluster_mapping: contiguous_frame2cluster_mapping.pkl
+cluster2keypoint_mapping: proxy_centers_tr_${vocab_size}.pkl
+cluster2frame_mapping: proxy_centers_tr_complete_${vocab_size}.pkl
+
+fps: 25.0 #desired fps for mpjpe calculation and visualization
+recons_fps: 12.5 #same as fps of predictions
+gt_fps: 100.0 #fps of KIT
+
+visualize: True
+force: False
+viz_dir: reconstructions # folder/viz_dir
+
+visualize_gt: True
+force_gt: False
+viz_gt_dir: constructions # datapath/viz_gt_dir
