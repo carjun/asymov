@@ -8,7 +8,8 @@ import pdb
 # from pprint import pprint
 
 logger = logging.getLogger(__name__)
-os.environ['WANDB_API_KEY'] = '57f6d5aab6f1a78b78fb181dcf32dfeca0e65f79'
+# Darsh's Wandb api key: '57f6d5aab6f1a78b78fb181dcf32dfeca0e65f79'
+os.environ['WANDB_API_KEY'] = 'bac3a003428df951a8e0b9e3878002a3227bbf0c'
 
 @hydra.main(config_path="configs", config_name="train_asymov")
 def _train(cfg: DictConfig):
