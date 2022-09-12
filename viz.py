@@ -540,7 +540,7 @@ def write_vid_from_imgs(folder_p, fps):
     retcode = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
     if not 0 == retcode:
         print('*******ValueError(Error {0} executing command: {1}*********'.format(retcode, ' '.join(cmd)))
-    shutil.rmtree(osp.join(folder_p, 'frames'))
+    # shutil.rmtree(osp.join(folder_p, 'frames'))
 
 #TODO take fps dynamically
 # def joint2vid(name_keypoint, sk_type, frames_dir, fps):
@@ -553,7 +553,7 @@ def write_vid_from_imgs(folder_p, fps):
 def viz_skeleton_mp(seq_folder_p, sk_type, radius):
     return viz_skeleton(*seq_folder_p, sk_type, radius)
 
-def viz_seq(seq_names, keypoints, frames_dir, sk_type, force=False):
+def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     '''1. Dumps sequence of skeleton images for the given sequence of joints.
     2. Collates the sequence of images into an mp4 video.
 
@@ -562,6 +562,7 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, force=False):
         keypoints (np.array([T, num_joints, 3])): Joint positions for each frame
         frames_dir (str): Path to dir where visualizations will be dumped.
         sk_type (str): {'smpl', 'nturgbd','kitml','coco17'}
+        fps (float): Output frame rate.
         force (Bool): If True visualizes all sequences even if already exists in frames_dir. 
                     Defaults to False, only visualizes incomplete or un-visualized sequences.  
 
@@ -569,13 +570,7 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, force=False):
         None. Path of mp4 video: folder_p/video.mp4
     '''
     # pdb.set_trace()
-    if sk_type == 'kitml':
-        fps = 100.0 
-    elif sk_type == 'coco17':
-        fps = 60.0 
-    else:
-        fps = 30.0
-
+    
     # Delete folder if exists
     if force:
         _ = [shutil.rmtree(ospj(frames_dir, name)) for name in seq_names if osp.exists(ospj(frames_dir, name))]
@@ -594,6 +589,7 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, force=False):
             viz_names.append(name)
     # print(f'Sequences to visualize: {len(viz_names)}')
     
+    #TODO: take radius for visualizations as a hydra argument
     # joint2img_procs = []
     # img2vid_procs = []
     # with tqdm(zip(viz_names, keypoints), desc='joint2img', total=len(viz_names), position=0) as pbar:
@@ -628,8 +624,8 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, force=False):
     #option 2: new process for each seq_name for each operation (with Pool, sequential operations)
     n = len(viz_names)
     folders_p = [ospj(frames_dir, name) for name in viz_names]
-    with Pool(cpu_count()) as p:
-        chunk_size = 5
+    with Pool(cpu_count()*2) as p:
+        chunk_size = 2
         iter = zip(keypoints, folders_p)
         with tqdm(desc='joint2img', total=n) as pbar:
             _ = [pbar.update() for _ in p.imap_unordered(partial(viz_skeleton_mp, sk_type=sk_type, radius=1.2), iter, chunk_size)]
@@ -897,7 +893,7 @@ def downsample(motion, ratio):
 #reconstruction methods-----------------------------------------------------------------
 #TODO: reconstruct for multiple filters at once
 
-def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_upsample_ratio=1.0, gt_downsample_ratio=1.0, frames_dir=None, viz_names=[], force=False, **kwargs):
+def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_upsample_ratio=1.0, gt_downsample_ratio=1.0, fps=None, frames_dir=None, viz_names=[], force=False, **kwargs):
     '''
     Args:
         recons_type (str) : reconstruction technique to be used
@@ -907,6 +903,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}        
         recons_upsample_ratio : Float(desired_fps/recons_fps), should be >=1.0. Default = 1.0. 
         gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 1.0. 
+        fps (float): Output frame rate.
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
         viz_names : name of video sequences to visualize
         force : If True, visualize all viz_names overwriting existing ones. Defaults to False, visualizing only those whose .mp4 videos do not already exist.
@@ -922,7 +919,14 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
 
     assert recons_upsample_ratio>=1.0, "recons_upsample_ratio cannot be less than 1"   
     assert gt_downsample_ratio<=1.0, "gt_downsample_ratio cannot be greater than 1"   
-
+    if fps is None:
+        if sk_type == 'kitml':
+            fps = 25.0 
+        elif sk_type == 'coco17':
+            fps = 60.0 
+        else:
+            fps = 30.0
+    
     print('----------------------------------------------------')
     # print(recons_type+'_reconstruction')
     if recons_type == 'naive_no_rep' or recons_type  == 'naive':
@@ -959,7 +963,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
         elif filter == 'spline':
             recons = [spline_filter1d(keypoint, axis=0) for keypoint in recons]
         elif filter == 'uniform':
-            recons = [uniform_filter1d(keypoint, size=100, axis=0) for keypoint in recons]
+            recons = [uniform_filter1d(keypoint, size=int(fps/4), axis=0) for keypoint in recons]
         else :
             raise NameError(f'No such filter {filter}')
         print(f"Using {filter} filter")
@@ -972,7 +976,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
                 frames_dir_temp = frames_dir / f"{recons_type}"
             else:
                 frames_dir_temp = frames_dir / f"{recons_type}_{filter}"
-            viz_seq(viz_names, recons, frames_dir_temp, sk_type, force)
+            viz_seq(viz_names, recons, frames_dir_temp, sk_type, fps, force)
         print('----------------------------------------------------')
     print('----------------------------------------------------')
     # if per_seq_score:
@@ -1138,7 +1142,7 @@ def very_naive_reconstruction(seq_names, data_path, cluster2keypoint_mapping_pat
 
     return reconstructed_keypoints, ground_truth_keypoints
 
-def ground_truth_construction(seq_names, data_path, sk_type, frames_dir, force):
+def ground_truth_construction(seq_names, data_path, sk_type, gt_downsample_ratio, fps, frames_dir, force):
     '''
     Constructs original video from ground truth sequences, which are used as reference for mpjpe calculation.
 
@@ -1146,6 +1150,8 @@ def ground_truth_construction(seq_names, data_path, sk_type, frames_dir, force):
         seq_names : name of video sequences to construct and visualize ground truth
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 1.0.
+        fps (float): Output frame rate.
         frames_dir : Path to root folder that will contain frames folder for visualization.
         force (Bool): If True visualizes all sequences even if already exists in frames_dir. 
                     Defaults to False, only visualizes incomplete or un-visualized sequences. 
@@ -1153,17 +1159,19 @@ def ground_truth_construction(seq_names, data_path, sk_type, frames_dir, force):
         None.
         The reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
     '''
-    assert frames_dir is not None
+    assert frames_dir is not None, "path to store gt visualizations absent"
+    assert gt_downsample_ratio<=1.0, "gt_downsample_ratio cannot be greater than 1"
 
     with open(data_path, 'rb') as handle:
         ground_truth_data = pickle.load(handle)
 
     print('----------------------------------------------------')
     #TODO: remove 5000 limit
-    ground_truth_keypoints = [ground_truth_data[name][:5000, :, :] for name in tqdm(seq_names, 'Ground Truth construction')]
+    gt = [downsample(ground_truth_data[name][:5000, :, :], gt_downsample_ratio) 
+          for name in tqdm(seq_names, 'Ground Truth construction')]
     print('----------------------------------------------------')
 
-    viz_seq(seq_names, ground_truth_keypoints, frames_dir, sk_type, force)
+    viz_seq(seq_names, gt, frames_dir, sk_type, fps, force)
     print('----------------------------------------------------')
 
 #-------------------------------------------------------------------------------

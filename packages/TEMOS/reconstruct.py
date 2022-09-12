@@ -35,8 +35,10 @@ def reconstruct(cfg: DictConfig) -> None:
     logger.info(f"{pred_dir}")
 
     # seq_names = sorted([i[:-4] for i in os.listdir(pred_dir) if i.endswith('.npy')])
-    seq_names = get_split_keyids(path=cfg.splitpath, split=cfg.split)
+    #TODO: take all seq_names
+    seq_names = sorted(get_split_keyids(path=cfg.splitpath, split=cfg.split)[:50])
     logger.info(f"Total sequences: {len(seq_names)}")
+    #TODO: resolve the need of viz_names
     viz_names = seq_names
     # viz_names = get_split_keyids(path=cfg.splitpath, split='recons')
     logger.info(f"Visualizing sequences: {len(viz_names)}")
@@ -47,8 +49,10 @@ def reconstruct(cfg: DictConfig) -> None:
     cluster2keypoint_mapping_path = data_dir / cfg.cluster2keypoint_mapping
     cluster2frame_mapping_path = data_dir /  cfg.cluster2frame_mapping
 
+    #TODO : give fps directly to reconstruction function instead of ratios
     recons_upsample_ratio=cfg.fps/cfg.recons_fps
     gt_downsample_ratio=cfg.fps/cfg.gt_fps
+    logger.info(f"Output FPS: {cfg.fps}")
     
     if cfg.visualize:
         viz_dir = pred_dir/cfg.viz_dir
@@ -69,16 +73,15 @@ def reconstruct(cfg: DictConfig) -> None:
         viz_gt_dir = None
         logger.info("Ground truth will not be visualized")
     
-    reconstruction('very_naive', ['none', 'uniform', 'spline'], seq_names, gt_path, cfg.sk_type, recons_upsample_ratio, gt_downsample_ratio, viz_dir, viz_names, cfg.force, 
+    reconstruction('very_naive', ['none', 'uniform', 'spline'], seq_names, gt_path, cfg.sk_type, recons_upsample_ratio, gt_downsample_ratio, cfg.fps, viz_dir, viz_names, cfg.force, 
                     cluster2keypoint_mapping_path=cluster2keypoint_mapping_path, frame2cluster_mapping_dir=frame2cluster_mapping_dir)
-    reconstruction('naive', ['none', 'uniform', 'spline'], seq_names, gt_path, cfg.sk_type, recons_upsample_ratio, gt_downsample_ratio, viz_dir, viz_names, cfg.force,
+    reconstruction('naive', ['none', 'uniform', 'spline'], seq_names, gt_path, cfg.sk_type, recons_upsample_ratio, gt_downsample_ratio, cfg.fps, viz_dir, viz_names, cfg.force,
                     contiguous_frame2cluster_mapping_path=contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path=cluster2frame_mapping_path)
-    reconstruction('naive_no_rep', ['none', 'uniform', 'spline'], seq_names, gt_path, cfg.sk_type, recons_upsample_ratio, gt_downsample_ratio, viz_dir, viz_names, cfg.force,
+    reconstruction('naive_no_rep', ['none', 'uniform', 'spline'], seq_names, gt_path, cfg.sk_type, recons_upsample_ratio, gt_downsample_ratio, cfg.fps, viz_dir, viz_names, cfg.force,
                     contiguous_frame2cluster_mapping_path=contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path=cluster2frame_mapping_path)    
     
     if cfg.visualize_gt:
-        viz_gt_dir = data_dir / cfg.viz_gt_dir
-        ground_truth_construction(viz_names, gt_path, cfg.sk_type, viz_gt_dir, cfg.force_gt)
+        ground_truth_construction(viz_names, gt_path, cfg.sk_type, gt_downsample_ratio, cfg.fps, viz_gt_dir, cfg.force_gt)
     
     # print('very naive mpjpe : ', very_naive_mpjpe_mean)
     # print('naive mpjpe : ', naive_mpjpe_mean)
