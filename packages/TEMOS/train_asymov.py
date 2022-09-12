@@ -61,8 +61,11 @@ def train(cfg: DictConfig) -> None:
         instantiate(cfg.callback.latest_ckpt),
         instantiate(cfg.callback.last_ckpt)
     ]
+    if cfg.callback.viz_ckpts:
+        callbacks.append(instantiate(cfg.callback.viz_ckpt))
     logger.info("Callbacks initialized")
 
+    #TODO: instantiate using hydra
     logger.info("Loading trainer")
     trainer = pl.Trainer(
         **OmegaConf.to_container(cfg.trainer, resolve=True),
@@ -76,7 +79,7 @@ def train(cfg: DictConfig) -> None:
     # pdb.set_trace()
     logger.info("Fitting the model..")
     if cfg.resume_ckpt_path is not None :
-        print(f'Resuming training from checkpoint {cfg.resume_ckpt_path}')
+        logger.info(f'Resuming training from checkpoint {cfg.resume_ckpt_path}')
     trainer.fit(model, datamodule=data_module, ckpt_path=cfg.resume_ckpt_path)
     logger.info("Fitting done")
 

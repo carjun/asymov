@@ -9,7 +9,7 @@ seed: 1234
 
 logger_level: INFO
 run_id: ${generate_id:}
-resume_ckpt_path: 
+resume_ckpt_path:
 
 # Composing nested config with default
 defaults:
@@ -28,5 +28,8 @@ defaults:
 data:
   transforms:
     normalization: true
+
+callback:
+  viz_ckpts: true 
 
 transforms: ${data.transforms}
