@@ -1,0 +1,26 @@
+{
+    "data": "kit-xyz-motion-word",
+    "exp_name": "asymov_legit",
+    "runid": "382wpogn",
+    "split": "recons",
+    "fps": "25.0",
+    "seq_name": "03787",
+
+    "path_ground": "f'./datasets/constructions_{fps}/{seq_name}/video.mp4'",
+
+    "path_very_naive": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/very_naive/{seq_name}/video.mp4'",
+    "path_very_naive_uniform": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/very_naive_uniform/{seq_name}/video.mp4'", 
+    "path_very_naive_spline": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/very_naive_spline/{seq_name}/video.mp4'", 
+    
+    "path_naive": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/naive/{seq_name}/video.mp4'", 
+    "path_naive_uniform": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/naive_uniform/{seq_name}/video.mp4'", 
+    "path_naive_spline": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/naive_spline/{seq_name}/video.mp4'",
+
+    "path_naive_no_rep": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/naive_no_rep/{seq_name}/video.mp4'", 
+    "path_naive_no_rep_uniform": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/naive_no_rep_uniform/{seq_name}/video.mp4'", 
+    "path_naive_no_rep_spline": "f'./outputs/{data}/{exp_name}/{runid}/samples/neutral_{split}/reconstructions_{fps}/naive_no_rep_spline/{seq_name}/video.mp4'",
+
+    "path_captions": "f'./datasets/kit/{seq_name}_annotations.json'",
+    "path_metadata": "f'./datasets/kit/{seq_name}_meta.json'"
+
+}
