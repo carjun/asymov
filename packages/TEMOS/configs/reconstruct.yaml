@@ -9,7 +9,7 @@ folder: ???
 defaults:
   - /path@path
 
-datapath: ${path.datasets}
+datapath: ${path.datasets} #not /kit
 splitpath: ${path.datasets}/kit-splits
 split: recons
 vocab_size: 1000

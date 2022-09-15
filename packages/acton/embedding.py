@@ -126,7 +126,7 @@ def get_feats(args, ldd, model=None):
         feats = forward_feat
     else:
         # to get results for using raw skeleton, swap with
-        ldd1 = torch.Tensor(ldd).flatten(1, -1) #/ 100  # [T, 51]
+        ldd1 = torch.Tensor(ldd).flatten(1, -1) #/ 100  # [T, 63]
         ttl = ldd1.shape[0]
         ct = body_center(ldd1[0])
         ldd1 -= ct.repeat(args['NUM_JOINTS']).unsqueeze(0)

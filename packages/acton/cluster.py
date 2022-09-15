@@ -70,6 +70,10 @@ def parse_args():
                         default=-1,
                         help='batch size for clustering',
                         type=int)
+    parser.add_argument('--force',
+                        required=True,
+                        help='forcefully fit kmeans or allow previously saved centers',
+                        type=int)
     #TODO arg k for clusters
     args, _ = parser.parse_known_args()
     print(f'SEED: {args.seed}')
@@ -86,6 +90,7 @@ def parse_args():
         ldd["PRETRAIN"]["TRAINER"]["LOG_DIR"] = args.log_dir
 
     ldd["CLUSTER"]["USE_RAW"] = args.use_raw
+    ldd["CLUSTER"]["FORCE"] = args.force
     ldd["CLUSTER"]["BATCH_SIZE"] = args.batch_size
     if args.batch_size > 0:
         ldd["CLUSTER"]["TYPE"] = "batch_kmeans_skl"
@@ -158,17 +163,30 @@ def main():
     for K in range(args["CLUSTER"]["K_MIN"], args["CLUSTER"]["K_MAX"], 10):
         # get cluster centers
         argument_dict = {"distance": plain_distance, "TYPE": "vanilla", "K": K, "TOL": 1e-4, "BATCH_SIZE": args["CLUSTER"]["BATCH_SIZE"]}
-        if not os.path.exists(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy")):
+        if (args["CLUSTER"]["FORCE"]) or (not os.path.exists(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"))):
             print('Finding cluster centers')
             c, scores = getattr(algo, args["CLUSTER"]["TYPE"])(tr_stacked, times=args["CLUSTER"]["TIMES"], argument_dict=argument_dict)
-            np.save(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"), c.kmeans.cluster_centers_)
+            
+            #handle empty clusters
+            non_empty_clusters = np.unique(c.get_assignment(tr_stacked))
+            assert np.max(non_empty_clusters)<K, "more no. of clusters than expected"
+            assert len(non_empty_clusters)<K, "more unique clusters than expected"
+            
+            print(f"Found {K-len(non_empty_clusters)} empty clusters")
+            non_empty_cluster_centers = c.kmeans.cluster_centers_[non_empty_clusters]
+            
+            np.save(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"), non_empty_cluster_centers)
             np.save(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}_scores.npy"), scores)
-        else:
-            print('Loading saved cluster centers')
-            ctrs = np.load(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"))
-            c = getattr(algo, args["CLUSTER"]["TYPE"] + "_clusterer")(TIMES=args["CLUSTER"]["TIMES"], argument_dict=argument_dict)
-            c.fit(tr_stacked[:K])
-            c.kmeans.cluster_centers_ = ctrs
+        
+        # else:
+        print('Loading saved cluster centers')
+        ctrs = np.load(os.path.join(args['CLUSTER_DIR'], f"advanced_centers_{K}.npy"))
+        argument_dict['K'] = len(ctrs)
+        print(f"Found {argument_dict['K']} clusters")
+        
+        c = getattr(algo, args["CLUSTER"]["TYPE"] + "_clusterer")(TIMES=args["CLUSTER"]["TIMES"], argument_dict=argument_dict)
+        c.kmeans.fit(tr_stacked[:argument_dict['K']])
+        c.kmeans.cluster_centers_ = ctrs
 
         # infer on training set and save
         y = np.concatenate([np.ones((l,)) * i for i, l in enumerate(tr_len_container)], axis=0)
@@ -187,13 +205,16 @@ def main():
         proxy_centers_tr['keypoints3d'] = proxy_centers_tr[['frame_index','seq_name']].apply(
             lambda x: official_loader.load_keypoint3d(x['seq_name'])[x['frame_index']], axis=1)   #3d skeleton keypoints of the closest frame
 
-        non_empty_clusters = proxy_centers_tr['cluster'].unique()
-        if non_empty_clusters.shape[0] < K:
-            empty_clusters = [i for i in range(K) if i not in non_empty_clusters]
-            closest_non_empty, _ = pairwise_distances_argmin_min(c.kmeans.cluster_centers_[empty_clusters], c.kmeans.cluster_centers_[non_empty_clusters])
-            non_empty_centers = proxy_centers_tr[proxy_centers_tr['cluster'].isin(closest_non_empty)]
-            non_empty_centers.loc[:,('cluster', 'dist')]=np.array([ empty_clusters, [None]*len(empty_clusters)]).transpose()
-            proxy_centers_tr = proxy_centers_tr.append(non_empty_centers, ignore_index=True)
+        # replace empty clusters
+        # non_empty_clusters = proxy_centers_tr['cluster'].unique()
+        # # pdb.set_trace()
+        # if non_empty_clusters.shape[0] < K:
+        #     empty_clusters = [i for i in range(K) if i not in non_empty_clusters]
+        #     print(f"Found {len(empty_clusters)} empty clusters")
+        #     closest_non_empty_clusters = non_empty_clusters[pairwise_distances_argmin_min(c.kmeans.cluster_centers_[empty_clusters], c.kmeans.cluster_centers_[non_empty_clusters])[0]]
+        #     closest_non_empty_centers = proxy_centers_tr.loc[proxy_centers_tr['cluster'].isin(closest_non_empty_clusters)]
+        #     closest_non_empty_centers.loc[:,('cluster', 'dist')]=np.array([ empty_clusters, [None]*len(empty_clusters)]).transpose()
+        #     proxy_centers_tr = proxy_centers_tr.append(closest_non_empty_centers, ignore_index=True)
 
         # not needed
         # sorted_proxies_tr = tr_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
@@ -217,20 +238,20 @@ def main():
                 prev = cc
         tr_word_df = tr_word_df[tr_word_df["idx"] > 0]
 
-        tr_word_df.to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_tr_{K}.pkl")
-        print(f"advanced_tr_{K}.pkl dumped to {args['CLUSTER_DIR']}")  # saved tokenization of training set
+        tr_word_df.to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_tr_{argument_dict['K']}.pkl")
+        print(f"advanced_tr_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}")  # saved tokenization of training set
 
-        tr_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_tr_res_{K}.pkl")
-        print(f"advanced_tr_res_{K}.pkl dumped to {args['CLUSTER_DIR']}") # frame wise tokenization
+        tr_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_tr_res_{argument_dict['K']}.pkl")
+        print(f"advanced_tr_res_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}") # frame wise tokenization
 
-        proxy_centers_tr.to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_tr_complete_{K}.pkl")
-        print(f"proxy_centers_tr_complete_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved complete proxy cluster center info
-        proxy_centers_tr[['cluster', 'keypoints3d']].to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_tr_{K}.pkl")
-        print(f"proxy_centers_tr_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved proxy centers to feature vector mapping
+        proxy_centers_tr.to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_tr_complete_{argument_dict['K']}.pkl")
+        print(f"proxy_centers_tr_complete_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}") # saved complete proxy cluster center info
+        proxy_centers_tr[['cluster', 'keypoints3d']].to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_tr_{argument_dict['K']}.pkl")
+        print(f"proxy_centers_tr_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}") # saved proxy centers to feature vector mapping
 
         # not needed
-        # sorted_proxies_tr.to_pickle(Path(args['CLUSTER_DIR']) / f"sorted_proxies_tr_{K}.pkl")
-        # print(f"sorted_proxies_tr_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved sorted proxies
+        # sorted_proxies_tr.to_pickle(Path(args['CLUSTER_DIR']) / f"sorted_proxies_tr_{argument_dict['K']}.pkl")
+        # print(f"sorted_proxies_tr_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}") # saved sorted proxies
 
 #-------------------- TODO: handle more than one splits --------------------#
 
@@ -254,10 +275,10 @@ def main():
         # non_empty_clusters = proxy_centers_val['cluster'].unique()
         # if non_empty_clusters < K:
             # empty_clusters = [i for i in range(K) if i not in non_empty_clusters]
-            # closest_non_empty, _ = pairwise_distances_argmin_min(c.kmeans.cluster_centers_[empty_clusters], c.kmeans.cluster_centers_[non_empty_clusters])
-            # non_empty_centers = proxy_centers_val[proxy_centers_val['cluster'].isin(closest_non_empty)]
-            # non_empty_centers.loc[:,('cluster', 'dist')]=np.array([ empty_clusters, [None]*len(empty_clusters)]).transpose()
-            # proxy_centers_val = proxy_centers_val.append(non_empty_centers, ignore_index=True)
+            # closest_non_empty_clusters, _ = pairwise_distances_argmin_min(c.kmeans.cluster_centers_[empty_clusters], c.kmeans.cluster_centers_[non_empty_clusters])
+            # closest_non_empty_centers = proxy_centers_val[proxy_centers_val['cluster'].isin(closest_non_empty_clusters)]
+            # closest_non_empty_centers.loc[:,('cluster', 'dist')]=np.array([ empty_clusters, [None]*len(empty_clusters)]).transpose()
+            # proxy_centers_val = proxy_centers_val.append(closest_non_empty_centers, ignore_index=True)
 
         # not needed
         # sorted_proxies_val = val_res_df.drop(['feat_vec'], axis=1).groupby('cluster').apply(lambda x: x.sort_values('dist')) #frames in sorted order of closeness to cluster center
@@ -281,20 +302,20 @@ def main():
                 prev = cc
         val_word_df = val_word_df[val_word_df["idx"] > 0]
 
-        val_word_df.to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_val_{K}.pkl")
-        print(f"advanced_val_{K}.pkl dumped to {args['CLUSTER_DIR']}")  # saved tokenization of validation set
+        val_word_df.to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_val_{argument_dict['K']}.pkl")
+        print(f"advanced_val_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}")  # saved tokenization of validation set
 
-        val_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_val_res_{K}.pkl")
-        print(f"advanced_val_res_{K}.pkl dumped to {args['CLUSTER_DIR']}") # frame wise tokenization
+        val_res_df.drop(['feat_vec'], axis=1).to_pickle(Path(args['CLUSTER_DIR']) / f"advanced_val_res_{argument_dict['K']}.pkl")
+        print(f"advanced_val_res_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}") # frame wise tokenization
 
-        # proxy_centers_val.to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_complete_{K}.pkl")
-        # print(f"proxy_centers_val_complete_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved proxy centers
-        # proxy_centers_val[['cluster', 'keypoints3d']].to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_{K}.pkl")
-        # print(f"proxy_centers_val_{K}.pkl dumped to {args['CLUSTER_DIR']}")
+        # proxy_centers_val.to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_complete_{argument_dict['K']}.pkl")
+        # print(f"proxy_centers_val_complete_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}") # saved proxy centers
+        # proxy_centers_val[['cluster', 'keypoints3d']].to_pickle(Path(args['CLUSTER_DIR']) / f"proxy_centers_val_{argument_dict['K']}.pkl")
+        # print(f"proxy_centers_val_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}")
 
         # not needed
-        # sorted_proxies_val.to_pickle(Path(args['CLUSTER_DIR']) / f"sorted_proxies_val_{K}.pkl")
-        # print(f"sorted_proxies_val_{K}.pkl dumped to {args['CLUSTER_DIR']}") # saved sorted proxies
+        # sorted_proxies_val.to_pickle(Path(args['CLUSTER_DIR']) / f"sorted_proxies_val_{argument_dict['K']}.pkl")
+        # print(f"sorted_proxies_val_{argument_dict['K']}.pkl dumped to {args['CLUSTER_DIR']}") # saved sorted proxies
 
 #---------------------------------------------------------------------------#
 

@@ -4,3 +4,5 @@ __pycache__
 .ipynb_checkpoints
 .vscode
 kit-molan/code/test_viz/
+packages/acton/kit_logs/
+kit-molan/xyz_data.pkl

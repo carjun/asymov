@@ -82,6 +82,7 @@ class SkeletonTransform(object):
         
         if joint_num == 17 or joint_num == 21:
             # spatial rotation normalization by first frame
+            #TODO this conditional is redundant
             if joint_num == 17 or joint_num == 21:
                 lh = x[norm_frame, 33:35]  # left hip x, left hip y
             else:
