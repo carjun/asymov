@@ -1,8 +1,9 @@
-dataname: kit-xyz-motion-word
+name: kit-xyz-motion-word
 _target_: temos.data.kit_motion_word.KITMotionWordDataModule
 
 # Paths
 datapath: ${path.datasets}/kit
+dataname: ${.name}.pkl
 splitpath: ${path.datasets}/kit-splits
 
 # No Amass

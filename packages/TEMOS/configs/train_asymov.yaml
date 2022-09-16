@@ -10,6 +10,10 @@ seed: 1234
 logger_level: INFO
 run_id: ${generate_id:}
 resume_ckpt_path:
+wandb_api_keys:
+  darsh: 57f6d5aab6f1a78b78fb181dcf32dfeca0e65f79
+  arjun: bac3a003428df951a8e0b9e3878002a3227bbf0c
+user: 
 
 # Composing nested config with default
 defaults:

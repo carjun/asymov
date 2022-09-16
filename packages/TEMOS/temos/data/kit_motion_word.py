@@ -53,7 +53,7 @@ class KITMotionWordDataModule(BASEDataModule):
 class KITMotionWord(Dataset):
     dataname = "KIT Motion-Language Motion Word"
 
-    def __init__(self, datapath: str,
+    def __init__(self, datapath: str, dataname: str,
                  splitpath: str,
                  vocab_size: int,
                 #  transforms: Transform,
@@ -114,7 +114,7 @@ class KITMotionWord(Dataset):
         #     bad_smpl = 0
         #     good_smpl = 0
         
-        with open(datapath/'kit-motion-word.pkl', 'rb') as f:
+        with open(datapath/dataname, 'rb') as f:
             motion_words_data = pickle.load(f)
         for i, keyid in enumerator:
 

@@ -8,12 +8,12 @@ import pdb
 # from pprint import pprint
 
 logger = logging.getLogger(__name__)
-# Darsh's Wandb api key: '57f6d5aab6f1a78b78fb181dcf32dfeca0e65f79'
-os.environ['WANDB_API_KEY'] = 'bac3a003428df951a8e0b9e3878002a3227bbf0c'
 
 @hydra.main(config_path="configs", config_name="train_asymov")
 def _train(cfg: DictConfig):
     # print(OmegaConf.to_yaml(cfg))
+    if cfg.user:
+        os.environ['WANDB_API_KEY'] = cfg.wandb_api_keys[cfg.user]
     cfg.trainer.enable_progress_bar = True
     return train(cfg)
 
@@ -36,7 +36,7 @@ def train(cfg: DictConfig) -> None:
 
     logger.info("Loading data module")
     data_module = instantiate(cfg.data)
-    logger.info(f"Data module '{cfg.data.dataname}' loaded")
+    logger.info(f"Data module '{cfg.data.name}' loaded")
 
     logger.info("Loading model")
     model = instantiate(cfg.model,
@@ -55,7 +55,12 @@ def train(cfg: DictConfig) -> None:
         # "APE mean pose": "Metrics/APE_mean_pose",
         # "AVE root": "Metrics/AVE_root",
         # "AVE mean pose": "Metrics/AVE_mean_pose"
-        "Accuracy": "Metrics/Accuracy"
+        "Train_acc": "Metrics/acc_text2mw/train",
+        "Val_acc": "Metrics/acc_text2mw/val",
+        "Train_BLEU": "Metrics/bleu_text2mw/train",
+        "Val_BLEU": "Metrics/bleu_text2mw/val",
+        "Train_ppl": "Metrics/ppl_text2mw/train",
+        "Val_ppl": "Metrics/ppl_text2mw/val"
     }
     callbacks = [
         instantiate(cfg.callback.progress, metric_monitor=metric_monitor),

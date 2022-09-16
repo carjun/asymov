@@ -1,15 +1,16 @@
 from typing import List, Optional
 
 import torch
+import pdb
 
 from hydra.utils import instantiate
 
 from torch import Tensor
 from omegaconf import DictConfig
-from temos.model.utils.tools import remove_padding_asymov
+from temos.model.utils.tools import remove_padding_asymov, remove_padding
 
 from temos.model.metrics import ComputeMetrics
-from torchmetrics import MetricCollection, Accuracy
+from torchmetrics import MetricCollection, Accuracy, BLEUScore
 from temos.model.base import BaseModel
 from torch.distributions.distribution import Distribution
 
@@ -42,10 +43,26 @@ class Asymov(BaseModel):
         self.losses = {key: self._losses["losses_" + key] for key in ["train", "test", "val"]}
 
         # self.metrics = ComputeMetrics()
-        self.metrics = Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
-                                ignore_index=vocab_size, multiclass=True,
-                                # subset_accuracy=True
-                                )
+        #TODO: can refactor
+        self.train_metrics = {'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
+                                              ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
+                                              ),
+                              'acc_text2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
+                                              ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
+                                              ),
+                              'bleu_mw2mw': BLEUScore(),
+                              'bleu_text2mw': BLEUScore()
+                             }
+        self.val_metrics = {'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
+                                              ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
+                                              ),
+                              'acc_text2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
+                                              ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
+                                              ),
+                              'bleu_mw2mw': BLEUScore(),
+                              'bleu_text2mw': BLEUScore()
+                             }
+        self.metrics={'train':self.train_metrics, 'val':self.val_metrics}
 
         # If we want to overide it at testing time
         self.sample_mean = False
@@ -160,15 +177,29 @@ class Asymov(BaseModel):
         if loss is None:
             raise ValueError("Loss is None, this happend with torchmetrics > 0.7")
 
-        if split == "val":
-            # Compute the metrics
-            preds = probs_from_text.detach().softmax(dim=1)
-            bs, _, frames = preds.shape 
-            preds = torch.cat((preds, preds.new_zeros(bs, 1, frames)), dim=1)
-            
-            target = motion_word_ref.detach()
-            
-            self.metrics.update(preds, target)
+        ### Compute the metrics
+        preds_from_text = probs_from_text.detach().softmax(dim=1)
+        preds_from_motion = probs_from_motion.detach().softmax(dim=1)
+        bs, _, frames = preds_from_text.shape
+        # assert bs == preds_from_motion.shape[0] and frames == preds_from_motion.shape[2], 'train and val predictions shape mismatch'
+        target = motion_word_ref.detach()
+        
+        # adding padding class to preds for compatibility with padded target motion words for Accuracy
+        preds_from_text = torch.cat((preds_from_text, preds_from_text.new_zeros(bs, 1, frames)), dim=1)
+        preds_from_motion = torch.cat((preds_from_motion, preds_from_motion.new_zeros(bs, 1, frames)), dim=1)
+        
+        self.metrics[split]['acc_text2mw'].update(preds_from_text, target)
+        self.metrics[split]['acc_mw2mw'].update(preds_from_motion, target)
+        
+        # predicted, target motion word ids without padding for BLEU
+        pred_mw_from_text = remove_padding(torch.argmax(preds_from_text, dim=1).int(), batch["length"])
+        pred_mw_from_motion = remove_padding(torch.argmax(preds_from_motion, dim=1).int(), batch["length"])
+        pred_mw_sents_from_text = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_from_text]
+        pred_mw_sents_from_motion = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_from_motion]
+        target_mw_sents = [[" ".join(map(str, mw.int().tolist()))] for mw in remove_padding(target, batch["length"])]
+        # pdb.set_trace()
+        self.metrics[split]['bleu_text2mw'].update(pred_mw_sents_from_text, target_mw_sents)
+        self.metrics[split]['bleu_mw2mw'].update(pred_mw_sents_from_motion, target_mw_sents)
 
         return loss
 
@@ -177,14 +208,22 @@ class Asymov(BaseModel):
         loss_dict = losses.compute(split)
         dico = {losses.loss2logname(loss, split): value.item()
                 for loss, value in loss_dict.items()}
-
-        if split == "val":
-            # pdb.set_trace()
-            # metrics_dict = self.metrics.compute()
-            # metrics_dict = {key:metrics_dict[key] for key in metrics_dict.keys() if key not in ['APE_joints', 'APE_pose', 'AVE_joints', 'AVE_pose']}
-            # dico.update({f"Metrics/{metric}": value for metric, value in metrics_dict.items()})
-            accuracy = self.metrics.compute()
-            dico.update({"Metrics/Accuracy": accuracy})
+        
+        #Accuracy and BLEU
+        metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items()}
+        # Perplexity (geometric mean over batch)
+        metrics_dict[f"Metrics/ppl_text2mw/{split}"] = torch.exp(loss_dict['recons_text2mw'])
+        metrics_dict[f"Metrics/ppl_mw2mw/{split}"] = torch.exp(loss_dict['recons_mw2mw'])
+        dico.update(metrics_dict)
+        
+        # if split == "val":
+        #     # pdb.set_trace()
+        #     # metrics_dict = self.metrics.compute()
+        #     # metrics_dict = {key:metrics_dict[key] for key in metrics_dict.keys() if key not in ['APE_joints', 'APE_pose', 'AVE_joints', 'AVE_pose']}
+        #     # dico.update({f"Metrics/{metric}": value for metric, value in metrics_dict.items()})
+        #     accuracy = self.metrics.compute()
+        #     dico.update({"Metrics/Accuracy/train": accuracy})
+        
         dico.update({"epoch": float(self.trainer.current_epoch),
                     "step": float(self.trainer.current_epoch)})
         self.log_dict(dico)
