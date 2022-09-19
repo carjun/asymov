@@ -929,15 +929,24 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
     
     print('----------------------------------------------------')
     # print(recons_type+'_reconstruction')
+    with open(data_path, 'rb') as handle:
+        ground_truth_data = pickle.load(handle)
+    gt = [ground_truth_data[name][:5000, :, :] for name in seq_names]
+    gt = [downsample(keypoint, gt_downsample_ratio) for keypoint in gt]
+    
     if recons_type == 'naive_no_rep' or recons_type  == 'naive':
         contiguous_frame2cluster_mapping_path = kwargs['contiguous_frame2cluster_mapping_path']
         cluster2frame_mapping_path = kwargs['cluster2frame_mapping_path']
 
-        output = eval(recons_type+'_reconstruction')(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path)
+        contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
+        contiguous_cluster_seqs = [contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index() for name in seq_names]
+        
+        output = eval(recons_type+'_reconstruction')(seq_names, contiguous_cluster_seqs,  ground_truth_data, cluster2frame_mapping_path)
         if recons_type == 'naive_no_rep':
-            recons, gt, faulty = output
+            recons, faulty = output
         else:
-            recons, gt = output
+            recons = output
+
     elif recons_type == 'very_naive':
         cluster2keypoint_mapping_path = kwargs['cluster2keypoint_mapping_path']
         if 'frame2cluster_mapping_path' in kwargs.keys():
@@ -949,12 +958,20 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
         else:
             frame2cluster_mapping_dir = None
         
-        recons, gt = eval(recons_type+'_reconstruction')(seq_names, data_path, cluster2keypoint_mapping_path, frame2cluster_mapping_path, frame2cluster_mapping_dir)
+        if frame2cluster_mapping_path is not None:
+            frame2cluster = pd.read_pickle(frame2cluster_mapping_path)
+            cluster_seqs = [frame2cluster[frame2cluster['seq_name']==name]['cluster'] for name in seq_names]
+        elif frame2cluster_mapping_dir is not None:
+            cluster_seqs = [np.load(os.path.join(frame2cluster_mapping_dir, f"{name}.npy")) for name in seq_names] 
+        else:
+            ValueError('frame2cluster not given')
+
+        recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path)
     
     # recons and gt in desired fps
     recons = [upsample(keypoint, recons_upsample_ratio) for keypoint in recons]
-    gt = [downsample(keypoint, gt_downsample_ratio) for keypoint in gt]
     
+    mpjpe={}
     print('----------------------------------------------------')
     # print("MPJPE")
     for filter in filters:
@@ -969,7 +986,9 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
         print(f"Using {filter} filter")
 
         mpjpe_per_sequence=mpjpe3d(seq_names, recons, gt)
-        print(f'{recons_type}_{filter} mpjpe: ', np.mean(mpjpe_per_sequence))
+        mpjpe_mean = np.mean(mpjpe_per_sequence)
+        mpjpe['filter'] = mpjpe_mean
+        print(f'{recons_type}_{filter} mpjpe: ', mpjpe_mean)
 
         if frames_dir is not None:
             if filter == 'none':
@@ -983,43 +1002,36 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
     #     return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
     # else:
     #     return np.mean(mpjpe_per_sequence)
-    return None
+    return mpjpe
 
 
 #TODO: naive_no_rep_reconstruction implementation
-def naive_no_rep_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path):
+def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
-        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
-        contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
-        cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it) 
+        contiguous_cluster_seqs : mapping of contiguous frames with identically predicted cluster
+        ground_truth_data : ground truth 3d keypoints of skeleton joints
+        cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
 
     Retruns:
-        The mean (and optionally per sequence) mpjpe between reconstructed and original sequences.
-        If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
+        The reconstructed keypoints
     '''
 
-    ground_truth_keypoints = []
     reconstructed_keypoints = []
     faulty = []
 
-    with open(data_path, 'rb') as handle:
-        ground_truth_data = pickle.load(handle)
-    contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
-    with tqdm(seq_names, desc='naive_no_rep reconstruction') as pbar:
-        for name in pbar:
+    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive_no_rep reconstruction', total=len(seq_names)) as pbar:
+        for name, contiguous_cluster_seq in pbar:
             pbar.set_description(f'naive_no_rep reconstruction - {name}')
-            ground_truth_keypoints.append(ground_truth_data[name][:5000, :, :])
             reconstructed_keypoint = []
             
             # try:
-            contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
-            for i in range(contiguous_cluster_seqs.shape[0]):
+            for i in range(contiguous_cluster_seq.shape[0]):
                 #get contiguous cluster info
-                contiguous_cluster = contiguous_cluster_seqs.iloc[i]
+                contiguous_cluster = contiguous_cluster_seq.iloc[i]
                 cluster, length = contiguous_cluster[['cluster', 'length']]
                 #get center frame info 
                 center_frame = cluster2frame.iloc[cluster]
@@ -1046,44 +1058,36 @@ def naive_no_rep_reconstruction(seq_names, data_path, contiguous_frame2cluster_m
             #     faulty.append(name)
             #     # print(f'{name} cannot be reconstructed naively (no rep)')
 
-    return reconstructed_keypoints, ground_truth_keypoints, faulty
+    return reconstructed_keypoints, faulty
 
-def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path):
+def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
-        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
-        contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
+        contiguous_cluster_seqs : mapping of contiguous frames with identically predicted cluster
+        ground_truth_data : ground truth 3d keypoints of skeleton joints
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
 
     Retruns:
-        The mean and per sequence mpjpe between reconstructed and original sequences.
-        If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
+        The reconstructed keypoints
     '''
 
-    ground_truth_keypoints = []
     reconstructed_keypoints = []
-
-    with open(data_path, 'rb') as handle:
-        ground_truth_data = pickle.load(handle)
-    contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
-    with tqdm(seq_names, desc='naive reconstruction') as pbar:
-        for name in pbar:
+    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive reconstruction', total=len(seq_names)) as pbar:
+        for name, contiguous_cluster_seq in pbar:
             pbar.set_description(f'naive reconstruction - {name}')
-            ground_truth_keypoints.append(ground_truth_data[name][:5000, :, :])
             reconstructed_keypoint = []
             
-            contiguous_cluster_seqs = contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index()
-            for i in range(contiguous_cluster_seqs.shape[0]):
+            for i in range(contiguous_cluster_seq.shape[0]):
                 #get contiguous cluster info
-                contiguous_cluster = contiguous_cluster_seqs.iloc[i]
+                contiguous_cluster = contiguous_cluster_seq.iloc[i]
                 cluster, length = contiguous_cluster[['cluster', 'length']]
                 #get center frame info 
                 center_frame = cluster2frame.iloc[cluster]
                 center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
-                center_frame_complete_seq =ground_truth_data[center_frame_seq_name]
+                center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
                 assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
 
                 #calculate left right and center frames
@@ -1102,37 +1106,21 @@ def naive_reconstruction(seq_names, data_path, contiguous_frame2cluster_mapping_
 
             reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
 
-    return reconstructed_keypoints, ground_truth_keypoints
+    return reconstructed_keypoints
 
-def very_naive_reconstruction(seq_names, data_path, cluster2keypoint_mapping_path, frame2cluster_mapping_path=None, frame2cluster_mapping_dir=None):
+def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_path):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
-        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
+        cluster_seqs : the mapping of each frame to a cluster. 
         cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
-        frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster. 
-        frame2cluster_mapping_dir: Path of directory containing .npy files for TEMOS-asymov variant.
-
+        
     Retruns:
-        The mean and per sequence mpjpe between reconstructed and original sequences.
-        If frames_dir not None, then reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
+        The reconstructed keypoints
     '''
-    # for name in seq_names:
     # pdb.set_trace()
+    assert len(seq_names) == len(cluster_seqs)
 
-    with open(data_path, 'rb') as handle:
-        ground_truth_data = pickle.load(handle)
-
-    ground_truth_keypoints = [ground_truth_data[name][:5000, :, :] for name in seq_names]
-
-    if frame2cluster_mapping_path is not None:
-        frame2cluster = pd.read_pickle(frame2cluster_mapping_path)
-        cluster_seqs = [frame2cluster[frame2cluster['seq_name']==name]['cluster'] for name in seq_names]
-    elif frame2cluster_mapping_dir is not None:
-        cluster_seqs = [np.load(os.path.join(frame2cluster_mapping_dir, f"{name}.npy")) for name in seq_names] 
-    else:
-        ValueError('frame2cluster not given')
-    
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
     reconstructed_keypoints = []
     with tqdm(zip(seq_names, cluster_seqs), desc='very_naive reconstruction', total=len(seq_names)) as pbar:
@@ -1140,7 +1128,7 @@ def very_naive_reconstruction(seq_names, data_path, cluster2keypoint_mapping_pat
             pbar.set_description(f'very_naive reconstruction - {name}')
             reconstructed_keypoints.append(np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]))
 
-    return reconstructed_keypoints, ground_truth_keypoints
+    return reconstructed_keypoints
 
 def ground_truth_construction(seq_names, data_path, sk_type, gt_downsample_ratio, fps, frames_dir, force):
     '''

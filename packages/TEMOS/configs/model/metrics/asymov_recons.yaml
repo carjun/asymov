@@ -1,0 +1,10 @@
+_target_: temos.model.metrics.compute_asymov.ReconsMetrics
+
+recons_types: ['very_naive', 'naive', 'naive_no_rep']
+filters: ['none', 'uniform', 'spline']
+
+gt_path: ${data.datapath}/xyz_data.pkl
+
+fps: 25.0 #desired fps for mpjpe calculation and visualization
+recons_fps: 12.5 #same as fps of predictions
+gt_fps: 100.0 #fps of KIT
