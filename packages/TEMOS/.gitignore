@@ -8,9 +8,9 @@ __pycache__/
 outputs/
 gifs/
 deps/distilbert-base-uncased/
-datasets/kit/*.json
+# datasets/kit/*.json
 datasets/babel
-datasets/*.pkl
+datasets/xyz_data.pkl
 *.ckpt
 *.gif
 *.csv
