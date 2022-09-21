@@ -164,19 +164,17 @@ def sample(newcfg: DictConfig) -> None:
                 assert np.max(clusters) < cfg.data.vocab_size
 
                 if cfg.number_of_samples > 1:
-                    npypath = path / f"{keyid}_{index}.npy"
+                    name = f"{keyid}_{index}"
+                    npypath = path / f"{name}.npy"
                 else:
-                    npypath = path / f"{keyid}.npy"
-
+                    name = f"{keyid}"
+                    npypath = path / f"{name}.npy"
                 np.save(npypath, clusters)
                 
                 prev=-1
                 running_idx=0
                 current_len = 0
-                if cfg.number_of_samples > 1:
-                    name = f"{keyid}_{index}"
-                else:
-                    name = f"{keyid}"
+                clusters = np.append(clusters, [-1])
                 for cc in clusters:
                     if cc == prev:
                         current_len += 1
