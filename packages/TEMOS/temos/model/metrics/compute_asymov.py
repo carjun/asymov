@@ -4,16 +4,20 @@ import pickle
 import os
 import pandas as pd
 import numpy as np
+import pdb
 
 import torch
-from einops import rearrange
 from torch import Tensor, nn
 from torchmetrics import Metric, MeanMetric
+from hydra.utils import instantiate
 
 from temos.transforms.joints2jfeats import Rifke
 from temos.tools.geometry import matrix_of_angles
 from temos.model.utils.tools import remove_padding
-from viz import reconstruction, mpjpe3d, upsample, downsample
+import sys
+# pdb.set_trace()
+sys.path.append('../../../../../../')
+from viz import very_naive_reconstruction, naive_reconstruction, naive_no_rep_reconstruction, mpjpe3d, upsample, downsample
 from scipy.ndimage import uniform_filter1d, spline_filter1d
 
 def l2_norm(x1, x2, dim):
@@ -31,13 +35,14 @@ class Perplexity(MeanMetric):
     Calculates perplexity from logits and target.
     Wrapper around SumMetric.
     '''
-    def __init__(self, **kwargs):
+    def __init__(self, ignore_index: int, **kwargs):
         super().__init__(**kwargs)
-        self.CE = nn.CrossEntropyLoss(reduction='none')
+        self.CE = nn.CrossEntropyLoss(ignore_index=ignore_index, reduction='none')
     
     def update(self, logits: Tensor, target: Tensor):
         # Compute $$\sum PP}L(X)$$ where X = single sequence.
         # Since target = 1-hot, we use CE(.) to compute -log p_{gt}
+        # pdb.set_trace()
         ce_tensor = self.CE(logits, target) #[b_sz, T]
         ppl = torch.exp(ce_tensor.mean(dim=-1)) #[b_sz]
         return super().update(ppl)
@@ -127,6 +132,7 @@ class ReconsMetrics(Metric):
                 prev=-1
                 running_idx=0
                 current_len = 0
+                cluster_seq = np.append(cluster_seq, [-1])
                 for cc in cluster_seq:
                     if cc == prev:
                         current_len += 1
@@ -246,3 +252,6 @@ class ReconsMetrics(Metric):
     #                 remove_padding(poses_local, lengths),
     #                 remove_padding(root, lengths),
     #                 remove_padding(trajectory, lengths))
+
+if __name__ == '__main__':
+    pdb.set_trace()

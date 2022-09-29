@@ -1,0 +1,155 @@
+data:
+  dataname: kit-xyz-motion-word.pkl
+  _target_: temos.data.kit_motion_word.KITMotionWordDataModule
+  datapath: ${path.datasets}/kit
+  splitpath: ${path.datasets}/kit-splits-tiny
+  load_amass_data: false
+  load_with_rot: false
+  pick_one_text: true
+  batch_size: ${machine.batch_size}
+  num_workers: ${machine.num_workers}
+  vocab_size: 1000
+  framerate: 12.5
+  sampler: ${sampler}
+  tiny: false
+  progress_bar: true
+  transforms:
+    normalization: true
+model:
+  textencoder:
+    name: distilbert_actor
+    _target_: temos.model.textencoder.distilbert_actor.DistilbertActorAgnosticEncoder
+    latent_dim: ${model.latent_dim}
+    vae: ${model.vae}
+    ff_size: ${model.ff_size}
+    num_layers: ${model.num_layers}
+    num_head: ${model.num_head}
+    droupout: ${model.droupout}
+    activation: ${model.activation}
+    finetune: false
+    modelpath: ${path.deps}/distilbert-base-uncased
+  motionencoder:
+    name: asymov_encoder
+    _target_: temos.model.motionencoder.asymov.AsymovEncoder
+    vocab_size: ${model.vocab_size}
+    latent_dim: ${model.latent_dim}
+    vae: ${model.vae}
+    ff_size: ${model.ff_size}
+    num_layers: ${model.num_layers}
+    num_head: ${model.num_head}
+    droupout: ${model.droupout}
+    activation: ${model.activation}
+  motiondecoder:
+    name: actor_decoder
+    _target_: temos.model.motiondecoder.asymov.AsymovDecoder
+    vocab_size: ${model.vocab_size}
+    latent_dim: ${model.latent_dim}
+    ff_size: ${model.ff_size}
+    num_layers: ${model.num_layers}
+    num_head: ${model.num_head}
+    droupout: ${model.droupout}
+    activation: ${model.activation}
+  losses:
+    _target_: temos.model.losses.TemosComputeLosses
+    mode: motion_word
+    lmd_mw_recons: 1.0
+    lmd_latent: 1.0e-05
+    lmd_kl: 1.0e-05
+    loss_on_both: true
+    force_loss_on_jfeats: false
+    ablation_no_kl_combine: false
+    ablation_no_kl_gaussian: false
+    ablation_no_motionencoder: false
+    recons_text2mw: ${.lmd_mw_recons}
+    recons_text2mw_func: ${model.func_recons}
+    recons_mw2mw: ${.lmd_mw_recons}
+    recons_mw2mw_func: ${model.func_recons}
+    latent_manifold: ${.lmd_latent}
+    latent_manifold_func: ${model.func_latent}
+    kl_text: ${.lmd_kl}
+    kl_text_func: ${model.func_kl}
+    kl_motion: ${.lmd_kl}
+    kl_motion_func: ${model.func_kl}
+    kl_text2motion: ${.lmd_kl}
+    kl_text2motion_func: ${model.func_kl}
+    kl_motion2text: ${.lmd_kl}
+    kl_motion2text_func: ${model.func_kl}
+  optim:
+    _target_: torch.optim.AdamW
+    lr: 0.0001
+  func_recons:
+    _target_: torch.nn.CrossEntropyLoss
+    ignore_index: ${model.vocab_size}
+  func_latent:
+    _target_: torch.nn.SmoothL1Loss
+    reduction: mean
+  func_kl:
+    _target_: temos.model.losses.KLLoss
+  modelname: asymov
+  _target_: temos.model.asymov.Asymov
+  vocab_size: ${data.vocab_size}
+  latent_dim: 256
+  vae: true
+  ff_size: 1024
+  num_layers: 6
+  num_head: ${model.num_layers}
+  droupout: 0.1
+  activation: gelu
+machine:
+  name: server
+  batch_size: 32
+  smpl_batch_size: 256
+  num_workers: 8
+trainer:
+  auto_select_gpus: true
+  benchmark: false
+  max_epochs: 1001
+  gpus: 1
+  log_every_n_steps: 1
+  deterministic: false
+  detect_anomaly: false
+  enable_progress_bar: true
+sampler:
+  _target_: temos.data.sampling.FrameSampler
+  request_frames: null
+  sampling: conseq
+  sampling_step: 1
+  max_len: 500
+  min_len: 10
+logger:
+  logger_name: wandb
+  version: ${run_id}
+  save_dir: ${path.working_dir}
+  project: ${experiment}
+  offline: false
+  resume: allow
+  save_code: false
+  log_model: false
+callback:
+  last_ckpt:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    filename: latest-{epoch}
+    every_n_epochs: 1
+    save_top_k: 1
+    save_last: true
+  latest_ckpt:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    filename: latest-{epoch}
+    monitor: step
+    mode: max
+    every_n_epochs: 200
+    save_top_k: -1
+    save_last: false
+  progress:
+    _target_: temos.callback.ProgressLogger
+path:
+  deps: ${code_path:./deps}
+  datasets: ${code_path:./datasets}
+  code_dir: ${code_path:}
+  working_dir: ${working_path:""}
+experiment: asymov_legit
+seed: 1234
+logger_level: INFO
+run_id: 382wpogn
+resume_ckpt_path: /content/drive/MyDrive/vid tokenization/asymov/packages/TEMOS/wandb/asymov_legit/382wpogn/checkpoints/last.ckpt
+transforms: ${data.transforms}

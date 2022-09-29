@@ -1,10 +1,13 @@
-_target_: temos.model.metrics.compute_asymov.ReconsMetrics
+_target_: temos.model.metrics.ReconsMetrics
 
 recons_types: ['very_naive', 'naive', 'naive_no_rep']
 filters: ['none', 'uniform', 'spline']
 
-gt_path: ${data.datapath}/xyz_data.pkl
+gt_path: ${path.datasets}/xyz_data.pkl
 
 fps: 25.0 #desired fps for mpjpe calculation and visualization
 recons_fps: 12.5 #same as fps of predictions
 gt_fps: 100.0 #fps of KIT
+#TODO change naming of cluster files
+cluster2keypoint_mapping_path: ${path.datasets}/proxy_centers_tr_${data.vocab_size}.pkl
+cluster2frame_mapping_path: ${path.datasets}/proxy_centers_tr_complete_${data.vocab_size}.pkl

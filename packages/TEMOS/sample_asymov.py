@@ -16,6 +16,7 @@ import pytorch_lightning as pl
 
 import temos.launch.prepare  # noqa
 from temos.data.tools.collate import *
+from temos.model.utils.beam_search import beam_search
 from temos.data.sampling import upsample
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ def load_checkpoint(model, last_ckpt_path, *, eval_mode):
 
 
 def sample(newcfg: DictConfig) -> None:
+
     # Load last config
     output_dir = Path(hydra.utils.to_absolute_path(newcfg.folder))
     last_ckpt_path = newcfg.last_ckpt_path
@@ -164,19 +166,17 @@ def sample(newcfg: DictConfig) -> None:
                 assert np.max(clusters) < cfg.data.vocab_size
 
                 if cfg.number_of_samples > 1:
-                    npypath = path / f"{keyid}_{index}.npy"
+                    name = f"{keyid}_{index}"
+                    npypath = path / f"{name}.npy"
                 else:
-                    npypath = path / f"{keyid}.npy"
-
+                    name = f"{keyid}"
+                    npypath = path / f"{name}.npy"
                 np.save(npypath, clusters)
                 
                 prev=-1
                 running_idx=0
                 current_len = 0
-                if cfg.number_of_samples > 1:
-                    name = f"{keyid}_{index}"
-                else:
-                    name = f"{keyid}"
+                clusters = np.append(clusters, [-1])
                 for cc in clusters:
                     if cc == prev:
                         current_len += 1

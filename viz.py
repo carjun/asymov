@@ -25,7 +25,7 @@ from torch.nn.functional import interpolate as intrp
 
 import subprocess
 import shutil
-import wandb
+# import wandb
 import uuid
 import cv2
 from matplotlib import pyplot as plt
@@ -36,14 +36,10 @@ from scipy.ndimage import uniform_filter1d, spline_filter1d
 from pathlib import Path
 
 #TODO: change the import path to inside acton package
-sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
-from packages.acton.src.data.dataset.loader import KITDataset
+# sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
 # from packages.acton.src.data.dataset import loader,utils
 
 # sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/Complextext2animation/src/')
-import packages.Complextext2animation.src.dataUtils as dutils
-import packages.Complextext2animation.src.data as d
-import packages.Complextext2animation.src.common.mmm as mmm
 
 # sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/code/')
 # import kitml_utils
@@ -636,39 +632,41 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     return None
 
 
-def viz_rand_seq(X, Y, dtype, epoch, wb, urls=None,
-                 k=3, pred_labels=None):
-    '''
-    Args:
-        X (np.array): Array (frames) of SMPL joint positions.
-        Y (np.array): Multiple labels for each frame in x \in X.
-        dtype (str): {'input', 'pred'}
-        k (int): # samples to viz.
-        urls (tuple): Tuple of URLs of the rendered videos from original mocap.
-        wb (dict): Wandb log dict.
-    Returns:
-        viz_ds (dict): Data structure containing all viz. info so far.
-    '''
-    # `idx2al`: idx --> action label string
-    al2idx = dutils.read_json('data/action_label_to_idx.json')
-    idx2al = {al2idx[k]: k for k in al2idx}
+# def viz_rand_seq(X, Y, dtype, epoch, wb, urls=None,
+#                  k=3, pred_labels=None):
+#     '''
+#     Args:
+#         X (np.array): Array (frames) of SMPL joint positions.
+#         Y (np.array): Multiple labels for each frame in x \in X.
+#         dtype (str): {'input', 'pred'}
+#         k (int): # samples to viz.
+#         urls (tuple): Tuple of URLs of the rendered videos from original mocap.
+#         wb (dict): Wandb log dict.
+#     Returns:
+#         viz_ds (dict): Data structure containing all viz. info so far.
+#     '''
+#     import packages.Complextext2animation.src.dataUtils as dutils
 
-    # Sample k random seqs. to viz.
-    for s_idx in random.sample(list(range(X.shape[0])), k):
-        # Visualize a single seq. in path `folder_p`
-        folder_p = osp.join('viz', str(uuid.uuid4()))
-        viz_seq(seq=X[s_idx], folder_p=folder_p)
-        title='{0} seq. {1}: '.format(dtype, s_idx)
-        pdb.set_trace()
-        acts_str = ', '.join([idx2al[l] for l in torch.unique(Y[s_idx])])
-        wb[title+urls[s_idx]] = wandb.Video(osp.join(folder_p, 'video.mp4'),
-                                           caption='Actions: '+acts_str)
+#     # `idx2al`: idx --> action label string
+#     al2idx = dutils.read_json('data/action_label_to_idx.json')
+#     idx2al = {al2idx[k]: k for k in al2idx}
 
-        if 'pred' == dtype or 'preds'==dtype:
-            raise NotImplementedError
+#     # Sample k random seqs. to viz.
+#     for s_idx in random.sample(list(range(X.shape[0])), k):
+#         # Visualize a single seq. in path `folder_p`
+#         folder_p = osp.join('viz', str(uuid.uuid4()))
+#         viz_seq(seq=X[s_idx], folder_p=folder_p)
+#         title='{0} seq. {1}: '.format(dtype, s_idx)
+#         pdb.set_trace()
+#         acts_str = ', '.join([idx2al[l] for l in torch.unique(Y[s_idx])])
+#         wb[title+urls[s_idx]] = wandb.Video(osp.join(folder_p, 'video.mp4'),
+#                                            caption='Actions: '+acts_str)
 
-    print('Done viz. {0} seqs.'.format(k))
-    return wb
+#         if 'pred' == dtype or 'preds'==dtype:
+#             raise NotImplementedError☺
+
+#     print('Done viz. {0} seqs.'.format(k))
+#     return wb
 
 
 def fill_xml_jpos(all_j_names, mmm_seq):
@@ -697,54 +695,59 @@ def fill_xml_jpos(all_j_names, mmm_seq):
     return seq
 
 
-def debug_viz_kitml_seq():
-    '''
-    '''
-    kitml_fol_p = '/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/dataset/kit-mocap/'
+# def debug_viz_kitml_seq():
+#     '''
+#     '''
+#     import packages.Complextext2animation.src.data as d
+#     import packages.Complextext2animation.src.common.mmm as mmm
 
-    # List of seq ids to viz.
-    l_sids = list(range(1, 10))
-    for sid in l_sids:
-        fp = Path(ospj(kitml_fol_p, '{0}_mmm.xml'.format(str(sid).zfill(5))))
-        # seq = [ <list> joint names, <list> joint positions] of length (44, 44*T)
-        # all_j_names, mmm_seq = kitml_utils.parse_motions(fp)[0]
-        # all_j_names, mmm_dict = mmm.parse_motions(fp)[0]
-        # seq = fill_xml_jpos(all_j_names, mmm_seq)
-        # jnames, root_pos, root_rot, values, joint_dict = mmm.mmm2csv(fp)
+    
+#     kitml_fol_p = '/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/dataset/kit-mocap/'
 
-        # Get joint position data: (T, J=21, 3)
-        K = d.KITMocap(path2data=kitml_fol_p)
-        xyz_data, skel_obj, joints, root_pos, root_rot = K.mmm2quat(fp)
+#     # List of seq ids to viz.
+#     l_sids = list(range(1, 10))
+#     for sid in l_sids:
+#         fp = Path(ospj(kitml_fol_p, '{0}_mmm.xml'.format(str(sid).zfill(5))))
+#         # seq = [ <list> joint names, <list> joint positions] of length (44, 44*T)
+#         # all_j_names, mmm_seq = kitml_utils.parse_motions(fp)[0]
+#         # all_j_names, mmm_dict = mmm.parse_motions(fp)[0]
+#         # seq = fill_xml_jpos(all_j_names, mmm_seq)
+#         # jnames, root_pos, root_rot, values, joint_dict = mmm.mmm2csv(fp)
 
-        # Normalize by root position in case it's not already:
-        seq = xyz_data - np.transpose(root_pos.numpy(), axes=(1,0,2)) # seq = (T, J, 3)
+#         # Get joint position data: (T, J=21, 3)
+#         K = d.KITMocap(path2data=kitml_fol_p)
+#         xyz_data, skel_obj, joints, root_pos, root_rot = K.mmm2quat(fp)
 
-        # (J, T, 3) --> (T, J, 3)
-        # seq = values.transpose(1, 0, 2)
+#         # Normalize by root position in case it's not already:
+#         seq = xyz_data - np.transpose(root_pos.numpy(), axes=(1,0,2)) # seq = (T, J, 3)
 
-        # TODO: Assign root position value. For now, copy over Pelvis values.
-        # jnames = ['root'] + jnames
-        # seq = np.concatenate((seq[:, 0:1, :], seq), axis=1)
-        # Assume root position = (0, 0, 0)
-        # T, J, _ = seq.shape
-        # seq = np.concatenate((np.zeros((T, 1, 3)), seq), axis=1)
+#         # (J, T, 3) --> (T, J, 3)
+#         # seq = values.transpose(1, 0, 2)
 
-        # Make sure that joints are in the expected order
-        # plt_jorder = get_kitml_joint_names()
-        # new_idxs = []
-        # for j in plt_jorder:
-        #   new_i = jnames.index(j)
-        #   new_idxs.append(new_i)
-        # seq = seq[:, np.array(new_idxs), :]
+#         # TODO: Assign root position value. For now, copy over Pelvis values.
+#         # jnames = ['root'] + jnames
+#         # seq = np.concatenate((seq[:, 0:1, :], seq), axis=1)
+#         # Assume root position = (0, 0, 0)
+#         # T, J, _ = seq.shape
+#         # seq = np.concatenate((np.zeros((T, 1, 3)), seq), axis=1)
 
-        # Viz. "values" (joint positions?)
-        viz_seq(seq, './test_viz/{}_orig_format'.format(sid), 'kitml', debug=True)
+#         # Make sure that joints are in the expected order
+#         # plt_jorder = get_kitml_joint_names()
+#         # new_idxs = []
+#         # for j in plt_jorder:
+#         #   new_i = jnames.index(j)
+#         #   new_idxs.append(new_i)
+#         # seq = seq[:, np.array(new_idxs), :]
+
+#         # Viz. "values" (joint positions?)
+#         viz_seq(seq, './test_viz/{}_orig_format'.format(sid), 'kitml', debug=True)
 
 #specific_skeleton_viz----------------------------------------------------------
 
 # def viz_kitml_seq():
 #     '''
 #     '''
+#     import packages.Complextext2animation.src.data as d
 #     kitml_fol_p = '/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/dataset/kit-mocap/'
 
 #     # List of seq ids to viz.
@@ -776,35 +779,50 @@ def debug_viz_kitml_seq():
 
 #cluster2vid--------------------------------------------------------------------
 
-def cluster2vid(clusters_idx, sk_type, proxy_center_info_path, data_dir, data_name, frames_dir, support_frames_count=20):
+def cluster2vid(clusters_idx, sk_type, proxy_center_info_path, data_path, frames_dir, gt_downsample_ratio=0.25, fps=25.0, duration=0.5, force=False):
     '''
-    clusters_idx : cluster indices to visualize
-    sk_type (str): {'kitml', 'coco17'}
-    proxy_center_info_path : path to pickled Dataframe containing sequence name and frame of proxy centers
-    data_dir : path to folder containing pickled xyz data 
-    data_name : name of the data used, subset or not
-    frames_dir : Path to root folder that will contain frames folder
-    support_frames_count : maximum number of frames before and after the one corresponding proxy center, defaults to 60
-
+    Args:
+        clusters_idx : cluster indices to visualize
+        sk_type (str): {'kitml', 'coco17'}
+        proxy_center_info_path : path to pickled Dataframe containing sequence name and frame of proxy centers or the DataFrame itself
+        data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
+                    or the GT dictionary itself
+        frames_dir : Path to root folder that will contain frames folder
+        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 0.25 (25/100 for kitml). 
+        fps (float): Desired frame rate. Default = 25.0 (25 for kitml)
+        duration : the duration (in secs) for which the cluster visualization should last
+        force : If True, visualize all clusters overwriting existing ones. Defaults to False, visualizing only those whose .mp4 videos do not already exist.
+        
     Return:
         None. Path of mp4 video: frames_dir/{cluster_idx}/video.mp4
     '''
-
+    # from packages.acton.src.data.dataset.loader import KITDataset
+    # pdb.set_trace()
+    
+    #get GT keypoints to visualize
+    if type(data_path) == dict:
+        ground_truth_data = data_path
+    else:
+        with open(data_path, 'rb') as handle:
+            ground_truth_data = pickle.load(handle)
+    # support frames on each side of center frame
+    gt_fps = fps/gt_downsample_ratio
+    support_frames_count = int((gt_fps*duration-1)/2) #-1 for center frame
+    
     #get proxy center info
-    proxy_center_info = pd.read_pickle(proxy_center_info_path)
+    if type(proxy_center_info_path) == pd.DataFrame:
+        proxy_center_info = proxy_center_info_path
+    else:
+        proxy_center_info = pd.read_pickle(proxy_center_info_path)
     center_frames_idx, seq_names = proxy_center_info.loc[clusters_idx, 'frame_index'], proxy_center_info.loc[clusters_idx, 'seq_name']
 
-    #get keypoints to visualize
-    #TODO : change the path to official loader
-    d = KITDataset(data_dir, data_name)
-    procs = []
+    seqs = []
     for cluster_idx, center_frame_idx, seq_name in tqdm(zip(clusters_idx, center_frames_idx, seq_names), desc='clusters', total = len(seq_names)):
-        seq_complete = d.load_keypoint3d(seq_name)
+        seq_complete = ground_truth_data[seq_name]
         seq = seq_complete[max(0, center_frame_idx-support_frames_count):min(seq_complete.shape[0], center_frame_idx+support_frames_count+1)]
-        
-        #visualize the required fragment of complete sequence
-        procs.append(viz_seq(seq, ospj(frames_dir, str(cluster_idx)), sk_type, debug=False))
-    _ = [p.join() for p in tqdm([p for p in procs if p is not None], 'generating vids')]
+        seqs.append(downsample(seq, gt_downsample_ratio))
+    #visualize the required fragment of complete sequence
+    viz_seq([str(i) for i in clusters_idx], seqs, ospj(frames_dir, str(cluster_idx)), sk_type, fps, force)
 
 #-------------------------------------------------------------------------------
 
@@ -893,19 +911,20 @@ def downsample(motion, ratio):
 #reconstruction methods-----------------------------------------------------------------
 #TODO: reconstruct for multiple filters at once
 
-def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_upsample_ratio=1.0, gt_downsample_ratio=1.0, fps=None, frames_dir=None, viz_names=[], force=False, **kwargs):
+def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_upsample_ratio=2.0, gt_downsample_ratio=0.25, fps=25.0, frames_dir=None, viz_names=None, force=False, **kwargs):
     '''
     Args:
         recons_type (str) : reconstruction technique to be used
         filters (List[str]) : smoothing filters to apply on reconstructions. Use string 'none' for no filter.
-        seq_names : name of video sequences to reconstruct
+        seq_names (List[str]): name of video sequences to reconstruct
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
+                    or the GT dictionary itself
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}        
-        recons_upsample_ratio : Float(desired_fps/recons_fps), should be >=1.0. Default = 1.0. 
-        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 1.0. 
-        fps (float): Output frame rate.
+        recons_upsample_ratio : Float(desired_fps/recons_fps), should be >=1.0. Default = 2.0 (25/12.5 for kitml). 
+        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 0.25 (25/100 for kitml). 
+        fps (float): Output frame rate. Default = 25.0 (25 for kitml)
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
-        viz_names : name of video sequences to visualize
+        viz_names (List[str]): name of video sequences to visualize. Defaults to 'seq_names' argument. Pass [] to not visualize any.  
         force : If True, visualize all viz_names overwriting existing ones. Defaults to False, visualizing only those whose .mp4 videos do not already exist.
         **kwargs: Must contain
             if recons_type == 'naive_no_rep' or 'naive':
@@ -919,18 +938,21 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
 
     assert recons_upsample_ratio>=1.0, "recons_upsample_ratio cannot be less than 1"   
     assert gt_downsample_ratio<=1.0, "gt_downsample_ratio cannot be greater than 1"   
-    if fps is None:
-        if sk_type == 'kitml':
-            fps = 25.0 
-        elif sk_type == 'coco17':
-            fps = 60.0 
-        else:
-            fps = 30.0
+    # if fps is None:
+    #     if sk_type == 'kitml':
+    #         fps = 25.0 
+    #     elif sk_type == 'coco17':
+    #         fps = 60.0 
+    #     else:
+    #         fps = 30.0
     
     print('----------------------------------------------------')
     # print(recons_type+'_reconstruction')
-    with open(data_path, 'rb') as handle:
-        ground_truth_data = pickle.load(handle)
+    if type(data_path) == dict:
+        ground_truth_data = data_path
+    else:
+        with open(data_path, 'rb') as handle:
+            ground_truth_data = pickle.load(handle)
     gt = [ground_truth_data[name][:5000, :, :] for name in seq_names]
     gt = [downsample(keypoint, gt_downsample_ratio) for keypoint in gt]
     
@@ -991,10 +1013,14 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
         print(f'{recons_type}_{filter} mpjpe: ', mpjpe_mean)
 
         if frames_dir is not None:
+            if viz_names is None:
+                viz_names = seq_names
+
             if filter == 'none':
                 frames_dir_temp = frames_dir / f"{recons_type}"
             else:
                 frames_dir_temp = frames_dir / f"{recons_type}_{filter}"
+            
             viz_seq(viz_names, recons, frames_dir_temp, sk_type, fps, force)
         print('----------------------------------------------------')
     print('----------------------------------------------------')
@@ -1006,7 +1032,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
 
 
 #TODO: naive_no_rep_reconstruction implementation
-def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path):
+def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path, verbose=True):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
@@ -1017,13 +1043,14 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
     Retruns:
         The reconstructed keypoints
     '''
+    assert len(seq_names) == len(contiguous_cluster_seqs)
 
     reconstructed_keypoints = []
     faulty = []
 
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
-    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive_no_rep reconstruction', total=len(seq_names)) as pbar:
+    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive_no_rep reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
         for name, contiguous_cluster_seq in pbar:
             pbar.set_description(f'naive_no_rep reconstruction - {name}')
             reconstructed_keypoint = []
@@ -1060,7 +1087,7 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
 
     return reconstructed_keypoints, faulty
 
-def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path):
+def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path, verbose=True):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
@@ -1071,11 +1098,11 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
     Retruns:
         The reconstructed keypoints
     '''
-
+    assert len(seq_names) == len(contiguous_cluster_seqs)
     reconstructed_keypoints = []
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
-    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive reconstruction', total=len(seq_names)) as pbar:
+    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
         for name, contiguous_cluster_seq in pbar:
             pbar.set_description(f'naive reconstruction - {name}')
             reconstructed_keypoint = []
@@ -1108,7 +1135,7 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
 
     return reconstructed_keypoints
 
-def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_path):
+def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_path, verbose=True):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
@@ -1123,23 +1150,24 @@ def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_
 
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
     reconstructed_keypoints = []
-    with tqdm(zip(seq_names, cluster_seqs), desc='very_naive reconstruction', total=len(seq_names)) as pbar:
+    with tqdm(zip(seq_names, cluster_seqs), desc='very_naive reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
         for name, cluster_seq in pbar:
             pbar.set_description(f'very_naive reconstruction - {name}')
             reconstructed_keypoints.append(np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]))
 
     return reconstructed_keypoints
 
-def ground_truth_construction(seq_names, data_path, sk_type, gt_downsample_ratio, fps, frames_dir, force):
+def ground_truth_construction(seq_names, data_path, sk_type='kitml', gt_downsample_ratio=0.25, fps=25.0, frames_dir=None, force=False):
     '''
     Constructs original video from ground truth sequences, which are used as reference for mpjpe calculation.
 
     Args:
         seq_names : name of video sequences to construct and visualize ground truth
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
+                    or the GT dictionary itself
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
-        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 1.0.
-        fps (float): Output frame rate.
+        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 0.25 (25/100 for kitml).
+        fps (float): Output frame rate. Default = 25.0 (25 for kitml).
         frames_dir : Path to root folder that will contain frames folder for visualization.
         force (Bool): If True visualizes all sequences even if already exists in frames_dir. 
                     Defaults to False, only visualizes incomplete or un-visualized sequences. 
@@ -1150,8 +1178,11 @@ def ground_truth_construction(seq_names, data_path, sk_type, gt_downsample_ratio
     assert frames_dir is not None, "path to store gt visualizations absent"
     assert gt_downsample_ratio<=1.0, "gt_downsample_ratio cannot be greater than 1"
 
-    with open(data_path, 'rb') as handle:
-        ground_truth_data = pickle.load(handle)
+    if type(data_path) == dict:
+        ground_truth_data = data_path
+    else:
+        with open(data_path, 'rb') as handle:
+            ground_truth_data = pickle.load(handle)
 
     print('----------------------------------------------------')
     #TODO: remove 5000 limit
@@ -1164,6 +1195,8 @@ def ground_truth_construction(seq_names, data_path, sk_type, gt_downsample_ratio
 
 #-------------------------------------------------------------------------------
 if __name__ == '__main__':
+    # from packages.acton.src.data.dataset.loader import KITDataset
+
     # viz_kitml_seq()
     # viz_aistpp_seq()
     
@@ -1178,6 +1211,7 @@ if __name__ == '__main__':
 
     data_dir = '/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/'
     data_name = 'xyz'
+    from packages.acton.src.data.dataset.loader import KITDataset
     d = KITDataset(data_dir, data_name)
 
     # seq_names=['02654']
@@ -1245,4 +1279,3 @@ if __name__ == '__main__':
     # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_no_rep_sfilter')
     naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
     print('spline filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
-

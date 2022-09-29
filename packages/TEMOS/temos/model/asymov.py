@@ -10,7 +10,7 @@ from torch import Tensor
 from omegaconf import DictConfig
 from temos.model.utils.tools import remove_padding_asymov, remove_padding
 
-from temos.model.metrics.compute_asymov import Perplexity, ReconsMetrics
+from temos.model.metrics.compute_asymov import Perplexity
 from torchmetrics import MetricCollection, Accuracy, BLEUScore, SumMetric
 from temos.model.base import BaseModel
 from torch.distributions.distribution import Distribution
@@ -21,7 +21,7 @@ class Asymov(BaseModel):
                  motionencoder: DictConfig,
                  motiondecoder: DictConfig,
                  losses: DictConfig,
-                 recons_metrics: DictConfig,
+                 metrics: DictConfig,
                  optim: DictConfig,
                 #  transforms: DictConfig,
                  vocab_size: int,
@@ -55,8 +55,8 @@ class Asymov(BaseModel):
                                               ),
                               'bleu_mw2mw': BLEUScore(),
                               'bleu_text2mw': BLEUScore(),
-                              'ppl_mw2mw': Perplexity(),
-                              'ppl_text2mw': Perplexity(),
+                              'ppl_mw2mw': Perplexity(vocab_size),
+                              'ppl_text2mw': Perplexity(vocab_size),
                              }
         self.val_metrics = {
                               'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
@@ -67,11 +67,11 @@ class Asymov(BaseModel):
                                               ),
                               'bleu_mw2mw': BLEUScore(),
                               'bleu_text2mw': BLEUScore(),
-                              'ppl_mw2mw': Perplexity(),
-                              'ppl_text2mw': Perplexity(),
-                              'mpjpe_text2mw': instantiate(recons_metrics)
+                              'ppl_mw2mw': Perplexity(vocab_size),
+                              'ppl_text2mw': Perplexity(vocab_size),
+                              'mpjpe_text2mw': instantiate(metrics)
                              }
-    
+
         self.metrics={key: getattr(self, f"{key}_metrics") for key in ["train", "val"]}
 
         # If we want to overide it at testing time
