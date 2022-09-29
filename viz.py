@@ -1211,6 +1211,7 @@ if __name__ == '__main__':
 
     data_dir = '/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/'
     data_name = 'xyz'
+    from packages.acton.src.data.dataset.loader import KITDataset
     d = KITDataset(data_dir, data_name)
 
     # seq_names=['02654']
