@@ -6,16 +6,17 @@ hydra:
 seed: 1234
 
 logger_level: INFO
-folder: ???
 
 split: gtest
+l_samples: ???
 
 mean: false
 number_of_samples: 1
 fact: 1
 
-ckpt_name: last.ckpt
-last_ckpt_path: ${get_last_checkpoint:${folder},${ckpt_name}}
+ckpt_p: ???
+
+viz_dir: ???
 
 # only used if trained with kit-amass-rot
 # so with smpl rotations
@@ -36,6 +37,5 @@ defaults:
   - override hydra/job_logging: custom
   - override hydra/hydra_logging: custom
   - _self_
-
 
 data.batch_size: 1
