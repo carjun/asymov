@@ -1032,7 +1032,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
 
 
 #TODO: naive_no_rep_reconstruction implementation
-def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path):
+def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path, verbose=True):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
@@ -1050,7 +1050,7 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
 
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
-    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive_no_rep reconstruction', total=len(seq_names)) as pbar:
+    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive_no_rep reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
         for name, contiguous_cluster_seq in pbar:
             pbar.set_description(f'naive_no_rep reconstruction - {name}')
             reconstructed_keypoint = []
@@ -1087,7 +1087,7 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
 
     return reconstructed_keypoints, faulty
 
-def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path):
+def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path, verbose=True):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
@@ -1102,7 +1102,7 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
     reconstructed_keypoints = []
     cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
-    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive reconstruction', total=len(seq_names)) as pbar:
+    with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
         for name, contiguous_cluster_seq in pbar:
             pbar.set_description(f'naive reconstruction - {name}')
             reconstructed_keypoint = []
@@ -1135,7 +1135,7 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
 
     return reconstructed_keypoints
 
-def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_path):
+def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_path, verbose=True):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
@@ -1150,7 +1150,7 @@ def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_
 
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
     reconstructed_keypoints = []
-    with tqdm(zip(seq_names, cluster_seqs), desc='very_naive reconstruction', total=len(seq_names)) as pbar:
+    with tqdm(zip(seq_names, cluster_seqs), desc='very_naive reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
         for name, cluster_seq in pbar:
             pbar.set_description(f'very_naive reconstruction - {name}')
             reconstructed_keypoints.append(np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]))

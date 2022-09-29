@@ -18,6 +18,7 @@ defaults:
   - motionencoder: asymov
   - motiondecoder: asymov
   - losses: asymov
+  - metrics: asymov_recons
   - optim: adamw
   - /model/losses/function/crossEntropy@func_recons
   - /model/losses/function/smoothL1@func_latent

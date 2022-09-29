@@ -10,7 +10,7 @@ from torch import Tensor
 from omegaconf import DictConfig
 from temos.model.utils.tools import remove_padding_asymov, remove_padding
 
-from temos.model.metrics import ComputeMetrics
+from temos.model.metrics.compute_asymov import Perplexity
 from torchmetrics import MetricCollection, Accuracy, BLEUScore, SumMetric
 from temos.model.base import BaseModel
 from torch.distributions.distribution import Distribution
@@ -21,6 +21,7 @@ class Asymov(BaseModel):
                  motionencoder: DictConfig,
                  motiondecoder: DictConfig,
                  losses: DictConfig,
+                 metrics: DictConfig,
                  optim: DictConfig,
                 #  transforms: DictConfig,
                  vocab_size: int,
@@ -40,12 +41,13 @@ class Asymov(BaseModel):
 
         self._losses = MetricCollection({split: instantiate(losses, vae=vae,
                                                             _recursive_=False)
-                                         for split in ["losses_train", "losses_test", "losses_val"]})
-        self.losses = {key: self._losses["losses_" + key] for key in ["train", "test", "val"]}
+                                         for split in ["losses_train", "losses_val"]})
+        self.losses = {key: self._losses["losses_" + key] for key in ["train", "val"]}
 
         # self.metrics = ComputeMetrics()
         #TODO: can refactor
-        self.train_metrics = {'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
+        self.train_metrics = {
+                              'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
                                               ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
                                               ),
                               'acc_text2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
@@ -53,10 +55,11 @@ class Asymov(BaseModel):
                                               ),
                               'bleu_mw2mw': BLEUScore(),
                               'bleu_text2mw': BLEUScore(),
-                              'ppl_mw2mw': SumMetric(),
-                              'ppl_text2mw': SumMetric(),
+                              'ppl_mw2mw': Perplexity(vocab_size),
+                              'ppl_text2mw': Perplexity(vocab_size),
                              }
-        self.val_metrics = {'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
+        self.val_metrics = {
+                              'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
                                               ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
                                               ),
                               'acc_text2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
@@ -64,10 +67,12 @@ class Asymov(BaseModel):
                                               ),
                               'bleu_mw2mw': BLEUScore(),
                               'bleu_text2mw': BLEUScore(),
-                              'ppl_mw2mw': SumMetric(),
-                              'ppl_text2mw': SumMetric(),
+                              'ppl_mw2mw': Perplexity(vocab_size),
+                              'ppl_text2mw': Perplexity(vocab_size),
+                              'mpjpe_text2mw': instantiate(metrics)
                              }
-        self.metrics={'train':self.train_metrics, 'val':self.val_metrics}
+
+        self.metrics={key: getattr(self, f"{key}_metrics") for key in ["train", "val"]}
 
         # If we want to overide it at testing time
         self.sample_mean = False
@@ -77,10 +82,10 @@ class Asymov(BaseModel):
 
     # Forward: text => motion
     def forward(self, batch: dict) -> List[Tensor]:
-        probs_from_text = self.text_to_motion_forward(batch["text"],
+        logits_from_text = self.text_to_motion_forward(batch["text"],
                                                            batch["length"])
 
-        return remove_padding_asymov(probs_from_text, batch["length"])
+        return remove_padding_asymov(logits_from_text, batch["length"])
 
     def sample_from_distribution(self, distribution: Distribution, *,
                                  fact: Optional[bool] = None,
@@ -146,14 +151,14 @@ class Asymov(BaseModel):
         ret = self.text_to_motion_forward(batch["text"],
                                           batch["length"],
                                           return_latent=True)
-        probs_from_text, latent_from_text, distribution_from_text = ret
+        logits_from_text, latent_from_text, distribution_from_text = ret
         #[Batch size, Classes, Frames]
 
         # Encode the motion/decode to a motion
         ret = self.motion_to_motion_forward(batch["motion_words"],
                                             batch["length"],
                                             return_latent=True)
-        probs_from_motion, latent_from_motion, distribution_from_motion = ret
+        logits_from_motion, latent_from_motion, distribution_from_motion = ret
         #[Batch size, Classes, Frames]
 
         # GT data
@@ -170,8 +175,8 @@ class Asymov(BaseModel):
             distribution_ref = None
 
         # Compute the losses
-        loss = self.losses[split].update(ds_text=probs_from_text,
-                                         ds_motion=probs_from_motion,
+        loss = self.losses[split].update(ds_text=logits_from_text,
+                                         ds_motion=logits_from_motion,
                                          ds_ref=motion_word_ref,
                                          lat_text=latent_from_text,
                                          lat_motion=latent_from_motion,
@@ -183,22 +188,22 @@ class Asymov(BaseModel):
             raise ValueError("Loss is None, this happend with torchmetrics > 0.7")
 
         ### Compute the metrics
-        preds_from_text = probs_from_text.detach().softmax(dim=1)
-        preds_from_motion = probs_from_motion.detach().softmax(dim=1)
-        bs, _, frames = preds_from_text.shape
-        # assert bs == preds_from_motion.shape[0] and frames == preds_from_motion.shape[2], 'train and val predictions shape mismatch'
+        probs_from_text = logits_from_text.detach().softmax(dim=1)
+        probs_from_motion = logits_from_motion.detach().softmax(dim=1)
+        bs, _, frames = probs_from_text.shape
+        # assert bs == probs_from_motion.shape[0] and frames == probs_from_motion.shape[2], 'train and val predictions shape mismatch'
         target = motion_word_ref.detach()
 
         # adding padding class to preds for compatibility with padded target motion words for Accuracy
-        preds_from_text = torch.cat((preds_from_text, preds_from_text.new_zeros(bs, 1, frames)), dim=1)
-        preds_from_motion = torch.cat((preds_from_motion, preds_from_motion.new_zeros(bs, 1, frames)), dim=1)
+        probs_from_text = torch.cat((probs_from_text, probs_from_text.new_zeros(bs, 1, frames)), dim=1)
+        probs_from_motion = torch.cat((probs_from_motion, probs_from_motion.new_zeros(bs, 1, frames)), dim=1)
 
-        self.metrics[split]['acc_text2mw'].update(preds_from_text, target)
-        self.metrics[split]['acc_mw2mw'].update(preds_from_motion, target)
+        self.metrics[split]['acc_text2mw'].update(probs_from_text, target)
+        self.metrics[split]['acc_mw2mw'].update(probs_from_motion, target)
 
         # predicted, target motion word ids without padding for BLEU
-        pred_mw_from_text = remove_padding(torch.argmax(preds_from_text, dim=1).int(), batch["length"])
-        pred_mw_from_motion = remove_padding(torch.argmax(preds_from_motion, dim=1).int(), batch["length"])
+        pred_mw_from_text = remove_padding(torch.argmax(probs_from_text, dim=1).int(), batch["length"])
+        pred_mw_from_motion = remove_padding(torch.argmax(probs_from_motion, dim=1).int(), batch["length"])
         pred_mw_sents_from_text = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_from_text]
         pred_mw_sents_from_motion = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_from_motion]
         target_mw_sents = [[" ".join(map(str, mw.int().tolist()))] for mw in remove_padding(target, batch["length"])]
@@ -206,15 +211,10 @@ class Asymov(BaseModel):
         self.metrics[split]['bleu_text2mw'].update(pred_mw_sents_from_text, target_mw_sents)
         self.metrics[split]['bleu_mw2mw'].update(pred_mw_sents_from_motion, target_mw_sents)
 
-        # Compute $$\sum PP}L(X)$$ where X = single sequence.
-        # Since target = 1-hot, we use CE(.) to compute -log p_{gt}
-
-        # TODO: Define somewhere else
-        CE = nn.CrossEntropyLoss(reduction='none')
-        # Shape (b_sz, T). Result is CE_t for each time-step t=[1:T]
-        ce_tensor = CE(probs_from_motion, target)
-        ppl = torch.exp(ce_tensor.mean(dim=-1))  # Sum CE_t for all t=[1:T]
-        self.metrics[split]['ppl_mw2mw'].update(ppl.mean().cpu())
+        self.metrics[split]['ppl_text2mw'].update(logits_from_text.detach().cpu(), target.cpu())
+        self.metrics[split]['ppl_mw2mw'].update(logits_from_motion.detach().cpu(), target.cpu())
+        if split == "val":
+            self.metrics[split]['mpjpe_text2mw'].update(batch['keyid'], pred_mw_from_text)
 
         return loss
 
@@ -224,21 +224,16 @@ class Asymov(BaseModel):
         dico = {losses.loss2logname(loss, split): value.item()
                 for loss, value in loss_dict.items()}
 
-        #Accuracy and BLEU
+        #Accuracy, BLEU and Perplexity
         metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items()}
-        # Perplexity (geometric mean over batch)
-        metrics_dict[f"Metrics/ppl_text2mw/{split}"] = torch.exp(loss_dict['recons_text2mw'])
-        metrics_dict[f"Metrics/ppl_mw2mw/{split}"] = torch.exp(loss_dict['recons_mw2mw'])
         dico.update(metrics_dict)
 
         # if split == "val":
-        #     # pdb.set_trace()
-        #     # metrics_dict = self.metrics.compute()
-        #     # metrics_dict = {key:metrics_dict[key] for key in metrics_dict.keys() if key not in ['APE_joints', 'APE_pose', 'AVE_joints', 'AVE_pose']}
-        #     # dico.update({f"Metrics/{metric}": value for metric, value in metrics_dict.items()})
-        #     accuracy = self.metrics.compute()
-        #     dico.update({"Metrics/Accuracy/train": accuracy})
+            # pdb.set_trace()
+            # metrics_dict = self.metrics.compute()
+            # metrics_dict = {key:metrics_dict[key] for key in metrics_dict.keys() if key not in ['APE_joints', 'APE_pose', 'AVE_joints', 'AVE_pose']}
+            # dico.update({f"Metrics/{metric}": value for metric, value in metrics_dict.items()})
 
         dico.update({"epoch": float(self.trainer.current_epoch),
-                    "step": float(self.trainer.current_epoch)})
+                    "step": float(self.trainer.global_step)})
         self.log_dict(dico)
