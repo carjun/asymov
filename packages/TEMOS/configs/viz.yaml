@@ -10,7 +10,7 @@ cluster_data: xyz  #{tan, tan64, xyz}
 
 datapath: ${path}/datasets  # not /kit
 splitpath: ${path}/datasets/kit-splits
-split: recons
+split: ???
 sk_type: kitml
 
 data_fnames:
@@ -28,7 +28,7 @@ approaches:
     gt: false 
     gt_clid: false 
     # If you want viz., give ckpt path below
-    temos_bl: false
+    temos_bl: false  # pretrained_models/kit-mmm-xyz/3l49g7hv
     asymov_temos: outputs/kit-xyz-motion-word/asymov_full_run_1/uoon5wnl/checkpoints/viz-epoch-144.ckpt
 
 rec_type: ['naive_no_rep', 'naive']
