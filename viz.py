@@ -400,6 +400,7 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
             elif sk_type is 'nturgbd', then assume:
                 1. no translation.
                 2. Size = (# frames, 25, 3)
+            elif sk_type == 'kitml_temos'
         folder_p (str): Path to root folder containing visualized frames.
             Frames are dumped to the path: folder_p/frames/*.jpg
         radius (float): Space around the subject?
@@ -417,7 +418,7 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
         kin_chain = get_smpl_skeleton()  # NOTE that hands are skipped.
         # Reshape flat pose features into (frames, joints, (x,y,z)) (skip trans)
         seq = seq[:, 3:].reshape(-1, len(joint_names), 3).cpu().detach().numpy()
-    elif sk_type=='kit' or sk_type=='kitml':
+    elif 'kit' in sk_type:
         joint_names = get_kitml_joint_names()
         kin_chain = get_kitml_skeleton()
         # seq[..., 1] = -seq[..., 1]
@@ -437,13 +438,25 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     colors = get_joint_colors(joint_names)
     labels = [(joint_names[jidx[0]], joint_names[jidx[1]]) for jidx in kin_chain]
 
+    # TODO: Handle properly
     # xroot, yroot, zroot = 0.0, 0.0, 0.0
+
     if sk_type=='coco17':
         xroot, yroot, zroot = 0.5*(seq[0,11] + seq[0,12])
         seq=seq-np.array([[[xroot, yroot, zroot]]])
         seq=seq/np.max(np.abs(seq))
+
+    elif sk_type == 'kitml_temos':        
+        # !inital translation. Subtract all frames by frame 0's pelvis.
+        seq -= seq[0, 11]
+        # !global translation. Subtract all frames by corresponding pelvis.
+        seq -= seq[:,11:12,:]
+        # x, y, z --> [-1, 1] 
+        # seq /= np.max(np.abs(seq), axis=(0,1))  # Normalize each dim. separately.
+        seq /= np.max(np.abs(seq))  # Normalize all dim. uniformly.
     else:
         xroot, yroot, zroot = seq[0, 0, 0], seq[0, 0, 1], seq[0, 0, 2]
+
     # seq = seq - seq[0, :, :]
 
     # Change viewing angle so that first frame is in frontal pose
@@ -457,15 +470,18 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     # Viz. skeleton for each frame
     # for t in tqdm(range(seq.shape[0]), desc='frames', position=1, leave=False):
     for t in range(seq.shape[0]):
-        # pdb.set_trace()
         # Fig. settings
         fig = plt.figure(figsize=(7, 6)) if debug else \
               plt.figure(figsize=(5, 5))
         ax = fig.add_subplot(111, projection='3d')
 
-        xroot, yroot, zroot = 0.5*(seq[t,11] + seq[t,12])
-        # seq[t] = seq[t] - [xroot, yroot, zroot]
+        # TODO: Handle this properly        
+        if sk_type != 'kitml_temos':
+            xroot, yroot, zroot = 0.5*(seq[t,11] + seq[t,12])
+        elif sk_type == 'kitml' or sk_type=='kit': 
+            xroot, yroot, zroot = seq[t,11]
 
+        # seq[t] = seq[t] - [xroot, yroot, zroot]
 
         # More figure settings
         ax.set_title(action)
@@ -492,6 +508,7 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
 
         # ax.view_init(75, az)
         # ax.view_init(elev=20, azim=90+az)
+
         if sk_type == 'coco17':
             ax.view_init(elev=-90, azim=90)
         else:
@@ -566,7 +583,7 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
                     Defaults to False, only visualizes incomplete or un-visualized sequences.
 
     Return:
-        None. Path of mp4 video: folder_p/video.mp4
+        None. Path of mp4 video: folder_p/{seq_name}.mp4
     '''
     # pdb.set_trace()
 
@@ -589,18 +606,16 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
             viz_names.append(name)
     # print(f'Sequences to visualize: {len(viz_names)}')
 
-    #TODO: take radius for visualizations as a hydra argument
     # joint2img_procs = []
     # img2vid_procs = []
     # with tqdm(zip(viz_names, keypoints), desc='joint2img', total=len(viz_names), position=0) as pbar:
     #     for name, keypoint in pbar:
     #         pbar.set_description(desc=f'joint2img {name}')
     #         folder_p = ospj(frames_dir, name)
-
     #         viz_skeleton(keypoint, folder_p, sk_type, 1.2)
-    #         # joint2img_proc = Process(target=viz_skeleton, args=(keypoint, folder_p, sk_type, 1.2))
-    #         # joint2img_proc.start()
-    #         # joint2img_procs.append(joint2img_proc)
+            # joint2img_proc = Process(target=viz_skeleton, args=(keypoint, folder_p, sk_type, 1.2))
+            # joint2img_proc.start()
+            # joint2img_procs.append(joint2img_proc)
 
     # with tqdm(enumerate(viz_names), desc='img2vid', total=len(viz_names), position=0) as pbar:
     #     for i, name in pbar:
@@ -621,7 +636,7 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     #     with tqdm(total=n) as pbar:
     #         _ = [pbar.update() for _ in p.imap_unordered(partial(joint2vid, sk_type=sk_type, frames_dir=frames_dir, fps=fps), iter)]
 
-    #option 2: new process for each seq_name for each operation (with Pool, sequential operations)
+    # option 2: new process for each seq_name for each operation (with Pool, sequential operations)
     n = len(viz_names)
     folders_p = [ospj(frames_dir, name) for name in viz_names]
     with Pool(cpu_count()*2) as p:
