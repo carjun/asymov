@@ -87,6 +87,23 @@ def write_pickle(data, filepath, overwrite=False):
 	return 1
 
 
+def write_textf(data, filepath, overwrite=False):
+	'''Write the string contents into text file
+	'''
+	# TODO: Test
+
+	# Make sure the file directory exists
+	_dir_exists(filepath)
+
+	# Make sure that the file doesn't already exist
+	_file_exists(filepath, overwrite)
+
+	# Save text file to disk at 'filepath'
+	with open(filepath, 'w') as outfile:
+		outfile.write(data)
+	return 1
+
+
 def int2padstr(data, strlen):
 	'''Given a positive int (or float or string of an int), return a
 0-padded string of desired length.
