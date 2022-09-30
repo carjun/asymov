@@ -198,7 +198,6 @@ class Viz:
         # Load "latest ckpt" from folder spec. in viz.yaml. Overwrite TEMOS's sample cfg.
         folder = Path(self.cfg.path, self.cfg.approaches.temos_bl)
 
-        '''
         # Create temp file in kit-splits that sample.py can load.
         file_p = Path('packages/TEMOS/datasets/kit-splits', str(uuid.uuid4()))
         utils.write_textf('\n'.join(self.l_samples), file_p)
@@ -210,8 +209,6 @@ class Viz:
         cmd = f'HYDRA_FULL_ERROR=1 python sample.py {sample_args}'
         print(f'Run: ', cmd)
         os.system(cmd)
-        '''
-        file_p = Path('packages/TEMOS/datasets/kit-splits', '0d6f926b-52e9-4786-a1ae-1bd7dcf8d592')
 
         # Destination npy files: 
         npy_folder = folder / 'samples' / f'neutral_{file_p.name}'
