@@ -175,15 +175,13 @@ class Viz:
         ckpt_p = Path(self.cfg.path, self.cfg.approaches.asymov_temos)
 
         # TODO: Below code doesn't run
-        # execute
-        cs_str = ','.join(self.l_samples)
-        args = f'ckpt_p={ckpt_p} l_samples=[{cs_str}] viz_dir={self.cfg.viz_dir}'
-        cmd = f'HYDRA_FULL_ERROR=1 python packages/TEMOS/sample_asymov_for_viz.py {args}'
-        print('Running: ', cmd)
+        sample_args = f'folder={ckpt_p.parent.parent} split={self.split_file_p.name} ckpt_name={ckpt_p.name}'
+        os.chdir('packages/TEMOS')
+        cmd = f'HYDRA_FULL_ERROR=1 python sample_asymov.py {sample_args}'
+        print(f'Run: ', cmd)
         pdb.set_trace()
-
         os.system(cmd)
-
+        
         # Relies on cfg at configs/sample_asymov.yaml
 
 
@@ -197,21 +195,16 @@ class Viz:
 
         # Load "latest ckpt" from folder spec. in viz.yaml. Overwrite TEMOS's sample cfg.
         folder = Path(self.cfg.path, self.cfg.approaches.temos_bl)
-
-        # Create temp file in kit-splits that sample.py can load.
-        file_p = Path('packages/TEMOS/datasets/kit-splits', str(uuid.uuid4()))
-        utils.write_textf('\n'.join(self.l_samples), file_p)
-        print('Created input seq. list file: ', file_p)
-
+        
         # TEMOS's sampling script saves pred xyz motions as npy's in ${folder}/samples/${split}
-        sample_args = f'folder={folder} split={file_p.name}'
+        sample_args = f'folder={folder} split={self.split_file_p.name}'
         os.chdir('packages/TEMOS')
         cmd = f'HYDRA_FULL_ERROR=1 python sample.py {sample_args}'
         print(f'Run: ', cmd)
         os.system(cmd)
 
         # Destination npy files: 
-        npy_folder = folder / 'samples' / f'neutral_{file_p.name}'
+        npy_folder = folder / 'samples' / f'neutral_{self.split_file_p.name}'
         keypoints = []
         for sid in self.l_samples:
             kp = np.load(f'{npy_folder}/{sid}.npy')
@@ -253,14 +246,15 @@ class Viz:
             seq2clid_df = self._create_seq2clid_df()  # GT cl ids for seqs.
             self.viz_diff_rec_types(seq2clid_df, 'gt_cluster_recon')
 
+        # Create temp file in kit-splits that sample.py can load.
+        # Debug: self.split_file_p = Path('packages/TEMOS/datasets/kit-splits/0d6f926b-52e9-4786-a1ae-1bd7dcf8d592')
+        self.split_file_p = Path('packages/TEMOS/datasets/kit-splits', str(uuid.uuid4()))
+        utils.write_textf('\n'.join(self.l_samples), self.split_file_p)
+        print('Created input seq. list file: ', self.split_file_p)
+        
         # Reconstruct with TEMOS-ASyMov model predictions
         if self.cfg.approaches.asymov_temos:
-            # TODO: Implement the below
-            seq2clid_df = self.sample_temos_asymov()  # Get pred cl ids foj
-            pdb.set_trace()
-
-            # TODO:
-            # self.viz_diff_rec_types(seq2clid_df, 'temos_asymov_recon')
+            self.sample_temos_asymov()  # Get pred cl ids foj
 
         if self.cfg.approaches.temos_bl:
             self.sample_temos_bl()
