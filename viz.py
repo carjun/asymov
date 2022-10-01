@@ -438,20 +438,17 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     colors = get_joint_colors(joint_names)
     labels = [(joint_names[jidx[0]], joint_names[jidx[1]]) for jidx in kin_chain]
 
-    # TODO: Handle properly
-    # xroot, yroot, zroot = 0.0, 0.0, 0.0
-
+    xroot, yroot, zroot = 0.0, 0.0, 0.0
     if sk_type=='coco17':
         xroot, yroot, zroot = 0.5*(seq[0,11] + seq[0,12])
         seq=seq-np.array([[[xroot, yroot, zroot]]])
         seq=seq/np.max(np.abs(seq))
-
-    elif sk_type == 'kitml_temos':        
+    elif sk_type == 'kitml_temos':
         # !inital translation. Subtract all frames by frame 0's pelvis.
         seq -= seq[0, 11]
         # !global translation. Subtract all frames by corresponding pelvis.
         seq -= seq[:,11:12,:]
-        # x, y, z --> [-1, 1] 
+        # x, y, z --> [-1, 1]
         # seq /= np.max(np.abs(seq), axis=(0,1))  # Normalize each dim. separately.
         seq /= np.max(np.abs(seq))  # Normalize all dim. uniformly.
     else:
@@ -475,11 +472,12 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
               plt.figure(figsize=(5, 5))
         ax = fig.add_subplot(111, projection='3d')
 
-        # TODO: Handle this properly        
-        if sk_type != 'kitml_temos':
-            xroot, yroot, zroot = 0.5*(seq[t,11] + seq[t,12])
-        elif sk_type == 'kitml' or sk_type=='kit': 
+        if sk_type == 'kitml_temos':
             xroot, yroot, zroot = seq[t,11]
+        elif 'kit' in sk_type:
+            xroot, yroot, zroot = 0.5*(seq[t,11] + seq[t,12])
+        else:
+            pass  # Do not update root.  # TODO: Verify this.
 
         # seq[t] = seq[t] - [xroot, yroot, zroot]
 
@@ -566,15 +564,18 @@ def write_vid_from_imgs(folder_p, fps):
 #     write_vid_from_imgs(folder_p, fps)
 #     return None
 
+
 def viz_skeleton_mp(seq_folder_p, sk_type, radius):
     return viz_skeleton(*seq_folder_p, sk_type, radius)
 
-def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
+
+def viz_l_seqs(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     '''1. Dumps sequence of skeleton images for the given sequence of joints.
     2. Collates the sequence of images into an mp4 video.
 
     Args:
         seq_names (List(str)): name of sequences to visualize
+        # TODO: Change this
         keypoints (np.array([T, num_joints, 3])): Joint positions for each frame
         frames_dir (str): Path to dir where visualizations will be dumped.
         sk_type (str): {'smpl', 'nturgbd','kitml','coco17'}
@@ -585,8 +586,6 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     Return:
         None. Path of mp4 video: folder_p/{seq_name}.mp4
     '''
-    # pdb.set_trace()
-
     # Delete folder if exists
     if force:
         _ = [shutil.rmtree(ospj(frames_dir, name)) for name in seq_names if osp.exists(ospj(frames_dir, name))]
@@ -596,7 +595,7 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
         for name in seq_names:
             folder_p = ospj(frames_dir, name)
             if osp.exists(folder_p):
-                # TODO: Rename folder
+                # Rename folder
                 if osp.exists(ospj(folder_p, f'{name}.mp4')):
                     # print(f'Video for {folder_p[-5:]} already exists')
                     continue
@@ -604,8 +603,9 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
                     # print('Deleting existing folder ', folder_p)
                     shutil.rmtree(folder_p)
             viz_names.append(name)
-    # print(f'Sequences to visualize: {len(viz_names)}')
+    print(f'Sequences to visualize: {len(viz_names)}')
 
+    # pdb.set_trace()
     # joint2img_procs = []
     # img2vid_procs = []
     # with tqdm(zip(viz_names, keypoints), desc='joint2img', total=len(viz_names), position=0) as pbar:
@@ -613,9 +613,9 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     #         pbar.set_description(desc=f'joint2img {name}')
     #         folder_p = ospj(frames_dir, name)
     #         viz_skeleton(keypoint, folder_p, sk_type, 1.2)
-            # joint2img_proc = Process(target=viz_skeleton, args=(keypoint, folder_p, sk_type, 1.2))
-            # joint2img_proc.start()
-            # joint2img_procs.append(joint2img_proc)
+    #       # joint2img_proc = Process(target=viz_skeleton, args=(keypoint, folder_p, sk_type, 1.2))
+    #       # joint2img_proc.start()
+    #       # joint2img_procs.append(joint2img_proc)
 
     # with tqdm(enumerate(viz_names), desc='img2vid', total=len(viz_names), position=0) as pbar:
     #     for i, name in pbar:
@@ -841,7 +841,7 @@ def cluster2vid(clusters_idx, sk_type, proxy_center_info_path, data_path, frames
         seq = seq_complete[max(0, center_frame_idx-support_frames_count):min(seq_complete.shape[0], center_frame_idx+support_frames_count+1)]
         seqs.append(downsample(seq, gt_downsample_ratio))
     #visualize the required fragment of complete sequence
-    viz_seq([str(i) for i in clusters_idx], seqs, ospj(frames_dir, str(cluster_idx)), sk_type, fps, force)
+    viz_l_seqs([str(i) for i in clusters_idx], seqs, ospj(frames_dir, str(cluster_idx)), sk_type, fps, force)
 
 #-------------------------------------------------------------------------------
 
@@ -863,7 +863,7 @@ def cluster_seq2vid(cluster_seq, cluster2keypoint_mapping_path, frames_dir, sk_t
 
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
     skeleton_keypoints = np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq])
-    viz_seq(skeleton_keypoints, frames_dir, sk_type, debug=False).join()
+    viz_l_seqs(skeleton_keypoints, frames_dir, sk_type, debug=False).join()
 
 #-------------------------------------------------------------------------------
 
@@ -1042,7 +1042,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
             else:
                 frames_dir_temp = frames_dir / f"{recons_type}_{filter}"
 
-            viz_seq(viz_names, recons, frames_dir_temp, sk_type, fps, force)
+            viz_l_seqs(viz_names, recons, frames_dir_temp, sk_type, fps, force)
         print('----------------------------------------------------')
     print('----------------------------------------------------')
     # if per_seq_score:
@@ -1216,7 +1216,7 @@ def ground_truth_construction(seq_names, data_path, sk_type='kitml', gt_downsamp
           for name in tqdm(seq_names, 'Ground Truth construction')]
     print('----------------------------------------------------')
 
-    viz_seq(seq_names, gt, frames_dir, sk_type, fps, force)
+    viz_l_seqs(seq_names, gt, frames_dir, sk_type, fps, force)
     print('----------------------------------------------------')
 
 #-------------------------------------------------------------------------------
