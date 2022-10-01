@@ -9,7 +9,7 @@ __pycache__
 # Data, viz
 kit-molan/xyz_data.pkl
 packages/R-Drop/
-packages/TEMOS/datasets/
+packages/TEMOS/datasets
 packages/Complextext2animation/src/dataProcessing/
 
 # Output, viz., logs
@@ -18,4 +18,7 @@ kit-molan/code/test_viz/
 packages/acton/logs/
 packages/acton/wandb/
 packages/TEMOS/outputs/
+
+# Models
+packages/TEMOS/pretrained_models/
 
