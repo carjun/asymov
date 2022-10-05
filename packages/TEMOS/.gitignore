@@ -6,6 +6,7 @@ __pycache__/
 *.npy
 .vscode/
 outputs/**/samples
+outputs/**/dummy
 gifs/
 deps/distilbert-base-uncased/
 # datasets/kit/*.json

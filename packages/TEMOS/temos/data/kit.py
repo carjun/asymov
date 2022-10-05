@@ -33,7 +33,7 @@ class KITDataModule(BASEDataModule):
         super().__init__(batch_size=batch_size,
                          num_workers=num_workers,
                          collate_fn=collate_fn)
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
         self.Dataset = KIT
 
         sample_overrides = {"split": "train", "tiny": True,

@@ -1,10 +1,14 @@
 import os
 import warnings
 from pathlib import Path
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, ListConfig
 from temos.tools.runid import generate_id
 import hydra
+from typing import List
 
+# idx of special symbols in vocab
+def special_symbol_idx(special_symbols_list: ListConfig, symbol: str):
+    return special_symbols_list.index(symbol)
 
 # Local paths
 def code_path(path=""):
@@ -37,6 +41,7 @@ def get_kitname(load_amass_data: bool, load_with_rot: bool):
     if load_amass_data and load_with_rot:
         return "kit-amass-rot"
 
+OmegaConf.register_new_resolver("special_symbol_idx", special_symbol_idx)
 OmegaConf.register_new_resolver("code_path", code_path)
 OmegaConf.register_new_resolver("working_path", working_path)
 OmegaConf.register_new_resolver("generate_id", generate_id)

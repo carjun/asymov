@@ -1,7 +1,8 @@
 import json
 import os
 from glob import glob
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional, Callable, Union
+from omegaconf import ListConfig
 import logging
 import pickle
 from functools import partial
@@ -11,6 +12,8 @@ import pandas
 import torch
 from torch import nn
 from torch.utils.data import Dataset
+from torchtext.data.utils import get_tokenizer
+from torchtext.vocab import build_vocab_from_iterator
 from tqdm import tqdm
 from pathlib import Path
 
@@ -18,13 +21,59 @@ from temos.tools.easyconvert import matrix_to, axis_angle_to
 # from temos.transforms import Transform
 from temos.data.sampling import subsample
 from temos.data.tools.smpl import smpl_data_to_matrix_and_trans
-from temos.data.tools.collate import *
+from temos.data.tools.collate import * #tokenizer and collate functions
 
 from .base import BASEDataModule
-from .utils import get_split_keyids
+from .utils import get_split_keyids#, mt_terminal_transform, mt_mwid_transform, sequential_transforms
 
 logger = logging.getLogger(__name__)
 
+class KITMotionWordMTDataModule(BASEDataModule):
+    def __init__(self, 
+                 special_symbols: Union[List[str],ListConfig] = ['<pad>', '<bos>', '<eos>', '<unk>'],
+                 num_mw_clusters: int = 1000,
+                 batch_size: int = 32,
+                 num_workers: int = 16,
+                 collate_fn: Callable = collate_motion_words_and_text_mt,
+                 **kwargs):
+        self.save_hyperparameters()
+        
+        self.Dataset = KITMotionWord
+        # self.text_token_transform = get_tokenizer('spacy', language='en_core_web_sm')
+
+        # pdb.set_trace()
+        self.PAD_IDX, self.BOS_IDX, self.EOS_IDX, self.UNK_IDX = \
+            special_symbols.index('<pad>'), special_symbols.index('<bos>'), special_symbols.index('<eos>'), special_symbols.index('<unk>')
+        self.text_special_symbols = list(special_symbols)
+        
+        train_data = [ann for annotations in self.train_dataset.texts_data.values() for ann in annotations]
+        txt_tokens = [tokenizer(txt) for txt in train_data]
+        self.text_vocab = build_vocab_from_iterator(txt_tokens, min_freq=1, specials=self.text_special_symbols, special_first=True)
+        assert [self.PAD_IDX, self.BOS_IDX, self.EOS_IDX, self.UNK_IDX] == self.text_vocab(self.text_special_symbols)
+        self.text_vocab.set_default_index(self.UNK_IDX)
+        
+        self.mw_special_symbols = list(special_symbols)
+        # self.mw_shift_transform = partial(mt_mwid_transform, num_special = len(self.mw_special_symbols))
+        
+        # self.terminal_transform = partial(mt_terminal_transform, BOS_IDX=self.BOS_IDX, EOS_IDX=self.EOS_IDX)
+        # self.text_transform = sequential_transforms(self.text_token_transform, #Tokenization
+        #                                             self.text_vocab_transform, #Numericalization
+        #                                             self.terminal_transform) # Add BOS/EOS and create tensor
+        # self.text_transform = [self.text_token_transform, #Tokenization
+        #                        self.text_vocab_transform, #Numericalization
+        #                        self.terminal_transform] # Add BOS/EOS and create tensor
+        # self.mw_transform = sequential_transforms(self.mw_shift_transform, #Numericalization
+        #                                           self.terminal_transform) # Add BOS/EOS and create tensor
+        # self.mw_transform = [self.mw_shift_transform, #Numericalization
+        #                     self.terminal_transform] # Add BOS/EOS and create tensor
+        
+        self.text_vocab_size = self.text_vocab.__len__()
+        self.mw_vocab_size = num_mw_clusters + len(self.mw_special_symbols)
+        self.max_frames = max(self.train_dataset._num_frames_in_sequence.values()) + 2 # +2 for BOS/EOS
+        
+        super().__init__(batch_size=batch_size,
+                         num_workers=num_workers,
+                         collate_fn=partial(collate_fn, text_vocab=self.text_vocab, special_symbols=list(special_symbols)))
 
 class KITMotionWordDataModule(BASEDataModule):
     def __init__(self, data_dir: str = "",
@@ -36,7 +85,7 @@ class KITMotionWordDataModule(BASEDataModule):
         super().__init__(batch_size=batch_size,
                          num_workers=num_workers,
                          collate_fn=partial(collate_fn, vocab_size=vocab_size))
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
         self.Dataset = KITMotionWord
 
         # sample_overrides = {"split": "train", "tiny": True,

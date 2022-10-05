@@ -49,7 +49,7 @@ class Perplexity(MeanMetric):
 
 class ReconsMetrics(Metric):
     def __init__(self, recons_types: List[str], filters: List[str], gt_path: str,
-                 fps: float, recons_fps: float, gt_fps: float,
+                 fps: float, recons_fps: float, gt_fps: float, num_mw_clusters: int,
                 #  jointstype: str = "mmm",
                 #  force_in_meter: bool = True,
                  dist_sync_on_step=False, **kwargs):
@@ -59,7 +59,10 @@ class ReconsMetrics(Metric):
         self.recons_upsample_ratio=fps/recons_fps
         self.gt_downsample_ratio=fps/gt_fps
         self.fps = fps
+        self.num_clusters = num_mw_clusters
         self.kwargs = kwargs
+        
+        gt_path = Path(gt_path)
         print("Retrieving GT data for recons loss from", gt_path)
         with open(gt_path, 'rb') as handle:
             self.ground_truth_data = pickle.load(handle)
@@ -76,6 +79,7 @@ class ReconsMetrics(Metric):
         # self.force_in_meter = force_in_meter
         # self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("count_seq", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("count_good_seq", default=torch.tensor(0), dist_reduce_fx="sum")
 
         # APE
         # self.add_state("APE_root", default=torch.tensor(0.), dist_reduce_fx="sum")
@@ -108,7 +112,7 @@ class ReconsMetrics(Metric):
         # APE_metrics["APE_mean_pose"] = self.APE_pose.mean() / count
         # APE_metrics["APE_mean_joints"] = self.APE_joints.mean() / count
 
-        count_seq = self.count_seq
+        count_seq = self.count_good_seq
         recons_metrics = {metric: getattr(self, metric) / count_seq for metric in self.metrics}
         # AVE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.AVE_metrics}
 
@@ -116,12 +120,21 @@ class ReconsMetrics(Metric):
         # AVE_metrics["AVE_mean_pose"] = self.AVE_pose.mean() / count_seq
         # AVE_metrics["AVE_mean_joints"] = self.AVE_joints.mean() / count_seq
 
-        return {**recons_metrics}
+        return {**recons_metrics, 'all_seq':self.count_seq, 'good_seq':self.count_good_seq, 
+                'good_seq_%': self.count_good_seq/self.count_seq}
         # return {**APE_metrics, **AVE_metrics}
 
     def update(self, seq_names: List[str], cluster_seqs: List[Tensor]):
+        assert len(seq_names)==len(cluster_seqs)
         # self.count += sum(lengths)
         self.count_seq += len(seq_names)
+        good_idx = [i for i,cluster_seq in enumerate(cluster_seqs) \
+            if cluster_seq.max()<self.num_clusters and cluster_seq.min()>=0]
+        
+        seq_names = [seq_names[i] for i in good_idx]
+        cluster_seqs = [cluster_seqs[i] for i in good_idx]
+        self.count_good_seq += len(seq_names)
+        
         gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]
         gt = [downsample(keypoint, self.gt_downsample_ratio) for keypoint in gt]
         cluster_seqs = [cluster_seq.numpy() for cluster_seq in cluster_seqs]
@@ -146,19 +159,20 @@ class ReconsMetrics(Metric):
                     prev = cc
             contiguous_frame2cluster_mapping = pd.DataFrame.from_dict(contiguous_frame2cluster_mapping)
             contiguous_frame2cluster_mapping = contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping["idx"]>0]
-            contiguous_cluster_seqs = [contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping['name']==name][['cluster', 'length']].reset_index() for name in seq_names]
+            contiguous_cluster_seqs = [contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping['name']==name][['cluster', 'length']].reset_index(drop=True) for name in seq_names]
 
+        # pdb.set_trace()
         for recons_type in self.recons_types:
             if recons_type == 'naive_no_rep' or recons_type  == 'naive':
-                cluster2frame_mapping_path = self.kwargs['cluster2frame_mapping_path']
-                output = eval(recons_type+'_reconstruction')(seq_names, contiguous_cluster_seqs, self.ground_truth_data, cluster2frame_mapping_path)
+                cluster2frame_mapping_path = Path(self.kwargs['cluster2frame_mapping_path'])
+                output = eval(recons_type+'_reconstruction')(seq_names, contiguous_cluster_seqs, self.ground_truth_data, cluster2frame_mapping_path, verbose=False)
                 if recons_type == 'naive_no_rep':
                     recons, faulty = output
                 else:
                     recons = output
             elif recons_type == 'very_naive':
-                cluster2keypoint_mapping_path = self.kwargs['cluster2keypoint_mapping_path']
-                recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path)
+                cluster2keypoint_mapping_path = Path(self.kwargs['cluster2keypoint_mapping_path'])
+                recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path, verbose=False)
             recons = [upsample(keypoint, self.recons_upsample_ratio) for keypoint in recons]
             
             for filter in self.filters:

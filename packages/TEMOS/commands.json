@@ -1,0 +1,11 @@
+{
+    "dummy_train": 
+    {
+        "MT_xyz": "python train_asymov_mt.py experiment=dummy run_id=dummy user= data.splitpath='${path.datasets}/kit-splits-tiny' num_mw_clusters=1000 viz_metrics_start_epoch=0 viz_metrics_every_n_epoch=3 trainer=cpu trainer.max_epochs=10 model.max_frames=100 model.metrics.recons_types=['naive']",
+    },
+    
+    "train":
+    {
+        "MT_xyz": "python train_asymov_mt.py experiment= user= num_mw_clusters=1000",
+    }
+}

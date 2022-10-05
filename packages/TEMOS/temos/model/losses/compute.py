@@ -1,5 +1,6 @@
 import hydra
 import torch
+import pdb
 
 from torchmetrics import Metric
 
@@ -102,6 +103,7 @@ class TemosComputeLosses(Metric):
         self.total += total.detach()
         self.count += 1
 
+        # pdb.set_trace()
         return total
 
     def compute(self, split):

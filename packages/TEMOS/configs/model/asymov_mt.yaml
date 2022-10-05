@@ -1,24 +1,25 @@
-modelname: asymov_machine_translation
+modelname: asymov_machine_translation_seq2seq_transformer
 _target_: temos.model.asymov_mt.AsymovMT
 
-vocab_size: ${data.vocab_size}
-latent_dim: 256
-vae: false
+#TODO: verify with Attention is All You Need paper
+num_encoder_layers: 6
+num_decoder_layers: 6
+emb_size: 512
+nhead: 8
+text_vocab_size: ??? # vocab size of text (including '<pad>', '<bos>', '<eos>', '<unk>')
+mw_vocab_size: ??? # vocab size of motion words (including '<pad>', '<bos>', '<eos>'; no '<unk>' here)
+dim_feedforward: 2048
+special_symbols: ${data.special_symbols}
 
-# transforms: ${transforms}
+fps: ${data.framerate}
+max_frames: ??? # Length of largest mw sequence in train data including EOS/BOS (max limit for mw in the predicted sequence)
 
-ff_size: 1024
-num_layers: 6
-num_head: ${model.num_layers}
-droupout: 0.1
-activation: "gelu"
+metrics_start_epoch: ${viz_metrics_start_epoch}
+metrics_every_n_epoch: ${viz_metrics_every_n_epoch}
 
 defaults:
-  - textencoder: distilbert_actor
-  - motiondecoder: asymov
-  - losses: asymov_mt
+  - transformer: vanilla
+  - losses: asymov_mt_temos #since cross entropy loss already implemented there, may need a different class if MT specific losses are added
   - metrics: asymov_recons
   - optim: adamw
   - /model/losses/function/crossEntropy@func_recons
-  # - /model/losses/function/smoothL1@func_latent
-  # - /model/losses/function/kl@func_kl

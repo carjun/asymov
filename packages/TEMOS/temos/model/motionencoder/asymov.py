@@ -18,7 +18,7 @@ class AsymovEncoder(pl.LightningModule):
                  dropout: float = 0.1,
                  activation: str = "gelu", **kwargs) -> None:
         super().__init__()
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
 
         self.motion_word_embedding = nn.Embedding(vocab_size+1, latent_dim, padding_idx=vocab_size)
 

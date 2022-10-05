@@ -5,7 +5,7 @@ import pdb
 class BaseModel(LightningModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
 
         # Need to define:
         # forward

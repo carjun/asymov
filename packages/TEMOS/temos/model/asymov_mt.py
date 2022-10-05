@@ -1,241 +1,168 @@
-from typing import List, Optional
-
-import torch
-from torch import nn
+from fnmatch import translate
+from typing import List, Iterable, Optional, Dict, Union
+import math
 import pdb
+import sys
+from tqdm import tqdm
 
+from omegaconf import DictConfig, ListConfig
 from hydra.utils import instantiate
 
-from torch import Tensor
-from omegaconf import DictConfig
-from temos.model.utils.tools import remove_padding_asymov, remove_padding
+import torch
+from torch import Tensor, nn
+from torchmetrics import MetricCollection, Accuracy, BLEUScore
 
 from temos.model.metrics.compute_asymov import Perplexity, ReconsMetrics
 from torchmetrics import MetricCollection, Accuracy, BLEUScore, SumMetric
 from temos.model.base import BaseModel
-from torch.distributions.distribution import Distribution
+from temos.model.utils.tools import create_mask, remove_padding, greedy_decode
 
-
-class Asymov(BaseModel):
-    def __init__(self, textencoder: DictConfig,
-                #  motionencoder: DictConfig,
-                 motiondecoder: DictConfig,
+class AsymovMT(BaseModel):
+    def __init__(self,
+                 transformer: DictConfig,
                  losses: DictConfig,
-                 recons_metrics: DictConfig,
+                 metrics: DictConfig,
                  optim: DictConfig,
-                #  transforms: DictConfig,
-                 vocab_size: int,
-                 vae: bool,
-                 latent_dim: int,
+                #  text_vocab_size: int,
+                 mw_vocab_size: int,
+                 special_symbols: Union[List[str],ListConfig],
+                #  fps: float,
+                 max_frames: int,
+                 metrics_start_epoch: int,
+                 metrics_every_n_epoch: int,
                  **kwargs):
         super().__init__()
 
-        self.textencoder = instantiate(textencoder)
-        # self.motionencoder = instantiate(motionencoder)
+        self.PAD_IDX, self.BOS_IDX, self.EOS_IDX, self.UNK_IDX = \
+            special_symbols.index('<pad>'), special_symbols.index('<bos>'), special_symbols.index('<eos>'), special_symbols.index('<unk>')
+        self.num_special_symbols = len(special_symbols)
+        
+        # self.fps = fps
+        self.max_frames = max_frames
+        
+        self.metrics_start_epoch = metrics_start_epoch
+        self.metrics_every_n_epoch = metrics_every_n_epoch
+        
+        self.transformer = instantiate(transformer)#, src_vocab_size = text_vocab_size, tgt_vocab_size = mw_vocab_size)
+        for p in self.transformer.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+        # pdb.set_trace()
 
-        # self.transforms = instantiate(transforms)
-        # self.Datastruct = self.transforms.Datastruct
-
-        self.motiondecoder = instantiate(motiondecoder)
         self.optimizer = instantiate(optim, params=self.parameters())
 
-        self._losses = MetricCollection({split: instantiate(losses, vae=vae,
-                                                            _recursive_=False)
+        self._losses = MetricCollection({split: instantiate(losses, vae=False, _recursive_=False)
                                          for split in ["losses_train", "losses_val"]})
         self.losses = {key: self._losses["losses_" + key] for key in ["train", "val"]}
 
-        # self.metrics = ComputeMetrics()
-        #TODO: can refactor
         self.train_metrics = {
-                            #   'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
-                            #                   ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
-                            #                   ),
-                              'acc_text2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
-                                              ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
+                              'acc_teachforce': Accuracy(num_classes=mw_vocab_size, mdmc_average='samplewise',
+                                              ignore_index=self.PAD_IDX, multiclass=True,# subset_accuracy=True
                                               ),
-                            #   'bleu_mw2mw': BLEUScore(),
-                              'bleu_text2mw': BLEUScore(),
-                            #   'ppl_mw2mw': Perplexity(),
-                              'ppl_text2mw': Perplexity(),
+                              'bleu_teachforce': BLEUScore(),
+                              'ppl_teachforce': Perplexity(self.PAD_IDX),
                              }
         self.val_metrics = {
-                            #   'acc_mw2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
-                            #                   ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
-                            #                   ),
-                              'acc_text2mw': Accuracy(num_classes=vocab_size+1, mdmc_average='samplewise',
-                                              ignore_index=vocab_size, multiclass=True,# subset_accuracy=True
+                              'acc_teachforce': Accuracy(num_classes=mw_vocab_size, mdmc_average='samplewise',
+                                              ignore_index=self.PAD_IDX, multiclass=True,# subset_accuracy=True
                                               ),
-                            #   'bleu_mw2mw': BLEUScore(),
-                              'bleu_text2mw': BLEUScore(),
-                            #   'ppl_mw2mw': Perplexity(),
-                              'ppl_text2mw': Perplexity(),
-                              'mpjpe_text2mw': instantiate(recons_metrics)
+                              'bleu_teachforce': BLEUScore(),
+                              'ppl_teachforce': Perplexity(self.PAD_IDX),
+                            
+                            #   'acc': Accuracy(num_classes=mw_vocab_size, mdmc_average='samplewise',
+                            #                   ignore_index=self.PAD_IDX, multiclass=True,# subset_accuracy=True
+                            #                   ),
+                              'bleu': BLEUScore(),
+                            #   'ppl': Perplexity(self.PAD_IDX),
+                              'mpjpe': instantiate(metrics)
                              }
-    
+
         self.metrics={key: getattr(self, f"{key}_metrics") for key in ["train", "val"]}
-
-        # If we want to overide it at testing time
-        self.sample_mean = False
-        self.fact = None
-
+        
         self.__post_init__()
-
-    # Forward: text => motion
-    def forward(self, batch: dict) -> List[Tensor]:
-        logits_from_text = self.text_to_motion_forward(batch["text"],
-                                                           batch["length"])
-
-        return remove_padding_asymov(logits_from_text, batch["length"])
-
-    # def sample_from_distribution(self, distribution: Distribution, *,
-    #                              fact: Optional[bool] = None,
-    #                              sample_mean: Optional[bool] = False) -> Tensor:
-    #     fact = fact if fact is not None else self.fact
-    #     sample_mean = sample_mean if sample_mean is not None else self.sample_mean
-
-    #     if sample_mean:
-    #         return distribution.loc
-
-    #     # Reparameterization trick
-    #     if fact is None:
-    #         return distribution.rsample()
-
-    #     # Resclale the eps
-    #     eps = distribution.rsample() - distribution.loc
-    #     latent_vector = distribution.loc + fact * eps
-    #     return latent_vector
-
-    def text_to_motion_forward(self, text_sentences: List[str], lengths: List[int], *,
-                               return_latent: bool = False):
-        # Encode the text to the latent space
-        if self.hparams.vae:
-            distribution = self.textencoder(text_sentences)
-            latent_vector = self.sample_from_distribution(distribution)
+        
+    #TODO: optimize, and beam search
+    def translate(self, src_list: List[Tensor], max_len: Union[int, List[int]]) -> List[Tensor]: # no teacher forcing
+        if type(max_len)==int:
+            max_len_list = [max_len]*len(src_list)
         else:
-            distribution = None
-            latent_vector = self.textencoder(text_sentences)
+            assert len(src_list)==len(max_len)
+            max_len_list = max_len
+        
+        tgt_list = []
+        # pdb.set_trace()
+        for src, max_len in tqdm(zip(src_list, max_len_list), "translating", len(src_list), None, position=0):
+            src = src.view(-1,1) #[Frames, 1]
+            tgt_tokens = greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX).flatten() #[Frames]
+            tgt_list.append(tgt_tokens) 
+        return tgt_list # List[Tensor[Frames]]
+    
+    def allsplit_step(self, split: str, batch: Dict, batch_idx):
+        src: Tensor = batch["text"] #[Frames, Batch size]
+        tgt: Tensor = batch["motion_words"] #[Frames, Batch size]
+        tgt_input = tgt[:-1, :] #[Frames-1, Batch size]
+        tgt_out = tgt[1:, :].permute(1,0) #[Batch size, Frames-1]
 
-        # Decode the latent vector to a motion
-        probs = self.motiondecoder(latent_vector, lengths)
-        # datastruct = self.Datastruct(features=features)
-
-        if not return_latent:
-            return probs
-        return probs, latent_vector, distribution
-
-    # def motion_to_motion_forward(self, motion_words,
-    #                              lengths: Optional[List[int]] = None,
-    #                              return_latent: bool = False
-    #                              ):
-    #     # Make sure it is on the good device
-    #     # datastruct.transforms = self.transforms
-
-    #     # Encode the motion to the latent space
-    #     if self.hparams.vae:
-    #         distribution = self.motionencoder(motion_words, lengths)
-    #         latent_vector = self.sample_from_distribution(distribution)
-    #     else:
-    #         distribution = None
-    #         latent_vector: Tensor = self.motionencoder(motion_words, lengths)
-
-    #     # Decode the latent vector to a motion
-    #     probs = self.motiondecoder(latent_vector, lengths)
-    #     # datastruct = self.Datastruct(features=features)
-
-    #     if not return_latent:
-    #         return probs
-    #     return probs, latent_vector, distribution
-
-    def allsplit_step(self, split: str, batch, batch_idx):
-        # Encode the text/decode to a motion
-        logits_from_text = self.text_to_motion_forward(batch["text"],
-                                          batch["length"],
-                                          return_latent=False)
-        # logits_from_text, latent_from_text, distribution_from_text = ret
-        #[Batch size, Classes, Frames]
-
-        # # Encode the motion/decode to a motion
-        # ret = self.motion_to_motion_forward(batch["motion_words"],
-        #                                     batch["length"],
-        #                                     return_latent=True)
-        # logits_from_motion, latent_from_motion, distribution_from_motion = ret
-        # #[Batch size, Classes, Frames]
-
-        # GT data
-        motion_word_ref = batch["motion_words"].long() #long tensor for cross entropy target
-        #[Batch size, Frames]
-
-        # # Compare to a Normal distribution
-        # if self.hparams.vae:
-        #     # Create a centred normal distribution to compare with
-        #     mu_ref = torch.zeros_like(distribution_from_text.loc)
-        #     scale_ref = torch.ones_like(distribution_from_text.scale)
-        #     distribution_ref = torch.distributions.Normal(mu_ref, scale_ref)
-        # else:
-        #     distribution_ref = None
-
+        src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, self.PAD_IDX)
+        logits = self.transformer(src, tgt_input, src_mask, tgt_mask,src_padding_mask, tgt_padding_mask, src_padding_mask)
+        logits = logits.permute(1,2,0) #[Batch size, Classes, Frames]
+        
         # Compute the losses
-        loss = self.losses[split].update(ds_text=logits_from_text,
-                                        #  ds_motion=logits_from_motion,
-                                         ds_ref=motion_word_ref,
-                                        #  lat_text=latent_from_text,
-                                        #  lat_motion=latent_from_motion,
-                                        #  dis_text=distribution_from_text,
-                                        #  dis_motion=distribution_from_motion,
-                                        #  dis_ref=distribution_ref
-                                         )
+        loss = self.losses[split].update(ds_text=logits, ds_ref=tgt_out)
 
         if loss is None:
             raise ValueError("Loss is None, this happend with torchmetrics > 0.7")
+        # pdb.set_trace()
 
         ### Compute the metrics
-        probs_from_text = logits_from_text.detach().softmax(dim=1)
-        # probs_from_motion = logits_from_motion.detach().softmax(dim=1)
-        bs, _, frames = probs_from_text.shape
-        # assert bs == probs_from_motion.shape[0] and frames == probs_from_motion.shape[2], 'train and val predictions shape mismatch'
-        target = motion_word_ref.detach()
+        probs = logits.detach().softmax(dim=1) 
+        # bs, _, frames = probs.shape
+        target = tgt_out.detach()
 
-        # adding padding class to preds for compatibility with padded target motion words for Accuracy
-        probs_from_text = torch.cat((probs_from_text, probs_from_text.new_zeros(bs, 1, frames)), dim=1)
-        # probs_from_motion = torch.cat((probs_from_motion, probs_from_motion.new_zeros(bs, 1, frames)), dim=1)
+        self.metrics[split]['acc_teachforce'].update(probs, target)
 
-        self.metrics[split]['acc_text2mw'].update(probs_from_text, target)
-        # self.metrics[split]['acc_mw2mw'].update(probs_from_motion, target)
+        # predicted through teacher forcing, target motion word ids without padding for BLEU
+        pred_mw_tokens_teachforce = remove_padding(torch.argmax(probs, dim=1).int(), batch["mw_length"])
+        pred_mw_sents_teachforce = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens_teachforce]
+        target_mw_sents = [[" ".join(map(str, mw.int().tolist()))] for mw in remove_padding(target, batch["mw_length"])]
+        self.metrics[split]['bleu_teachforce'].update(pred_mw_sents_teachforce, target_mw_sents)
+        
+        self.metrics[split]['ppl_teachforce'].update(logits.detach().cpu(), target.cpu())
 
-        # predicted, target motion word ids without padding for BLEU
-        pred_mw_from_text = remove_padding(torch.argmax(probs_from_text, dim=1).int(), batch["length"])
-        # pred_mw_from_motion = remove_padding(torch.argmax(probs_from_motion, dim=1).int(), batch["length"])
-        pred_mw_sents_from_text = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_from_text]
-        # pred_mw_sents_from_motion = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_from_motion]
-        target_mw_sents = [[" ".join(map(str, mw.int().tolist()))] for mw in remove_padding(target, batch["length"])]
-
-        self.metrics[split]['bleu_text2mw'].update(pred_mw_sents_from_text, target_mw_sents)
-        # self.metrics[split]['bleu_mw2mw'].update(pred_mw_sents_from_motion, target_mw_sents)
-
-        self.metrics[split]['ppl_text2mw'].update(logits_from_text.detach().cpu(), target.cpu())
-        # self.metrics[split]['ppl_mw2mw'].update(logits_from_motion.detach().cpu(), target.cpu())
-
-        if split == "val":
-            self.metrics[split]['mpjpe_text2mw'].update(batch['keyid'], pred_mw_from_text)
+        epoch = self.trainer.current_epoch
+        if split == "val" and (epoch==0 or (epoch>=self.metrics_start_epoch and epoch%self.metrics_every_n_epoch==0)):
+            # inferencing translations without teacher forcing
+            #TODO: add max_len buffer frames to config
+            # max_len = [i+int(self.fps*5) for i in batch["mw_length"]]
+            # pdb.set_trace()
+            pred_mw_tokens = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames) 
+            pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
+            self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
+            
+            # Remove terminal tokens BOS/EOS, shift for special symbols
+            pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]
+            self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters)
 
         return loss
 
     def allsplit_epoch_end(self, split: str, outputs):
+        # pdb.set_trace()
         losses = self.losses[split]
         loss_dict = losses.compute(split)
         dico = {losses.loss2logname(loss, split): value.item()
                 for loss, value in loss_dict.items()}
 
-        #Accuracy, BLEU and Perplexity
-        metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items()}
+        #Accuracy, BLEU and Perplexity Teacher-forced
+        metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')}
         dico.update(metrics_dict)
 
-        # if split == "val":
+        epoch = self.trainer.current_epoch
+        if split == "val" and (epoch==0 or (epoch>=self.metrics_start_epoch and epoch%self.metrics_every_n_epoch==0)):
             # pdb.set_trace()
-            # metrics_dict = self.metrics.compute()
-            # metrics_dict = {key:metrics_dict[key] for key in metrics_dict.keys() if key not in ['APE_joints', 'APE_pose', 'AVE_joints', 'AVE_pose']}
-            # dico.update({f"Metrics/{metric}": value for metric, value in metrics_dict.items()})
-
+            dico.update({f"Metrics/bleu/{split}": self.metrics[split]['bleu'].compute()})
+            mpjpe_dict = self.metrics[split]['mpjpe'].compute()
+            dico.update({f"ReconsMetrics/{name}/{split}": metric for name, metric in mpjpe_dict.items()})
+            
         dico.update({"epoch": float(self.trainer.current_epoch),
                     "step": float(self.trainer.global_step)})
         self.log_dict(dico)

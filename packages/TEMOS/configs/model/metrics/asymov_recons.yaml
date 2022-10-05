@@ -8,6 +8,9 @@ gt_path: ${path.datasets}/xyz_data.pkl
 fps: 25.0 #desired fps for mpjpe calculation and visualization
 recons_fps: 12.5 #same as fps of predictions
 gt_fps: 100.0 #fps of KIT
+
+num_mw_clusters: ${num_mw_clusters}
+
 #TODO change naming of cluster files
-cluster2keypoint_mapping_path: ${path.datasets}/proxy_centers_tr_${data.vocab_size}.pkl
-cluster2frame_mapping_path: ${path.datasets}/proxy_centers_tr_complete_${data.vocab_size}.pkl
+cluster2keypoint_mapping_path: ${path.datasets}/proxy_centers_${data.cluster_data}.pkl
+cluster2frame_mapping_path: ${path.datasets}/proxy_centers_complete_${data.cluster_data}.pkl
