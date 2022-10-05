@@ -22,7 +22,7 @@ from temos.data.sampling import upsample
 logger = logging.getLogger(__name__)
 
 
-@hydra.main(config_path="configs", config_name="sample_asymov")
+@hydra.main(version_base=None, config_path="configs", config_name="sample_asymov")
 def _sample(cfg: DictConfig):
     return sample(cfg)
 
@@ -72,7 +72,6 @@ def sample(newcfg: DictConfig) -> None:
     # Load previous config
     prevcfg = OmegaConf.load(output_dir / ".hydra/config.yaml")
     # Overload it
-    # pdb.set_trace()
     cfg = OmegaConf.merge(prevcfg, newcfg)
     onesample = cfg_mean_nsamples_resolution(cfg)
 
@@ -161,7 +160,7 @@ def sample(newcfg: DictConfig) -> None:
                 # upscaling to compare with other methods
                 # probs = upsample(probs, cfg.data.framerate, 100)
                 assert probs.shape == (duration, cfg.data.vocab_size)
-                
+
                 clusters = np.argmax(probs, axis=1)
                 assert np.max(clusters) < cfg.data.vocab_size
 
@@ -172,7 +171,7 @@ def sample(newcfg: DictConfig) -> None:
                     name = f"{keyid}"
                     npypath = path / f"{name}.npy"
                 np.save(npypath, clusters)
-                
+
                 prev=-1
                 running_idx=0
                 current_len = 0
