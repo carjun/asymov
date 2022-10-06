@@ -1,7 +1,7 @@
 from typing import Tuple
 import torch
 from torch import Tensor
-from torch.nn import Module
+from torch.nn import Module, Transformer as T
 from tqdm import tqdm
 import pdb
 
@@ -15,23 +15,16 @@ def remove_padding(tensors, lengths):
 def remove_padding_asymov(tensors, lengths):
     return [tensor[:, :tensor_length] for tensor, tensor_length in zip(tensors, lengths)]
 
-#TODO: remove the check
-def generate_square_subsequent_mask(sz: int) -> Tensor:
-    mask2 = (torch.triu(torch.ones((sz, sz))) == 1).transpose(0, 1) 
-    mask = torch.tril(torch.ones(sz,sz)) # [sz, sz] lower left triangle including diagonal is 1, rest 0
-    
-    mask2 = mask2.float().masked_fill(mask2 == 0, float('-inf')).masked_fill(mask2 == 1, float(0.0))
-    mask = mask.masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0)) # [sz, sz] lower left triangle including diagonal is 0, rest -inf
-    
-    assert torch.equal(mask, mask2)
-    return mask #[sz,sz]
+# def generate_square_subsequent_mask(sz: int) -> Tensor:
+#     mask = torch.triu(torch.full((sz, sz), float('-inf')), diagonal=1)
+#     return mask #[sz,sz]
 
 def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
     # src: [Frames, Batch size], tgt: [Frames-1, Batch size]
     src_seq_len = src.shape[0] #Frames
     tgt_seq_len = tgt.shape[0] #Frames-1
 
-    tgt_mask = generate_square_subsequent_mask(tgt_seq_len) #[tgt_seq_len, tgt_seq_len]
+    tgt_mask = T.generate_square_subsequent_mask(tgt_seq_len) #[tgt_seq_len, tgt_seq_len]
     src_mask = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool) #[src_seq_len, src_seq_len]
 
     src_padding_mask = (src == PAD_IDX).transpose(0, 1) #[Batch size, Frames]
@@ -48,7 +41,7 @@ def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, e
     # pdb.set_trace()
     tgt = torch.ones(1, 1).fill_(start_symbol).type(torch.long)
     for i in tqdm(range(max_len-1), leave=False):
-        tgt_mask = (generate_square_subsequent_mask(tgt.size(0))
+        tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
                     .type(torch.bool))
         out = model.decode(tgt, memory, tgt_mask) #[Frames, 1, *]
         logits = model.generator(out[-1]) #[1, Classes]
