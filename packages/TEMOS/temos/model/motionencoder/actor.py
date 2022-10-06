@@ -18,7 +18,7 @@ class ActorAgnosticEncoder(pl.LightningModule):
                  dropout: float = 0.1,
                  activation: str = "gelu", **kwargs) -> None:
         super().__init__()
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
 
         input_feats = nfeats
         self.skel_embedding = nn.Linear(input_feats, latent_dim)

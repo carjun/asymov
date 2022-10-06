@@ -19,7 +19,7 @@ class DistilbertActorAgnosticEncoder(DistilbertEncoderBase):
                  dropout: float = 0.1,
                  activation: str = "gelu", **kwargs) -> None:
         super().__init__(modelpath=modelpath, finetune=finetune)
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
 
         encoded_dim = self.text_encoded_dim
 

@@ -16,7 +16,7 @@ class GRUEncoder(pl.LightningModule):
                  latent_dim: int = 256,
                  num_layers: int = 4, **kwargs) -> None:
         super().__init__()
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
 
         input_feats = nfeats
         self.skel_embedding = nn.Linear(input_feats, latent_dim)

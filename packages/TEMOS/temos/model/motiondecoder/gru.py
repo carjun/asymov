@@ -16,7 +16,7 @@ class GRUDecoder(pl.LightningModule):
                  num_layers: int = 4, **kwargs) -> None:
 
         super().__init__()
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
 
         output_feats = nfeats
         # self.feats_embedding = nn.Linear(self.input_feats, latent_dim)

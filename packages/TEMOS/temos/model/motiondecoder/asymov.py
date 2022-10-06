@@ -18,7 +18,7 @@ class AsymovDecoder(pl.LightningModule):
                  activation: str = "gelu", **kwargs) -> None:
 
         super().__init__()
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
 
         self.sequence_pos_encoding = PositionalEncoding(latent_dim, dropout)
 

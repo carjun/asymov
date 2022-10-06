@@ -18,7 +18,7 @@ class ActorAgnosticDecoder(pl.LightningModule):
                  activation: str = "gelu", **kwargs) -> None:
 
         super().__init__()
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters()
 
         output_feats = nfeats
 
