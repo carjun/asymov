@@ -1,9 +1,9 @@
-modelname: asymov
-_target_: temos.model.asymov.Asymov
+modelname: asymov_machine_translation_temos
+_target_: temos.model.asymov_mt_temos.Asymov
 
 vocab_size: ${data.vocab_size}
 latent_dim: 256
-vae: true
+vae: false
 
 # transforms: ${transforms}
 
@@ -15,14 +15,13 @@ activation: "gelu"
 
 defaults:
   - textencoder: distilbert_actor
-  - motionencoder: asymov
   - motiondecoder: asymov
-  - losses: asymov
+  - losses: asymov_mt_temos
   - metrics: asymov_recons
   - optim: adamw
   - /model/losses/function/crossEntropy@func_recons
-  - /model/losses/function/smoothL1@func_latent
-  - /model/losses/function/kl@func_kl
+  # - /model/losses/function/smoothL1@func_latent
+  # - /model/losses/function/kl@func_kl
 
 func_recons:
   ignore_index: ${model.vocab_size}

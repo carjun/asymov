@@ -20,8 +20,8 @@ viz_metrics_start_epoch: 100
 viz_metrics_every_n_epoch: 5
 # Composing nested config with default
 defaults:
-  - data: kit-xyz-motion-word
-  - model: asymov
+  - data: kit-xyz-motion-word-mt
+  - model: asymov_mt
   - machine: server
   - trainer: gpu
   - sampler: variable_conseq
@@ -32,11 +32,5 @@ defaults:
   - override hydra/hydra_logging: custom
   - _self_
 
-data:
-  transforms:
-    normalization: true
-
 callback:
   viz_ckpts: true 
-
-transforms: ${data.transforms}
