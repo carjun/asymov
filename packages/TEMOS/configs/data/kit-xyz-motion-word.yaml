@@ -1,4 +1,5 @@
-name: kit-xyz-motion-word
+cluster_data: xyz
+name: kit-${.cluster_data}-motion-word
 _target_: temos.data.kit_motion_word.KITMotionWordDataModule
 
 # Paths

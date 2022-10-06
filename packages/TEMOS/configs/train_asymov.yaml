@@ -1,6 +1,6 @@
 hydra:
   run:
-    dir: outputs/${data.dataname}/${experiment}/${run_id}
+    dir: outputs/${data.name}/${experiment}/${run_id}
 
 # Global configurations shared between different modules
 experiment: asymov
