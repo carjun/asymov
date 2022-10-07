@@ -149,19 +149,21 @@ class AsymovMT(BaseModel):
         # pdb.set_trace()
         losses = self.losses[split]
         loss_dict = losses.compute(split)
+        losses.reset()
         dico = {losses.loss2logname(loss, split): value.item()
                 for loss, value in loss_dict.items()}
 
         #Accuracy, BLEU and Perplexity Teacher-forced
-        metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')}
-        dico.update(metrics_dict)
+        metrics_dict_teachforce = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')}
+        _ = [metric.reset() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')] 
+        dico.update(metrics_dict_teachforce)
 
         epoch = self.trainer.current_epoch
         if split == "val" and (epoch==0 or (epoch>=self.metrics_start_epoch and epoch%self.metrics_every_n_epoch==0)):
             # pdb.set_trace()
-            dico.update({f"Metrics/bleu/{split}": self.metrics[split]['bleu'].compute()})
-            mpjpe_dict = self.metrics[split]['mpjpe'].compute()
-            dico.update({f"ReconsMetrics/{name}/{split}": metric for name, metric in mpjpe_dict.items()})
+            metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')}
+            _ = [metric.reset() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')] 
+            dico.update(metrics_dict)
             
         dico.update({"epoch": float(self.trainer.current_epoch),
                     "step": float(self.trainer.global_step)})

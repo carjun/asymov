@@ -37,12 +37,14 @@ class BaseModel(LightningModule):
     def allsplit_epoch_end(self, split: str, outputs):
         losses = self.losses[split]
         loss_dict = losses.compute(split)
+        losses.reset()
         dico = {losses.loss2logname(loss, split): value.item()
                 for loss, value in loss_dict.items()}
 
         if split == "val":
             # pdb.set_trace()
             metrics_dict = self.metrics.compute()
+            self.metrics.reset()
             metrics_dict = {key:metrics_dict[key] for key in metrics_dict.keys() if key not in ['APE_joints', 'APE_pose', 'AVE_joints', 'AVE_pose']}
             dico.update({f"Metrics/{metric}": value for metric, value in metrics_dict.items()})
         dico.update({"epoch": float(self.trainer.current_epoch),
