@@ -78,6 +78,21 @@ def train(cfg: DictConfig) -> None:
         logger=instantiate_logger(cfg),
         callbacks=callbacks,
     )
+
+    # logger.info("Tuning the LR of model..")                               #auto_lr_find=True now so Tuning the LR first
+    # lr_finder = trainer.tuner.lr_find(model, datamodule=data_module)#, ckpt_path=cfg.resume_ckpt_path)
+    # print(lr_finder.results)
+
+    # # Plot with
+    # fig = lr_finder.plot(suggest=True)
+    # # fig.show()
+    # fig.savefig('/content/drive/MyDrive/Asymov/lr_finder.png')
+    # fig.savefig('/content/drive/MyDrive/Asymov/lr_finder.svg')
+
+    # logger.info(f"Tuning done. Suggested LR:{lr_finder.suggestion()}")    #Commented as gives error while normal run
+    # cfg.model.optim.lr = lr_finder.suggestion()                           #viz.py", line 1074, in naive_no_rep_reconstruction
+                                                                            #AssertionError: 02198 - Negative left boundary
+
     logger.info("Trainer initialized")
     checkpoint_folder = trainer.checkpoint_callback.dirpath
     logger.info(f"The checkpoints are stored in {checkpoint_folder}")

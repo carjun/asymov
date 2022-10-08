@@ -13,6 +13,7 @@ resume_ckpt_path:
 wandb_api_keys:
   darsh: 57f6d5aab6f1a78b78fb181dcf32dfeca0e65f79
   arjun: bac3a003428df951a8e0b9e3878002a3227bbf0c
+  shared: 2ec984489f9445078fa14448bc7da1f0c3604db6
 user: 
 
 num_mw_clusters: ???
