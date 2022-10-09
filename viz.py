@@ -1067,10 +1067,12 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
                 assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx]), "Incorrect center frame sequence"
 
                 center_frame_complete_seq_len = center_frame_complete_seq.shape[0]
-                # if length>center_frame_complete_seq_len:
-                #     raise Exception(f'seq name : {name}\ncontiguous_cluster_seq : {i}\n')
-                lb = max(0,center_frame_idx - (length-1)//2) #check left boundary
-                lb = min(center_frame_complete_seq_len-length, lb) #check right boundary
+                if length >= center_frame_complete_seq_len:
+                    # raise Exception(f'seq name : {name}\ncontiguous_cluster_seq : {i}\n')
+                    lb = 0
+                else:
+                    lb = max(0,center_frame_idx - (length-1)//2) #check left boundary
+                    lb = min(center_frame_complete_seq_len-length, lb) #check right boundary
                 assert lb>=0, f"{name} - Negative left boundary"
                 assert lb<center_frame_complete_seq_len, f"{name} - Exceeding right boundary"
                 
