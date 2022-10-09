@@ -214,18 +214,23 @@ class Asymov(BaseModel):
         self.metrics[split]['ppl_text2mw'].update(logits_from_text.detach().cpu(), target.cpu())
         self.metrics[split]['ppl_mw2mw'].update(logits_from_motion.detach().cpu(), target.cpu())
         if split == "val":
+            # pdb.set_trace()
             self.metrics[split]['mpjpe_text2mw'].update(batch['keyid'], pred_mw_from_text)
 
         return loss
 
     def allsplit_epoch_end(self, split: str, outputs):
+        # if split == "val":
+            # pdb.set_trace()
         losses = self.losses[split]
         loss_dict = losses.compute(split)
+        losses.reset()
         dico = {losses.loss2logname(loss, split): value.item()
                 for loss, value in loss_dict.items()}
 
         #Accuracy, BLEU and Perplexity
         metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items()}
+        _ = [metric.reset() for name, metric in self.metrics[split].items()]
         dico.update(metrics_dict)
 
         # if split == "val":
