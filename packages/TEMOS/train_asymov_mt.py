@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 @hydra.main(config_path="configs", config_name="train_asymov_mt")
 def _train(cfg: DictConfig):
-    logger.info(OmegaConf.to_yaml(cfg, resolve=False, sort_keys=False))
+    # logger.info(OmegaConf.to_yaml(cfg, resolve=False, sort_keys=False))
     if cfg.user:
         os.environ['WANDB_API_KEY'] = cfg.wandb_api_keys[cfg.user]
     cfg.trainer.enable_progress_bar = True

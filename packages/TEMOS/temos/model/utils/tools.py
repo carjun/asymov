@@ -52,3 +52,39 @@ def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, e
         if next_word == end_symbol:
             break
     return tgt #[Frames, 1]
+
+def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
+                  src_mask: Tensor = None, src_padding_mask: Tensor = None) -> Tensor:
+    # src: [Frames, Batches]
+    if src_mask is None:
+        num_tokens = src.shape[0]
+        src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool) # [Frames, Frames]
+    
+    memory = model.encode(src, src_mask, src_padding_mask) #[Frames, Batches, *]
+    
+    # pdb.set_trace()
+    batch_size = src.shape[1]
+    tgt = torch.ones(1, batch_size).fill_(start_symbol).type(torch.long) #[1, Batch size], 1 as for 1st frame
+    tgt_len = torch.full((batch_size,), max_len) #[Batch Size]
+
+    for i in tqdm(range((max_len-1)), "autoregressive translation", None):
+        tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
+                    .type(torch.bool))
+        if i==0:
+            tgt_padding_mask = torch.full((batch_size, 1), False) #[Batch Size, 1], 1 as for 1st frame
+        else:
+            tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(1)], dim=1)
+
+        out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask) #[Frames, Batch Size, *]
+        logits = model.generator(out[-1]) #[Batch Size, Classes]
+        next_word = torch.argmax(logits, dim=-1) #[Batch Size]
+        tgt = torch.cat([tgt, next_word.unsqueeze(0)]) #[Frames+1, Batch size]
+        # tgt2 = torch.argmax(model.generator(out), dim=-1)
+        # assert torch.equal(tgt[1:], tgt2)
+        
+        tgt_len = torch.where(torch.logical_and(next_word==end_symbol, tgt_len==max_len), i+2, tgt_len)
+        if (tgt_len>(i+2)).sum()==0 and (i+2)<max_len: #2nd condition is hack to run tqdm till end, not break at last index
+            break
+    
+    tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
+    return tgt_list #List[Tensor[Frames]]

@@ -61,11 +61,12 @@ class Seq2SeqTransformer(LightningModule):
                                 src_padding_mask, tgt_padding_mask, memory_key_padding_mask)
         return self.generator(outs)
 
-    def encode(self, src: Tensor, src_mask: Tensor):
+    def encode(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor = None):
         return self.transformer.encoder(self.positional_encoding(
-                            self.src_tok_emb(src)), src_mask)
+                            self.src_tok_emb(src)), src_mask, src_padding_mask)
 
-    def decode(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor):
+    def decode(self, tgt: Tensor, memory: Tensor, 
+               tgt_mask: Tensor, memory_mask: Tensor = None, tgt_padding_mask: Tensor = None, memory_key_padding_mask: Tensor = None):
         return self.transformer.decoder(self.positional_encoding(
                           self.tgt_tok_emb(tgt)), memory,
-                          tgt_mask)
+                          tgt_mask, memory_mask, tgt_padding_mask, memory_key_padding_mask)
