@@ -15,7 +15,7 @@ from torchmetrics import MetricCollection, Accuracy, BLEUScore
 from temos.model.metrics.compute_asymov import Perplexity, ReconsMetrics
 from torchmetrics import MetricCollection, Accuracy, BLEUScore, SumMetric
 from temos.model.base import BaseModel
-from temos.model.utils.tools import create_mask, remove_padding, greedy_decode
+from temos.model.utils.tools import create_mask, remove_padding, greedy_decode, batch_greedy_decode
 
 class AsymovMT(BaseModel):
     def __init__(self,
@@ -81,7 +81,13 @@ class AsymovMT(BaseModel):
         
         self.__post_init__()
         
-    #TODO: optimize, and beam search
+    #TODO:beam search
+    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int) -> List[Tensor]: # no teacher forcing, takes batched input but gives unbatched output
+        # src: [Frames, Batch size] 
+        tgt_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+                                       src_mask, src_padding_mask)
+        return tgt_list #List[Tensor[Frames]]
+
     def translate(self, src_list: List[Tensor], max_len: Union[int, List[int]]) -> List[Tensor]: # no teacher forcing
         if type(max_len)==int:
             max_len_list = [max_len]*len(src_list)
@@ -104,7 +110,7 @@ class AsymovMT(BaseModel):
         tgt_out = tgt[1:, :].permute(1,0) #[Batch size, Frames-1]
 
         src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, self.PAD_IDX)
-        logits = self.transformer(src, tgt_input, src_mask, tgt_mask,src_padding_mask, tgt_padding_mask, src_padding_mask)
+        logits = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
         logits = logits.permute(1,2,0) #[Batch size, Classes, Frames]
         
         # Compute the losses
@@ -135,7 +141,12 @@ class AsymovMT(BaseModel):
             #TODO: add max_len buffer frames to config
             # max_len = [i+int(self.fps*5) for i in batch["mw_length"]]
             # pdb.set_trace()
-            pred_mw_tokens = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames) 
+            
+            pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
+            # pred_mw_tokens2 = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames) 
+            # for mw_tokens, mw_tokens2 in zip(pred_mw_tokens, pred_mw_tokens2):
+            #     assert torch.equal(mw_tokens, mw_tokens2)
+            # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
             pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
             self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
             
@@ -149,19 +160,21 @@ class AsymovMT(BaseModel):
         # pdb.set_trace()
         losses = self.losses[split]
         loss_dict = losses.compute(split)
+        losses.reset()
         dico = {losses.loss2logname(loss, split): value.item()
                 for loss, value in loss_dict.items()}
 
         #Accuracy, BLEU and Perplexity Teacher-forced
-        metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')}
-        dico.update(metrics_dict)
+        metrics_dict_teachforce = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')}
+        _ = [metric.reset() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')] 
+        dico.update(metrics_dict_teachforce)
 
         epoch = self.trainer.current_epoch
         if split == "val" and (epoch==0 or (epoch>=self.metrics_start_epoch and epoch%self.metrics_every_n_epoch==0)):
             # pdb.set_trace()
-            dico.update({f"Metrics/bleu/{split}": self.metrics[split]['bleu'].compute()})
-            mpjpe_dict = self.metrics[split]['mpjpe'].compute()
-            dico.update({f"ReconsMetrics/{name}/{split}": metric for name, metric in mpjpe_dict.items()})
+            metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')}
+            _ = [metric.reset() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')] 
+            dico.update(metrics_dict)
             
         dico.update({"epoch": float(self.trainer.current_epoch),
                     "step": float(self.trainer.global_step)})

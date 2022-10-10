@@ -21,6 +21,8 @@ wandb/
 *.err
 *.out
 
+commands_darsh_only.json
+
 # C extensions
 *.so
 

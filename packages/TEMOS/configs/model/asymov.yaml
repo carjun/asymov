@@ -10,7 +10,7 @@ vae: true
 ff_size: 1024
 num_layers: 6
 num_head: ${model.num_layers}
-dropout: 0.1                 #typo: need to be changed to dropout in a lot of places
+dropout: 0.1
 activation: "gelu"
 
 defaults:
