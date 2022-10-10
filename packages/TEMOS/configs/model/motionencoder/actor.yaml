@@ -7,5 +7,5 @@ vae: ${model.vae}
 ff_size: ${model.ff_size}
 num_layers: ${model.num_layers}
 num_head: ${model.num_head}
-droupout: ${model.droupout}
+dropout: ${model.dropout}
 activation: ${model.activation}
