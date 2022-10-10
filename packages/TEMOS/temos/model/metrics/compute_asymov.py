@@ -137,7 +137,7 @@ class ReconsMetrics(Metric):
         
         gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]
         gt = [downsample(keypoint, self.gt_downsample_ratio) for keypoint in gt]
-        cluster_seqs = [cluster_seq.numpy() for cluster_seq in cluster_seqs]
+        cluster_seqs = [cluster_seq.cpu().numpy() for cluster_seq in cluster_seqs]
         
         if ('naive_no_rep' in self.recons_types) or ('naive' in self.recons_types):
             contiguous_frame2cluster_mapping = {"name":[], "idx":[], "cluster":[], "length":[]}
