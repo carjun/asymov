@@ -1,2 +1,2 @@
 _target_: torch.optim.AdamW
-lr: 0.0009120108393559097
+lr: 1e-4
