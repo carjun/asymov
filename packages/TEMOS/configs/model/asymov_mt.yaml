@@ -11,6 +11,8 @@ mw_vocab_size: ??? # vocab size of motion words (including '<pad>', '<bos>', '<e
 dim_feedforward: 2048
 special_symbols: ${data.special_symbols}
 
+dropout: 0.1
+
 fps: ${data.framerate}
 max_frames: ??? # Length of largest mw sequence in train data including EOS/BOS (max limit for mw in the predicted sequence)
 
