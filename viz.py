@@ -980,7 +980,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
         cluster2frame_mapping_path = kwargs['cluster2frame_mapping_path']
 
         contiguous_frame2cluster = contiguous_frame2cluster_mapping_path
-        if type(contiguous_frame2cluster_mapping_path) == str:
+        if type(contiguous_frame2cluster_mapping_path) != pd.DataFrame:
             contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
         contiguous_cluster_seqs = [contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index() for name in seq_names]
 
@@ -1070,7 +1070,7 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
     faulty = []
 
     cluster2frame = cluster2frame_mapping_path
-    if type(cluster2frame_mapping_path) == str:
+    if type(cluster2frame_mapping_path) != pd.DataFrame:
         cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
     with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive_no_rep reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
@@ -1127,7 +1127,7 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
     reconstructed_keypoints = []
 
     cluster2frame = cluster2frame_mapping_path
-    if type(cluster2frame_mapping_path) == str:
+    if type(cluster2frame_mapping_path) != pd.DataFrame:
         cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
     with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
