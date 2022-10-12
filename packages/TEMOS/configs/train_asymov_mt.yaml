@@ -33,4 +33,10 @@ defaults:
   - _self_
 
 callback:
-  viz_ckpts: true 
+  viz_ckpts: false
+  viz_ckpt:
+    start_epoch: ${viz_metrics_start_epoch}
+    every_n_epochs: ${viz_metrics_every_n_epoch}
+  
+  last_ckpt:
+    every_n_epochs: 10

@@ -17,8 +17,6 @@ wandb_api_keys:
 user: 
 
 num_mw_clusters: ???
-viz_metrics_start_epoch: 100
-viz_metrics_every_n_epoch: 5
 # Composing nested config with default
 defaults:
   - data: kit-xyz-motion-word
@@ -38,6 +36,12 @@ data:
     normalization: true
 
 callback:
-  viz_ckpts: true 
+  viz_ckpts: false
+  viz_ckpt:
+    start_epoch: 100
+    every_n_epochs: 5
+
+  last_ckpt:
+    every_n_epochs: 10
 
 transforms: ${data.transforms}
