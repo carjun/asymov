@@ -229,7 +229,10 @@ class Asymov(BaseModel):
                 for loss, value in loss_dict.items()}
 
         #Accuracy, BLEU and Perplexity
-        metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items()}
+        metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if name!='mpjpe_text2mw'}
+        if split=='val':
+            mpjpe_dict = self.metrics[split]['mpjpe_text2mw'].compute()
+            metrics_dict.update({f"Metrics/{name}_text2mw/{split}": metric for name, metric in mpjpe_dict.items()})
         _ = [metric.reset() for name, metric in self.metrics[split].items()]
         dico.update(metrics_dict)
 

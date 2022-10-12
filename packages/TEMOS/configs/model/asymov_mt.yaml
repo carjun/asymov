@@ -16,8 +16,8 @@ dropout: 0.1
 fps: ${data.framerate}
 max_frames: ??? # Length of largest mw sequence in train data including EOS/BOS (max limit for mw in the predicted sequence)
 
-metrics_start_epoch: ${viz_metrics_start_epoch}
-metrics_every_n_epoch: ${viz_metrics_every_n_epoch}
+metrics_start_epoch: ${viz_metrics_start_epoch} # epoch numbering starts from 0, epoch >= metrics_start_epoch
+metrics_every_n_epoch: ${viz_metrics_every_n_epoch} # (epoch+1)%n metrics_every_n_epoch
 
 defaults:
   - transformer: vanilla
@@ -25,6 +25,8 @@ defaults:
   - metrics: asymov_recons
   - optim: adamw
   - /model/losses/function/crossEntropy@func_recons
+
+best_ckpt_monitors: ${callback.best_ckpt_monitors}
 
 func_recons:
   ignore_index: ${special_symbol_idx:${data.special_symbols},'<pad>'}

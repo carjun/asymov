@@ -80,6 +80,8 @@ def train(cfg: DictConfig) -> None:
     ]
     if cfg.callback.viz_ckpts:
         callbacks.append(instantiate(cfg.callback.viz_ckpt))
+    for monitor, mode in cfg.callback.best_ckpt_monitors:
+        callbacks.append(instantiate(cfg.callback.best_ckpt, monitor=monitor, mode=mode))
     logger.info("Callbacks initialized")
 
     #TODO: instantiate using hydra
