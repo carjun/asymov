@@ -63,12 +63,20 @@ class ComputeMetrics(Metric):
         APE_metrics["APE_mean_pose"] = self.APE_pose.mean() / count
         APE_metrics["APE_mean_joints"] = self.APE_joints.mean() / count
 
+        # Remove arrays
+        APE_metrics.pop("APE_pose")
+        APE_metrics.pop("APE_joints")
+        
         count_seq = self.count_seq
         AVE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.AVE_metrics}
 
         # Compute average of AVEs
         AVE_metrics["AVE_mean_pose"] = self.AVE_pose.mean() / count_seq
         AVE_metrics["AVE_mean_joints"] = self.AVE_joints.mean() / count_seq
+
+        # Remove arrays
+        AVE_metrics.pop("AVE_pose")
+        AVE_metrics.pop("AVE_joints")
 
         return {**APE_metrics, **AVE_metrics}
 
