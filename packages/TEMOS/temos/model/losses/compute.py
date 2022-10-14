@@ -8,6 +8,7 @@ from torchmetrics import Metric
 class TemosComputeLosses(Metric):
     def __init__(self, vae: bool,
                  mode: str,
+                 use_cos:bool,              #condition to use cosSimilarity over Smooth L1
                  loss_on_both: bool = False,
                  force_loss_on_jfeats: bool = True,
                  ablation_no_kl_combine: bool = False,
@@ -19,6 +20,8 @@ class TemosComputeLosses(Metric):
         # Save parameters
         self.vae = vae
         self.mode = mode
+
+        self.use_cos = use_cos          #cosSimilarity
 
         self.loss_on_both = loss_on_both
         self.force_loss_on_jfeats = force_loss_on_jfeats
@@ -52,9 +55,14 @@ class TemosComputeLosses(Metric):
                 else:
                     kl_losses.extend(["kl_text", "kl_motion"])
             losses.extend(kl_losses)
-        if not self.vae or loss_on_both:
+        if (not self.vae or loss_on_both) and not use_cos:
             if not ablation_no_motionencoder:
                 losses.append("latent_manifold")
+
+        if (not self.vae or loss_on_both) and use_cos:     #cosSimilarity loss
+            if not ablation_no_motionencoder:
+                losses.append("cosine_similarity")
+
         losses.append("total")
 
         for loss in losses:
@@ -96,9 +104,14 @@ class TemosComputeLosses(Metric):
                 total += self._update_loss("kl_text", dis_text, dis_ref)
                 if not self.ablation_no_motionencoder:
                     total += self._update_loss("kl_motion", dis_motion, dis_ref)
-        if not self.vae or self.loss_on_both:
+        if (not self.vae or self.loss_on_both) and not self.use_cos:
             if not self.ablation_no_motionencoder:
                 total += self._update_loss("latent_manifold", lat_text, lat_motion)
+
+        if (not self.vae or self.loss_on_both) and self.use_cos:                    #cosSimilarity
+            if not self.ablation_no_motionencoder:
+                total += self._update_loss("cosine_similarity", lat_text, lat_motion)
+        
 
         self.total += total.detach()
         self.count += 1
@@ -113,9 +126,9 @@ class TemosComputeLosses(Metric):
     def _update_loss(self, loss: str, outputs, inputs):
         # Update the loss
         val = self._losses_func[loss](outputs, inputs)
-        getattr(self, loss).__iadd__(val.detach())
+        getattr(self, loss).__iadd__(val.mean().detach())
         # Return a weighted sum
-        weighted_loss = self._params[loss] * val
+        weighted_loss = self._params[loss] * val.mean()
         return weighted_loss
 
     def loss2logname(self, loss: str, split: str):
