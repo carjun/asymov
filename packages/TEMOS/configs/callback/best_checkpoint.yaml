@@ -1,7 +1,7 @@
 _target_: pytorch_lightning.callbacks.ModelCheckpoint
 
-monitor: ???
-mode: ???
+monitor: 
+mode: 
 filename: best-${.monitor}-{${.monitor}}-epoch-{epoch}
 auto_insert_metric_name: false
 dirpath: ${path.working_dir}/checkpoints
