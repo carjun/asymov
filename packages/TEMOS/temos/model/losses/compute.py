@@ -126,9 +126,9 @@ class TemosComputeLosses(Metric):
     def _update_loss(self, loss: str, outputs, inputs):
         # Update the loss
         val = self._losses_func[loss](outputs, inputs)
-        getattr(self, loss).__iadd__(val.detach())
+        getattr(self, loss).__iadd__(val.mean().detach())
         # Return a weighted sum
-        weighted_loss = self._params[loss] * val
+        weighted_loss = self._params[loss] * val.mean()
         return weighted_loss
 
     def loss2logname(self, loss: str, split: str):
