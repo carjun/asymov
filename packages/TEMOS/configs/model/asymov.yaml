@@ -13,8 +13,6 @@ num_head: ${model.num_layers}
 dropout: 0.1
 activation: "gelu"
 
-use_cos: true
-
 defaults:
   - textencoder: distilbert_actor
   - motionencoder: asymov
@@ -25,9 +23,6 @@ defaults:
   - /model/losses/function/crossEntropy@func_recons
   - /model/losses/function/smoothL1@func_latent
   - /model/losses/function/kl@func_kl
-  - /model/losses/function/cosSimilarity@func_cos
 
 func_recons:
   ignore_index: ${model.vocab_size}
-
-
