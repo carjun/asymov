@@ -1,8 +1,8 @@
 {
     "dummy_train": 
     {
-        "TEMOS_asymov_xyz": "python train_asymov.py experiment=dummy run_id=dummy user= data.splitpath='${path.datasets}/kit-splits-tiny' num_mw_clusters=1000 viz_metrics_start_epoch=0 viz_metrics_every_n_epoch=3 trainer=cpu trainer.max_epochs=10 model.metrics.recons_types=['naive']",
-        "MT_xyz": "python train_asymov_mt.py experiment=dummy run_id=dummy data.splitpath='${path.datasets}/kit-splits-tiny' num_mw_clusters=1000 viz_metrics_start_epoch=0 viz_metrics_every_n_epoch=3 trainer=cpu trainer.max_epochs=10 model.max_frames=100 model.metrics.recons_types=['naive'] logger=none machine.num_workers=0"
+        "TEMOS_asymov_xyz": "python train_asymov.py experiment=dummy user= data.splitpath='${path.datasets}/kit-splits-tiny' num_mw_clusters=1000 trainer=cpu trainer.max_epochs=10 model.metrics.recons_types=['naive']",
+        "MT_xyz": "python train_asymov_mt.py experiment=dummy user= data.splitpath='${path.datasets}/kit-splits-tiny' num_mw_clusters=1000 trainer=cpu trainer.max_epochs=10 model.max_frames=100 model.metrics.recons_types=['naive'] viz_metrics_start_epoch=0 viz_metrics_every_n_epoch=3 "
     },
     
     "train":

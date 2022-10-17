@@ -9,7 +9,7 @@ import pdb
 
 logger = logging.getLogger(__name__)
 
-@hydra.main(config_path="configs", config_name="train_asymov_mt")
+@hydra.main(version_base=None, config_path="configs", config_name="train_asymov_mt")
 def _train(cfg: DictConfig):
     # logger.info(OmegaConf.to_yaml(cfg, resolve=False, sort_keys=False))
     if cfg.user:

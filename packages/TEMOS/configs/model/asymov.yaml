@@ -29,5 +29,3 @@ defaults:
 
 func_recons:
   ignore_index: ${model.vocab_size}
-
-

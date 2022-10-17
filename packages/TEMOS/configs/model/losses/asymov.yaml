@@ -31,11 +31,6 @@ recons_mw2mw_func: ${model.func_recons}
 latent_manifold: ${.lmd_latent}
 latent_manifold_func: ${model.func_latent}
 
-# Cosine Similarity(for cross-model) loss
-# use_cos: ${model.use_cos}
-cosine_similarity: ${.lmd_latent}            #complete this
-cosine_similarity_func: ${model.func_cos}
-
 # VAE losses
 kl_text: ${.lmd_kl}
 kl_text_func: ${model.func_kl}
