@@ -9,6 +9,7 @@
 import os, sys
 import os.path as osp
 from os.path import join as ospj
+from os.path import basename as ospb
 import pdb
 from tqdm import tqdm
 import pickle
@@ -160,9 +161,9 @@ def get_coco17_joint_names():
     '''
     return [
         'nose', #0
-        'left_eye', 'right_eye', #1,2  
+        'left_eye', 'right_eye', #1,2
         'left_ear', 'right_ear', #3,4
-        'left_shoulder', 'right_shoulder', #5,6 
+        'left_shoulder', 'right_shoulder', #5,6
         'left_elbow', 'right_elbow', #7,8
         'left_wrist', 'right_wrist', #9,10
         'left_hip', 'right_hip', #11,12
@@ -311,8 +312,8 @@ def get_coco17_skeleton():
         [0, 1], [0, 2],
         [1, 3], [2, 4],
 
-        #Spine 
-        [5, 11], [6, 12], 
+        #Spine
+        [5, 11], [6, 12],
         [5, 6], [11, 12], #bridging left and right
 
         #Right lower
@@ -399,6 +400,7 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
             elif sk_type is 'nturgbd', then assume:
                 1. no translation.
                 2. Size = (# frames, 25, 3)
+            elif sk_type == 'kitml_temos'
         folder_p (str): Path to root folder containing visualized frames.
             Frames are dumped to the path: folder_p/frames/*.jpg
         radius (float): Space around the subject?
@@ -416,7 +418,7 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
         kin_chain = get_smpl_skeleton()  # NOTE that hands are skipped.
         # Reshape flat pose features into (frames, joints, (x,y,z)) (skip trans)
         seq = seq[:, 3:].reshape(-1, len(joint_names), 3).cpu().detach().numpy()
-    elif sk_type=='kit' or sk_type=='kitml':
+    elif 'kit' in sk_type:
         joint_names = get_kitml_joint_names()
         kin_chain = get_kitml_skeleton()
         # seq[..., 1] = -seq[..., 1]
@@ -436,13 +438,22 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     colors = get_joint_colors(joint_names)
     labels = [(joint_names[jidx[0]], joint_names[jidx[1]]) for jidx in kin_chain]
 
-    # xroot, yroot, zroot = 0.0, 0.0, 0.0
+    xroot, yroot, zroot = 0.0, 0.0, 0.0
     if sk_type=='coco17':
         xroot, yroot, zroot = 0.5*(seq[0,11] + seq[0,12])
         seq=seq-np.array([[[xroot, yroot, zroot]]])
         seq=seq/np.max(np.abs(seq))
+    elif sk_type == 'kitml_temos':
+        # !inital translation. Subtract all frames by frame 0's pelvis.
+        seq -= seq[0, 11]
+        # !global translation. Subtract all frames by corresponding pelvis.
+        seq -= seq[:,11:12,:]
+        # x, y, z --> [-1, 1]
+        # seq /= np.max(np.abs(seq), axis=(0,1))  # Normalize each dim. separately.
+        seq /= np.max(np.abs(seq))  # Normalize all dim. uniformly.
     else:
         xroot, yroot, zroot = seq[0, 0, 0], seq[0, 0, 1], seq[0, 0, 2]
+
     # seq = seq - seq[0, :, :]
 
     # Change viewing angle so that first frame is in frontal pose
@@ -450,20 +461,25 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
     # az = calc_angle_from_y(seq[0]-np.array([xroot, yroot, zroot]))
 
     # Create folder for frames
-    os.makedirs(osp.join(folder_p, 'frames'))
+    if not os.path.exists(osp.join(folder_p, 'frames')):
+        os.makedirs(osp.join(folder_p, 'frames'))
 
     # Viz. skeleton for each frame
     # for t in tqdm(range(seq.shape[0]), desc='frames', position=1, leave=False):
     for t in range(seq.shape[0]):
-        # pdb.set_trace()
         # Fig. settings
         fig = plt.figure(figsize=(7, 6)) if debug else \
               plt.figure(figsize=(5, 5))
         ax = fig.add_subplot(111, projection='3d')
 
-        xroot, yroot, zroot = 0.5*(seq[t,11] + seq[t,12])
+        if sk_type == 'kitml_temos':
+            xroot, yroot, zroot = seq[t,11]
+        elif 'kit' in sk_type:
+            xroot, yroot, zroot = 0.5*(seq[t,11] + seq[t,12])
+        else:
+            pass  # Do not update root.  # TODO: Verify this.
+
         # seq[t] = seq[t] - [xroot, yroot, zroot]
-        
 
         # More figure settings
         ax.set_title(action)
@@ -490,6 +506,7 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
 
         # ax.view_init(75, az)
         # ax.view_init(elev=20, azim=90+az)
+
         if sk_type == 'coco17':
             ax.view_init(elev=-90, azim=90)
         else:
@@ -507,12 +524,12 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
             # Plot bones in skeleton
             ax.plot(x, y, z, c=colors[i], marker='o', linewidth=2, label=labels[i])
             pass
-            
+
         # pdb.set_trace()
         cv2.waitKey(0)
 
         # fig.savefig(osp.join(folder_p, 'frames', '{1}_{0}.jpg'.format(t, ii)))
-        fig.savefig(osp.join(folder_p, 'frames', '{0}.jpg'.format(t)))
+        fig.savefig(osp.join(folder_p, 'frames', '{:05d}.jpg'.format(t)))
         plt.close(fig)
 
         # Debug statement
@@ -527,16 +544,17 @@ def write_vid_from_imgs(folder_p, fps):
         fps (float): Output frame rate.
 
     Returns:
-        Output video is stored in the path: folder_p/video.mp4
+        Output video is stored in the path: folder_p/{seq_id}.mp4
     '''
-    vid_p = osp.join(folder_p, 'video.mp4')
+    sid = ospb(folder_p)
+    vid_p = osp.join(folder_p, f'{sid}.mp4')
     cmd = ['ffmpeg', '-r', str(int(fps)), '-i',
-                    osp.join(folder_p, 'frames', '%d.jpg'), '-y', vid_p]
+                    osp.join(folder_p, 'frames', '%05d.jpg'), '-y', vid_p]
     FNULL = open(os.devnull, 'w')
     retcode = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
     if not 0 == retcode:
         print('*******ValueError(Error {0} executing command: {1}*********'.format(retcode, ' '.join(cmd)))
-    # shutil.rmtree(osp.join(folder_p, 'frames'))
+    shutil.rmtree(osp.join(folder_p, 'frames'))
 
 #TODO take fps dynamically
 # def joint2vid(name_keypoint, sk_type, frames_dir, fps):
@@ -546,27 +564,28 @@ def write_vid_from_imgs(folder_p, fps):
 #     write_vid_from_imgs(folder_p, fps)
 #     return None
 
+
 def viz_skeleton_mp(seq_folder_p, sk_type, radius):
     return viz_skeleton(*seq_folder_p, sk_type, radius)
 
-def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
+
+def viz_l_seqs(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     '''1. Dumps sequence of skeleton images for the given sequence of joints.
     2. Collates the sequence of images into an mp4 video.
 
     Args:
-        seq_names (List(str)): name of sequences to visualize 
+        seq_names (List(str)): name of sequences to visualize
+        # TODO: Change this
         keypoints (np.array([T, num_joints, 3])): Joint positions for each frame
         frames_dir (str): Path to dir where visualizations will be dumped.
         sk_type (str): {'smpl', 'nturgbd','kitml','coco17'}
         fps (float): Output frame rate.
-        force (Bool): If True visualizes all sequences even if already exists in frames_dir. 
-                    Defaults to False, only visualizes incomplete or un-visualized sequences.  
+        force (Bool): If True visualizes all sequences even if already exists in frames_dir.
+                    Defaults to False, only visualizes incomplete or un-visualized sequences.
 
     Return:
-        None. Path of mp4 video: folder_p/video.mp4
+        None. Path of mp4 video: folder_p/{seq_name}.mp4
     '''
-    # pdb.set_trace()
-    
     # Delete folder if exists
     if force:
         _ = [shutil.rmtree(ospj(frames_dir, name)) for name in seq_names if osp.exists(ospj(frames_dir, name))]
@@ -576,28 +595,28 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
         for name in seq_names:
             folder_p = ospj(frames_dir, name)
             if osp.exists(folder_p):
-                if osp.exists(ospj(folder_p, 'video.mp4')):
+                # Rename folder
+                if osp.exists(ospj(folder_p, f'{name}.mp4')):
                     # print(f'Video for {folder_p[-5:]} already exists')
                     continue
                 else:
                     # print('Deleting existing folder ', folder_p)
                     shutil.rmtree(folder_p)
             viz_names.append(name)
-    # print(f'Sequences to visualize: {len(viz_names)}')
-    
-    #TODO: take radius for visualizations as a hydra argument
+    print(f'Sequences to visualize: {len(viz_names)}')
+
+    # pdb.set_trace()
     # joint2img_procs = []
     # img2vid_procs = []
     # with tqdm(zip(viz_names, keypoints), desc='joint2img', total=len(viz_names), position=0) as pbar:
     #     for name, keypoint in pbar:
     #         pbar.set_description(desc=f'joint2img {name}')
     #         folder_p = ospj(frames_dir, name)
-            
     #         viz_skeleton(keypoint, folder_p, sk_type, 1.2)
-    #         # joint2img_proc = Process(target=viz_skeleton, args=(keypoint, folder_p, sk_type, 1.2))
-    #         # joint2img_proc.start()
-    #         # joint2img_procs.append(joint2img_proc)
-    
+    #       # joint2img_proc = Process(target=viz_skeleton, args=(keypoint, folder_p, sk_type, 1.2))
+    #       # joint2img_proc.start()
+    #       # joint2img_procs.append(joint2img_proc)
+
     # with tqdm(enumerate(viz_names), desc='img2vid', total=len(viz_names), position=0) as pbar:
     #     for i, name in pbar:
     #         pbar.set_description(desc=f'img2vid {name}')
@@ -608,7 +627,7 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     #         # img2vid_proc.start()
     #         # img2vid_procs.append(img2vid_proc)
     # _ = [p.join() for p in tqdm(img2vid_procs, 'generating vids')]
-    
+
     # #option 1: new process for each seq_name (with Pool, concurrent operations)
     # n = len(viz_names)
 
@@ -616,8 +635,8 @@ def viz_seq(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     #     iter = zip(viz_names, keypoints)
     #     with tqdm(total=n) as pbar:
     #         _ = [pbar.update() for _ in p.imap_unordered(partial(joint2vid, sk_type=sk_type, frames_dir=frames_dir, fps=fps), iter)]
-    
-    #option 2: new process for each seq_name for each operation (with Pool, sequential operations)
+
+    # option 2: new process for each seq_name for each operation (with Pool, sequential operations)
     n = len(viz_names)
     folders_p = [ospj(frames_dir, name) for name in viz_names]
     with Pool(cpu_count()*2) as p:
@@ -701,7 +720,7 @@ def fill_xml_jpos(all_j_names, mmm_seq):
 #     import packages.Complextext2animation.src.data as d
 #     import packages.Complextext2animation.src.common.mmm as mmm
 
-    
+
 #     kitml_fol_p = '/ps/project/conditional_action_gen/language2motion/packages/Complextext2animation/dataset/kit-mocap/'
 
 #     # List of seq ids to viz.
@@ -788,17 +807,17 @@ def cluster2vid(clusters_idx, sk_type, proxy_center_info_path, data_path, frames
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
                     or the GT dictionary itself
         frames_dir : Path to root folder that will contain frames folder
-        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 0.25 (25/100 for kitml). 
+        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 0.25 (25/100 for kitml).
         fps (float): Desired frame rate. Default = 25.0 (25 for kitml)
         duration : the duration (in secs) for which the cluster visualization should last
         force : If True, visualize all clusters overwriting existing ones. Defaults to False, visualizing only those whose .mp4 videos do not already exist.
-        
+
     Return:
         None. Path of mp4 video: frames_dir/{cluster_idx}/video.mp4
     '''
     # from packages.acton.src.data.dataset.loader import KITDataset
     # pdb.set_trace()
-    
+
     #get GT keypoints to visualize
     if type(data_path) == dict:
         ground_truth_data = data_path
@@ -808,7 +827,7 @@ def cluster2vid(clusters_idx, sk_type, proxy_center_info_path, data_path, frames
     # support frames on each side of center frame
     gt_fps = fps/gt_downsample_ratio
     support_frames_count = int((gt_fps*duration-1)/2) #-1 for center frame
-    
+
     #get proxy center info
     if type(proxy_center_info_path) == pd.DataFrame:
         proxy_center_info = proxy_center_info_path
@@ -822,7 +841,7 @@ def cluster2vid(clusters_idx, sk_type, proxy_center_info_path, data_path, frames
         seq = seq_complete[max(0, center_frame_idx-support_frames_count):min(seq_complete.shape[0], center_frame_idx+support_frames_count+1)]
         seqs.append(downsample(seq, gt_downsample_ratio))
     #visualize the required fragment of complete sequence
-    viz_seq([str(i) for i in clusters_idx], seqs, ospj(frames_dir, str(cluster_idx)), sk_type, fps, force)
+    viz_l_seqs([str(i) for i in clusters_idx], seqs, ospj(frames_dir, str(cluster_idx)), sk_type, fps, force)
 
 #-------------------------------------------------------------------------------
 
@@ -843,8 +862,8 @@ def cluster_seq2vid(cluster_seq, cluster2keypoint_mapping_path, frames_dir, sk_t
     '''
 
     cluster2keypoint = pd.read_pickle(cluster2keypoint_mapping_path)
-    skeleton_keypoints = np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq]) 
-    viz_seq(skeleton_keypoints, frames_dir, sk_type, debug=False).join()
+    skeleton_keypoints = np.array([cluster2keypoint.loc[i,'keypoints3d'] for i in cluster_seq])
+    viz_l_seqs(skeleton_keypoints, frames_dir, sk_type, debug=False).join()
 
 #-------------------------------------------------------------------------------
 
@@ -860,15 +879,15 @@ def mpjpe3d(seq_names, pred_keypoints, target_keypoints):
     with tqdm(zip(seq_names, pred_keypoints, target_keypoints), desc='calculating mpjpe', total=len(seq_names), position=0, leave=False) as pbar:
         for name, pred_keypoint, target_keypoint in pbar:
             pbar.set_description(desc=f'calculating mpjpe for {name}')
-            
+
             if pred_keypoint.shape[0]!=target_keypoint.shape[0]:
                 # if abs(pred_keypoint.shape[0]-target_keypoint.shape[0]) > 100:
                 #     print(f'Reconstruction of {name} had {pred_keypoint.shape[0]-target_keypoint.shape[0]} more frames')
                 assert pred_keypoint.shape[0]!=0
-        
+
             mn = min(pred_keypoint.shape[0], target_keypoint.shape[0])
             mpjpe_per_sequence.append(np.mean(np.sqrt(np.sum((target_keypoint[:mn] - pred_keypoint[:mn]) ** 2, axis=2))))
-    
+
     return mpjpe_per_sequence
 #-------------------------------------------------------------------------------
 
@@ -919,33 +938,33 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
         seq_names (List[str]): name of video sequences to reconstruct
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
                     or the GT dictionary itself
-        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}        
-        recons_upsample_ratio : Float(desired_fps/recons_fps), should be >=1.0. Default = 2.0 (25/12.5 for kitml). 
-        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 0.25 (25/100 for kitml). 
+        sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
+        recons_upsample_ratio : Float(desired_fps/recons_fps), should be >=1.0. Default = 2.0 (25/12.5 for kitml).
+        gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 0.25 (25/100 for kitml).
         fps (float): Output frame rate. Default = 25.0 (25 for kitml)
-        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization. 
-        viz_names (List[str]): name of video sequences to visualize. Defaults to 'seq_names' argument. Pass [] to not visualize any.  
+        frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization.
+        viz_names (List[str]): name of video sequences to visualize. Defaults to 'seq_names' argument. Pass [] to not visualize any.
         force : If True, visualize all viz_names overwriting existing ones. Defaults to False, visualizing only those whose .mp4 videos do not already exist.
         **kwargs: Must contain
             if recons_type == 'naive_no_rep' or 'naive':
                 contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
                 cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
-            if recons_type == 'very_naive': 
+            if recons_type == 'very_naive':
                 cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
-                frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster. 
+                frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster.
                 frame2cluster_mapping_dir: Path of directory containing .npy files for TEMOS-asymov variant.
     '''
 
-    assert recons_upsample_ratio>=1.0, "recons_upsample_ratio cannot be less than 1"   
-    assert gt_downsample_ratio<=1.0, "gt_downsample_ratio cannot be greater than 1"   
+    assert recons_upsample_ratio>=1.0, "recons_upsample_ratio cannot be less than 1"
+    assert gt_downsample_ratio<=1.0, "gt_downsample_ratio cannot be greater than 1"
     # if fps is None:
     #     if sk_type == 'kitml':
-    #         fps = 25.0 
+    #         fps = 25.0
     #     elif sk_type == 'coco17':
-    #         fps = 60.0 
+    #         fps = 60.0
     #     else:
     #         fps = 30.0
-    
+
     print('----------------------------------------------------')
     # print(recons_type+'_reconstruction')
     if type(data_path) == dict:
@@ -955,14 +974,16 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
             ground_truth_data = pickle.load(handle)
     gt = [ground_truth_data[name][:5000, :, :] for name in seq_names]
     gt = [downsample(keypoint, gt_downsample_ratio) for keypoint in gt]
-    
+
     if recons_type == 'naive_no_rep' or recons_type  == 'naive':
         contiguous_frame2cluster_mapping_path = kwargs['contiguous_frame2cluster_mapping_path']
         cluster2frame_mapping_path = kwargs['cluster2frame_mapping_path']
 
-        contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
+        contiguous_frame2cluster = contiguous_frame2cluster_mapping_path
+        if type(contiguous_frame2cluster_mapping_path) != pd.DataFrame:
+            contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
         contiguous_cluster_seqs = [contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index() for name in seq_names]
-        
+
         output = eval(recons_type+'_reconstruction')(seq_names, contiguous_cluster_seqs,  ground_truth_data, cluster2frame_mapping_path)
         if recons_type == 'naive_no_rep':
             recons, faulty = output
@@ -979,20 +1000,20 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
             frame2cluster_mapping_dir = kwargs['frame2cluster_mapping_dir']
         else:
             frame2cluster_mapping_dir = None
-        
+
         if frame2cluster_mapping_path is not None:
             frame2cluster = pd.read_pickle(frame2cluster_mapping_path)
             cluster_seqs = [frame2cluster[frame2cluster['seq_name']==name]['cluster'] for name in seq_names]
         elif frame2cluster_mapping_dir is not None:
-            cluster_seqs = [np.load(os.path.join(frame2cluster_mapping_dir, f"{name}.npy")) for name in seq_names] 
+            cluster_seqs = [np.load(os.path.join(frame2cluster_mapping_dir, f"{name}.npy")) for name in seq_names]
         else:
             ValueError('frame2cluster not given')
 
         recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path)
-    
+
     # recons and gt in desired fps
     recons = [upsample(keypoint, recons_upsample_ratio) for keypoint in recons]
-    
+
     mpjpe={}
     print('----------------------------------------------------')
     # print("MPJPE")
@@ -1020,12 +1041,12 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, recons_u
                 frames_dir_temp = frames_dir / f"{recons_type}"
             else:
                 frames_dir_temp = frames_dir / f"{recons_type}_{filter}"
-            
-            viz_seq(viz_names, recons, frames_dir_temp, sk_type, fps, force)
+
+            viz_l_seqs(viz_names, recons, frames_dir_temp, sk_type, fps, force)
         print('----------------------------------------------------')
     print('----------------------------------------------------')
     # if per_seq_score:
-    #     return np.mean(mpjpe_per_sequence), mpjpe_per_sequence 
+    #     return np.mean(mpjpe_per_sequence), mpjpe_per_sequence
     # else:
     #     return np.mean(mpjpe_per_sequence)
     return mpjpe
@@ -1048,19 +1069,21 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
     reconstructed_keypoints = []
     faulty = []
 
-    cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
+    cluster2frame = cluster2frame_mapping_path
+    if type(cluster2frame_mapping_path) != pd.DataFrame:
+        cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
     with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive_no_rep reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
         for name, contiguous_cluster_seq in pbar:
             pbar.set_description(f'naive_no_rep reconstruction - {name}')
             reconstructed_keypoint = []
-            
+
             # try:
             for i in range(contiguous_cluster_seq.shape[0]):
                 #get contiguous cluster info
                 contiguous_cluster = contiguous_cluster_seq.iloc[i]
                 cluster, length = contiguous_cluster[['cluster', 'length']]
-                #get center frame info 
+                #get center frame info
                 center_frame = cluster2frame.iloc[cluster]
                 center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
                 center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
@@ -1075,7 +1098,7 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
                     lb = min(center_frame_complete_seq_len-length, lb) #check right boundary
                 assert lb>=0, f"{name} - Negative left boundary"
                 assert lb<center_frame_complete_seq_len, f"{name} - Exceeding right boundary"
-                
+
                 #reconstruct
                 reconstructed_keypoint.append(center_frame_complete_seq[lb:lb+min(length, center_frame_complete_seq_len)])
                 assert reconstructed_keypoint[-1].shape[0]==length, f"{name} - {reconstructed_keypoint[-1].shape[0]-length} extra frames i reconstruction"
@@ -1102,18 +1125,21 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
     '''
     assert len(seq_names) == len(contiguous_cluster_seqs)
     reconstructed_keypoints = []
-    cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
+
+    cluster2frame = cluster2frame_mapping_path
+    if type(cluster2frame_mapping_path) != pd.DataFrame:
+        cluster2frame = pd.read_pickle(cluster2frame_mapping_path)
 
     with tqdm(zip(seq_names, contiguous_cluster_seqs), desc='naive reconstruction', total=len(seq_names), disable=(not verbose)) as pbar:
         for name, contiguous_cluster_seq in pbar:
             pbar.set_description(f'naive reconstruction - {name}')
             reconstructed_keypoint = []
-            
+
             for i in range(contiguous_cluster_seq.shape[0]):
                 #get contiguous cluster info
                 contiguous_cluster = contiguous_cluster_seq.iloc[i]
                 cluster, length = contiguous_cluster[['cluster', 'length']]
-                #get center frame info 
+                #get center frame info
                 center_frame = cluster2frame.iloc[cluster]
                 center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
                 center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
@@ -1124,7 +1150,7 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
                 l_frames = min(side_length, center_frame_idx)
                 r_frames = min(side_length, center_frame_complete_seq.shape[0]-1 - center_frame_idx)
                 center_reps = length - l_frames - r_frames
-                
+
                 #reconstruct
                 reconstructed_keypoint.append(np.concatenate((
                     center_frame_complete_seq[center_frame_idx-l_frames:center_frame_idx], #left supporting frames
@@ -1141,9 +1167,9 @@ def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_
     '''
     Args:
         seq_names : name of video sequences to reconstruct
-        cluster_seqs : the mapping of each frame to a cluster. 
+        cluster_seqs : the mapping of each frame to a cluster.
         cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
-        
+
     Retruns:
         The reconstructed keypoints
     '''
@@ -1171,11 +1197,11 @@ def ground_truth_construction(seq_names, data_path, sk_type='kitml', gt_downsamp
         gt_downsample_ratio : Float(desired_fps/gt_fps), should be <=1.0. Default = 0.25 (25/100 for kitml).
         fps (float): Output frame rate. Default = 25.0 (25 for kitml).
         frames_dir : Path to root folder that will contain frames folder for visualization.
-        force (Bool): If True visualizes all sequences even if already exists in frames_dir. 
-                    Defaults to False, only visualizes incomplete or un-visualized sequences. 
-    Retruns:
+        force (Bool): If True visualizes all sequences even if already exists in frames_dir.
+                    Defaults to False, only visualizes incomplete or un-visualized sequences.
+    Returns:
         None.
-        The reconstructed videos are saved in {frames_dir}/{seq_name} as video.mp4 
+        The reconstructed videos are saved in {frames_dir}/{seq_name} as {seq_name}.mp4
     '''
     assert frames_dir is not None, "path to store gt visualizations absent"
     assert gt_downsample_ratio<=1.0, "gt_downsample_ratio cannot be greater than 1"
@@ -1188,11 +1214,11 @@ def ground_truth_construction(seq_names, data_path, sk_type='kitml', gt_downsamp
 
     print('----------------------------------------------------')
     #TODO: remove 5000 limit
-    gt = [downsample(ground_truth_data[name][:5000, :, :], gt_downsample_ratio) 
+    gt = [downsample(ground_truth_data[name][:5000, :, :], gt_downsample_ratio)
           for name in tqdm(seq_names, 'Ground Truth construction')]
     print('----------------------------------------------------')
 
-    viz_seq(seq_names, gt, frames_dir, sk_type, fps, force)
+    viz_l_seqs(seq_names, gt, frames_dir, sk_type, fps, force)
     print('----------------------------------------------------')
 
 #-------------------------------------------------------------------------------
@@ -1201,13 +1227,13 @@ if __name__ == '__main__':
 
     # viz_kitml_seq()
     # viz_aistpp_seq()
-    
+
     # d = pd.read_pickle('/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_res_150.pkl')
     # cluster_seq = d[d['seq_name']=='gWA_sFM_cAll_d25_mWA2_ch03']['cluster']
     # cluster_seq2vid(cluster_seq[:500], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl', '/content/drive/Shareddrives/vid tokenization/seq2vid', 'coco17')
 
-    # cluster2vid(clusters_idx=[i for i in range(150)], sk_type='kitml', 
-    #     proxy_center_info_path='/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl', 
+    # cluster2vid(clusters_idx=[i for i in range(150)], sk_type='kitml',
+    #     proxy_center_info_path='/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl',
     #     data_dir='/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/', data_name='xyz',
     #     frames_dir='/content/drive/Shareddrives/vid tokenization/cluster2vid')
 
@@ -1218,14 +1244,14 @@ if __name__ == '__main__':
 
     # seq_names=['02654']
     # seq = d.load_keypoint3d('02654')
-    # seq_names = ['01699', #'02855', 
+    # seq_names = ['01699', #'02855',
     #    '00826', '02031', '01920', '02664', '01834',
     #    '02859', '00398', '03886', '01302', '02053', '00898', '03592',
     #    '03580', '00771', '01498', '00462', '01292', '02441', '03393',
     #    '00376', '02149', '03200', '03052', '01788', '00514', '01744',
     #    '02977', '00243', '02874', '00396', '03597', '02654', '03703',
     #    '00456', '00812', '00979', '00724', '01443', '03401', '00548',
-    #    '00905', '00835', #'02612', 
+    #    '00905', '00835', #'02612',
     #    '02388', '03788', '03870', '03181',
     #    '00199']
     seq_names = ["00017",
@@ -1234,7 +1260,7 @@ if __name__ == '__main__':
         "00014",
         "00005",
         "00010"]
-    
+
     #TODO use cofig to get viz paths
     frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/advanced_tr_res_150.pkl'
     contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/advanced_tr_150.pkl'
@@ -1242,11 +1268,11 @@ if __name__ == '__main__':
     cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/proxy_centers_tr_complete_150.pkl'
     sk_type = 'kitml'
     frames_dir = '/content/drive/Shareddrives/vid tokenization/kit_reconstruction/'
-    
+
     # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, frames_dir+'very_naive')
     very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type)
     print('very naive mpjpe : ', very_naive_mpjpe_mean)
-    
+
     # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive')
     naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
     print('naive mpjpe : ', naive_mpjpe_mean)
@@ -1260,7 +1286,7 @@ if __name__ == '__main__':
     # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter = 'uniform', frames_dir=frames_dir+'very_naive_ufilter')
     very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter='uniform')
     print('uniform filtered very naive mpjpe : ', very_naive_mpjpe_mean)
-    
+
     # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_ufilter')
     naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
     print('uniform filtered naive mpjpe : ', naive_mpjpe_mean)
@@ -1273,7 +1299,7 @@ if __name__ == '__main__':
     # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter = 'spline', frames_dir=frames_dir+'very_naive_sfilter')
     very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter='spline')
     print('spline filtered very naive mpjpe : ', very_naive_mpjpe_mean)
-    
+
     # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_sfilter')
     naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
     print('spline filtered naive mpjpe : ', naive_mpjpe_mean)

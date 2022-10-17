@@ -16,7 +16,7 @@ wandb_api_keys:
 user: 
 
 num_mw_clusters: ???
-viz_metrics_start_epoch: 100
+viz_metrics_start_epoch: 0
 viz_metrics_every_n_epoch: 5
 # Composing nested config with default
 defaults:
@@ -33,4 +33,12 @@ defaults:
   - _self_
 
 callback:
-  viz_ckpts: true 
+  best_ckpt_monitors: [['total/val', 'min'], ['Metrics/bleu/val', 'max'], ['Metrics/acc_teachforce/val', 'max'], ['Metrics/MPJPE_naive_none/val', 'min']]
+  
+  viz_ckpts: false
+  viz_ckpt:
+    start_epoch: 100
+    every_n_epochs: ${viz_metrics_every_n_epoch}
+  
+  last_ckpt:
+    every_n_epochs: 10
