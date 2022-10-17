@@ -27,7 +27,7 @@ class Asymov(BaseModel):
                  vocab_size: int,
                  vae: bool,
                  latent_dim: int,
-                 use_cos: bool,
+                 cross_modal_loss: str,
                  **kwargs):
         super().__init__()
 
@@ -41,7 +41,7 @@ class Asymov(BaseModel):
         self.optimizer = instantiate(optim, params=self.parameters())
 
         self._losses = MetricCollection({split: instantiate(losses, vae=vae,
-                                                            use_cos=use_cos,           #condition to use cosSimilarity over smooth L1
+                                                            cross_modal_loss=cross_modal_loss,           #condition to use cosSimilarity or smooth L1
                                                             _recursive_=False)
                                          for split in ["losses_train", "losses_val"]})
         self.losses = {key: self._losses["losses_" + key] for key in ["train", "val"]}
