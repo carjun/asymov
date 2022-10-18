@@ -128,7 +128,7 @@ class TemosComputeLosses(Metric):
     def _update_loss(self, loss: str, outputs, inputs):
         # Update the loss
         if loss=='cosine_similarity':
-            val = self._losses_func[loss](outputs, inputs, 1)
+            val = self._losses_func[loss](outputs, inputs, torch.tensor([1]))
         else:
             val = self._losses_func[loss](outputs, inputs)
         getattr(self, loss).__iadd__(val.detach())
