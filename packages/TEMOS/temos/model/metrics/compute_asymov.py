@@ -17,6 +17,8 @@ from temos.model.utils.tools import remove_padding
 import sys
 # pdb.set_trace()
 sys.path.append('../../../../../../')
+# TODO: Handle better. Hack: change to your own local path for the viz.py file.
+sys.path.append('/ps/project/conditional_action_gen/asymov')
 from viz import very_naive_reconstruction, naive_reconstruction, naive_no_rep_reconstruction, mpjpe3d, upsample, downsample
 from scipy.ndimage import uniform_filter1d, spline_filter1d
 
@@ -38,7 +40,7 @@ class Perplexity(MeanMetric):
     def __init__(self, ignore_index: int, **kwargs):
         super().__init__(**kwargs)
         self.CE = nn.CrossEntropyLoss(ignore_index=ignore_index, reduction='none')
-    
+
     def update(self, logits: Tensor, target: Tensor):
         # Compute $$\sum PP}L(X)$$ where X = single sequence.
         # Since target = 1-hot, we use CE(.) to compute -log p_{gt}
@@ -61,13 +63,13 @@ class ReconsMetrics(Metric):
         self.fps = fps
         self.num_clusters = num_mw_clusters
         self.kwargs = kwargs
-        
+
         gt_path = Path(gt_path)
         print("Retrieving GT data for recons loss from", gt_path)
         with open(gt_path, 'rb') as handle:
             self.ground_truth_data = pickle.load(handle)
-        
-        
+
+
         # if jointstype != "mmm":
         #     raise NotImplementedError("This jointstype is not implemented.")
 
@@ -75,7 +77,7 @@ class ReconsMetrics(Metric):
         # self.jointstype = jointstype
         # self.rifke = Rifke(jointstype=jointstype,
         #                    normalization=False)
-        
+
         # self.force_in_meter = force_in_meter
         self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("count_seq", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -87,8 +89,8 @@ class ReconsMetrics(Metric):
         self.add_state("APE_traj", default=torch.tensor(0.), dist_reduce_fx="sum")
         # self.add_state("APE_pose", default=torch.zeros(20), dist_reduce_fx="sum")
         self.add_state("APE_joints", default=torch.zeros(21), dist_reduce_fx="sum")
-        self.APE_metrics = ["APE_root", "APE_traj", 
-                            # "APE_pose", 
+        self.APE_metrics = ["APE_root", "APE_traj",
+                            # "APE_pose",
                             "APE_joints"]
 
         # AVE
@@ -96,8 +98,8 @@ class ReconsMetrics(Metric):
         self.add_state("AVE_traj", default=torch.tensor(0.), dist_reduce_fx="sum")
         # self.add_state("AVE_pose", default=torch.zeros(20), dist_reduce_fx="sum")
         self.add_state("AVE_joints", default=torch.zeros(21), dist_reduce_fx="sum")
-        self.AVE_metrics = ["AVE_root", "AVE_traj", 
-                            # "AVE_pose", 
+        self.AVE_metrics = ["AVE_root", "AVE_traj",
+                            # "AVE_pose",
                             "AVE_joints"]
 
         # MPJPE
@@ -106,7 +108,7 @@ class ReconsMetrics(Metric):
             for filter in self.filters:
                 self.add_state(f"MPJPE_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.MPJPE_metrics.append(f"MPJPE_{recons_type}_{filter}")
-        
+
         # All metric
         self.metrics = self.APE_metrics + self.AVE_metrics + self.MPJPE_metrics
 
@@ -121,7 +123,7 @@ class ReconsMetrics(Metric):
         # Remove arrays
         # APE_metrics.pop("APE_pose")
         APE_metrics.pop("APE_joints")
-        
+
         count_seq = self.count_good_seq
         AVE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.AVE_metrics}
 
@@ -136,7 +138,7 @@ class ReconsMetrics(Metric):
         # Compute average of MPJPEs
         MPJPE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.MPJPE_metrics}
 
-        return {**APE_metrics, **AVE_metrics, **MPJPE_metrics, 
+        return {**APE_metrics, **AVE_metrics, **MPJPE_metrics,
                 'all_seq':self.count_seq, 'good_seq':self.count_good_seq, 'good_seq_%': self.count_good_seq/self.count_seq,
                 'all_pred':self.count, 'good_pred':self.count_good, 'good_pred_%': self.count_good/self.count
                 }
@@ -147,17 +149,17 @@ class ReconsMetrics(Metric):
         self.count += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
         good_idx = [i for i,cluster_seq in enumerate(cluster_seqs) \
             if cluster_seq.max()<self.num_clusters and cluster_seq.min()>=0]
-        
+
         # get good sequences (no <unk> or <pad>)
         seq_names = [seq_names[i] for i in good_idx]
         cluster_seqs = [cluster_seqs[i] for i in good_idx]
         self.count_good_seq += len(seq_names)
         self.count_good += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
-        
+
         # get GT
         gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]
         gt = [downsample(keypoint, self.gt_downsample_ratio) for keypoint in gt]
-        
+
         # get contiguous cluster sequences (grouping contiguous identical clusters)
         cluster_seqs = [cluster_seq.cpu().numpy() for cluster_seq in cluster_seqs]
         if ('naive_no_rep' in self.recons_types) or ('naive' in self.recons_types):
@@ -196,7 +198,7 @@ class ReconsMetrics(Metric):
                 cluster2keypoint_mapping_path = Path(self.kwargs['cluster2keypoint_mapping_path'])
                 recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path, verbose=False)
             recons = [upsample(keypoint, self.recons_upsample_ratio) for keypoint in recons]
-            
+
             # apply different filters
             for filter in self.filters:
                 if filter == 'none':
@@ -214,13 +216,13 @@ class ReconsMetrics(Metric):
 
                 # AVE and APE
                 lengths = [min(recons[i].shape[0], gt[i].shape[0]) for i in range(len(recons))]
-                
+
                 # jts_text, poses_text, root_text, traj_text = self.transform(jts_text, lengths)
                 jts_text = [torch.from_numpy(keypoint)[:l] for keypoint, l in zip(recons, lengths)]
                 # poses_text = jts_text
                 root_text = [jts[..., 0, :] for jts in jts_text]
                 traj_text = [jts[..., 0, [0, 2]] for jts in jts_text]
-                
+
                 # jts_ref, poses_ref, root_ref, traj_ref = self.transform(jts_ref, lengths)
                 jts_ref = [torch.from_numpy(keypoint)[:l] for keypoint, l in zip(gt, lengths)]
                 # poses_ref = jts_ref

@@ -2,7 +2,7 @@ _target_: pytorch_lightning.callbacks.ModelCheckpoint
 
 filename: latest-epoch-{epoch}
 auto_insert_metric_name: false
-dirpath: ${path.working_dir}/checkpoints
+dirpath: ${callback.dirpath}/checkpoints
 monitor: step
 mode: max
 every_n_epochs: 200
