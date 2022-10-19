@@ -15,7 +15,7 @@ from torchmetrics import MetricCollection, Accuracy, BLEUScore
 from temos.model.metrics.compute_asymov import Perplexity, ReconsMetrics
 from torchmetrics import MetricCollection, Accuracy, BLEUScore, SumMetric
 from temos.model.base import BaseModel
-from temos.model.utils.tools import create_mask, remove_padding, greedy_decode, batch_greedy_decode
+from temos.model.utils.tools import create_mask, remove_padding, greedy_decode, batch_greedy_decode, batch_beam_decode
 
 class AsymovMT(BaseModel):
     def __init__(self,
@@ -23,7 +23,7 @@ class AsymovMT(BaseModel):
                  losses: DictConfig,
                  metrics: DictConfig,
                  optim: DictConfig,
-                #  text_vocab_size: int,
+                 text_vocab_size: int,
                  mw_vocab_size: int,
                  special_symbols: Union[List[str],ListConfig],
                 #  fps: float,
@@ -43,7 +43,9 @@ class AsymovMT(BaseModel):
         self.metrics_start_epoch = metrics_start_epoch
         self.metrics_every_n_epoch = metrics_every_n_epoch
         
-        self.transformer = instantiate(transformer)#, src_vocab_size = text_vocab_size, tgt_vocab_size = mw_vocab_size)
+        self.transformer = instantiate(transformer)
+        # self.src_vocab_size = text_vocab_size
+        self.tgt_vocab_size = mw_vocab_size
         for p in self.transformer.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
@@ -83,8 +85,11 @@ class AsymovMT(BaseModel):
         
     #TODO:beam search
     def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int) -> List[Tensor]: # no teacher forcing, takes batched input but gives unbatched output
-        # src: [Frames, Batch size] 
-        tgt_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+        # src: [Frames, Batch size]
+
+        # tgt_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+        #                                src_mask, src_padding_mask)
+        tgt_list = batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
                                        src_mask, src_padding_mask)
         return tgt_list #List[Tensor[Frames]]
 
