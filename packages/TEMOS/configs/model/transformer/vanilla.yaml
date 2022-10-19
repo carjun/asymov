@@ -8,3 +8,5 @@ nhead: ${model.nhead}
 src_vocab_size: ${model.text_vocab_size}
 tgt_vocab_size: ${model.mw_vocab_size}
 dim_feedforward: ${model.dim_feedforward}
+
+dropout: ${model.dropout}

@@ -30,6 +30,7 @@ class AsymovMT(BaseModel):
                  max_frames: int,
                  metrics_start_epoch: int,
                  metrics_every_n_epoch: int,
+                 best_ckpt_monitors: List,
                  **kwargs):
         super().__init__()
 
@@ -42,6 +43,7 @@ class AsymovMT(BaseModel):
         
         self.metrics_start_epoch = metrics_start_epoch
         self.metrics_every_n_epoch = metrics_every_n_epoch
+        self.best_ckpt_monitors = best_ckpt_monitors
         
         self.transformer = instantiate(transformer)
         # self.src_vocab_size = text_vocab_size
@@ -141,23 +143,24 @@ class AsymovMT(BaseModel):
         self.metrics[split]['ppl_teachforce'].update(logits.detach().cpu(), target.cpu())
 
         epoch = self.trainer.current_epoch
-        if split == "val" and (epoch==0 or (epoch>=self.metrics_start_epoch and epoch%self.metrics_every_n_epoch==0)):
-            # inferencing translations without teacher forcing
-            #TODO: add max_len buffer frames to config
-            # max_len = [i+int(self.fps*5) for i in batch["mw_length"]]
-            # pdb.set_trace()
-            
-            pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
-            # pred_mw_tokens2 = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames) 
-            # for mw_tokens, mw_tokens2 in zip(pred_mw_tokens, pred_mw_tokens2):
-            #     assert torch.equal(mw_tokens, mw_tokens2)
-            # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
-            pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
-            self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
-            
-            # Remove terminal tokens BOS/EOS, shift for special symbols
-            pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]
-            self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters)
+        if split == "val":
+            if (self.trainer.global_step==0 or (epoch>=self.metrics_start_epoch and (epoch+1)%self.metrics_every_n_epoch==0)):
+                # inferencing translations without teacher forcing
+                #TODO: add max_len buffer frames to config
+                # max_len = [i+int(self.fps*5) for i in batch["mw_length"]]
+                # pdb.set_trace()
+                
+                pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
+                # pred_mw_tokens2 = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames)
+                # for mw_tokens, mw_tokens2 in zip(pred_mw_tokens, pred_mw_tokens2):
+                #     assert torch.equal(mw_tokens, mw_tokens2)
+                # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
+                pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
+                self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
+                
+                # Remove terminal tokens BOS/EOS, shift for special symbols
+                pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]
+                self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters)
 
         return loss
 
@@ -175,11 +178,16 @@ class AsymovMT(BaseModel):
         dico.update(metrics_dict_teachforce)
 
         epoch = self.trainer.current_epoch
-        if split == "val" and (epoch==0 or (epoch>=self.metrics_start_epoch and epoch%self.metrics_every_n_epoch==0)):
-            # pdb.set_trace()
-            metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')}
-            _ = [metric.reset() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')] 
-            dico.update(metrics_dict)
+        if split == "val":
+            if (self.trainer.global_step==0 or (epoch>=self.metrics_start_epoch and (epoch+1)%self.metrics_every_n_epoch==0)):
+                # pdb.set_trace()
+                metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if (name!='mpjpe' and not name.endswith('_teachforce'))}
+                mpjpe_dict = self.metrics[split]['mpjpe'].compute()
+                metrics_dict.update({f"Metrics/{name}/{split}": metric for name, metric in mpjpe_dict.items()})
+                _ = [metric.reset() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')] 
+                dico.update(metrics_dict)
+                
+        dico.update({monitor: float('nan') for monitor, _ in self.best_ckpt_monitors if monitor not in dico})
             
         dico.update({"epoch": float(self.trainer.current_epoch),
                     "step": float(self.trainer.global_step)})

@@ -69,6 +69,9 @@ def train(cfg: DictConfig) -> None:
     ]
     if cfg.callback.viz_ckpts:
         callbacks.append(instantiate(cfg.callback.viz_ckpt))
+    # pdb.set_trace()
+    for monitor, mode in cfg.callback.best_ckpt_monitors:
+        callbacks.append(instantiate(cfg.callback.best_ckpt, monitor=monitor, mode=mode))
     logger.info("Callbacks initialized")
 
     #TODO: instantiate using hydra
@@ -97,7 +100,6 @@ def train(cfg: DictConfig) -> None:
     checkpoint_folder = trainer.checkpoint_callback.dirpath
     logger.info(f"The checkpoints are stored in {checkpoint_folder}")
 
-    # pdb.set_trace()
     logger.info("Fitting the model..")
     if cfg.resume_ckpt_path is not None :
         logger.info(f'Resuming training from checkpoint {cfg.resume_ckpt_path}')

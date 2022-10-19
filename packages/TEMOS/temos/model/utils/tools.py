@@ -21,8 +21,8 @@ def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
     src_seq_len = src.shape[0] #Frames
     tgt_seq_len = tgt.shape[0] #Frames-1
 
-    tgt_mask = T.generate_square_subsequent_mask(tgt_seq_len) #[tgt_seq_len, tgt_seq_len]
-    src_mask = torch.zeros((src_seq_len, src_seq_len)).type(torch.bool) #[src_seq_len, src_seq_len]
+    tgt_mask = T.generate_square_subsequent_mask(tgt_seq_len).to(tgt.device) #[tgt_seq_len, tgt_seq_len]
+    src_mask = src.new_zeros((src_seq_len, src_seq_len), dtype=torch.bool) #[src_seq_len, src_seq_len]
 
     src_padding_mask = (src == PAD_IDX).transpose(0, 1) #[Batch size, Frames]
     tgt_padding_mask = (tgt == PAD_IDX).transpose(0, 1) #[Batch size, Frames-1]
@@ -32,14 +32,14 @@ def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
 def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int) -> Tensor:
     # src: [Frames, 1]
     num_tokens = src.shape[0]
-    src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool) # [Frames, Frames]
+    src_mask = src.new_zeros((num_tokens, num_tokens), dtype=torch.bool) # [Frames, Frames]
     memory = model.encode(src, src_mask) #[Frames, 1, *]
     
     # pdb.set_trace()
-    tgt = torch.ones(1, 1).fill_(start_symbol).type(torch.long)
+    tgt = src.new_full((1, 1), start_symbol, dtype=torch.long)
     for i in tqdm(range(max_len-1), leave=False):
         tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
-                    .type(torch.bool))
+                    .to(tgt.device, dtype=torch.bool))
         out = model.decode(tgt, memory, tgt_mask) #[Frames, 1, *]
         logits = model.generator(out[-1]) #[1, Classes]
         _, next_word = torch.max(logits, dim=-1)
@@ -56,20 +56,20 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
     # src: [Frames, Batches]
     if src_mask is None:
         num_tokens = src.shape[0]
-        src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool) # [Frames, Frames]
+        src_mask = src.new_zeros(num_tokens, num_tokens, dtype=torch.bool) # [Frames, Frames]
     
     memory = model.encode(src, src_mask, src_padding_mask) #[Frames, Batches, *]
     
     # pdb.set_trace()
     batch_size = src.shape[1]
-    tgt = torch.ones(1, batch_size).fill_(start_symbol).type(torch.long) #[1, Batch size], 1 as for 1st frame
-    tgt_len = torch.full((batch_size,), max_len) #[Batch Size]
+    tgt = src.new_full((1, batch_size),  start_symbol, dtype=torch.long) #[1, Batch size], 1 as for 1st frame
+    tgt_len = tgt.new_full((batch_size,), max_len) #[Batch Size] #same dtype as tgt
 
     for i in tqdm(range((max_len-1)), "autoregressive translation", None):
         tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
-                    .type(torch.bool))
+                    .to(tgt.device, dtype=torch.bool))
         if i==0:
-            tgt_padding_mask = torch.full((batch_size, 1), False) #[Batch Size, 1], 1 as for 1st frame
+            tgt_padding_mask = tgt.new_full((batch_size, 1), False, dtype=torch.bool) #[Batch Size, 1], 1 as for 1st frame
         else:
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(1)], dim=1)
 

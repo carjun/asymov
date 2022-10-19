@@ -9,7 +9,7 @@ import pdb
 
 logger = logging.getLogger(__name__)
 
-@hydra.main(config_path="configs", config_name="train_asymov_mt")
+@hydra.main(version_base=None, config_path="configs", config_name="train_asymov_mt")
 def _train(cfg: DictConfig):
     # logger.info(OmegaConf.to_yaml(cfg, resolve=False, sort_keys=False))
     if cfg.user:
@@ -80,6 +80,8 @@ def train(cfg: DictConfig) -> None:
     ]
     if cfg.callback.viz_ckpts:
         callbacks.append(instantiate(cfg.callback.viz_ckpt))
+    for monitor, mode in cfg.callback.best_ckpt_monitors:
+        callbacks.append(instantiate(cfg.callback.best_ckpt, monitor=monitor, mode=mode))
     logger.info("Callbacks initialized")
 
     #TODO: instantiate using hydra

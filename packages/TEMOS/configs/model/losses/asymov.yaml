@@ -4,7 +4,8 @@ mode: motion_word
 
 # Loss terms
 ## Reconstruction losses
-lmd_mw_recons: 1.0
+lmd_mw_recons_text2mw: 1.0
+lmd_mw_recons_mw2mw: ${.lmd_mw_recons_text2mw}
 
 ## Latent spaces losses
 lmd_latent: 1.0e-5
@@ -19,11 +20,11 @@ ablation_no_kl_gaussian: false
 ablation_no_motionencoder: false
 
 # Text => motion_words
-recons_text2mw: ${.lmd_mw_recons}
+recons_text2mw: ${.lmd_mw_recons_text2mw}
 recons_text2mw_func: ${model.func_recons}
 
 # motion_words => motion_words
-recons_mw2mw: ${.lmd_mw_recons}
+recons_mw2mw: ${.lmd_mw_recons_mw2mw}
 recons_mw2mw_func: ${model.func_recons}
 
 # Latent space losses
