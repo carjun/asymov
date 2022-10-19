@@ -13,7 +13,7 @@ num_head: ${model.num_layers}
 dropout: 0.1
 activation: "gelu"
 
-cross_modal_loss: {"func_cos", "func_latent"}
+cross_modal_loss: func_latent #{"func_cos", "func_latent"}
 
 defaults:
   - textencoder: distilbert_actor
