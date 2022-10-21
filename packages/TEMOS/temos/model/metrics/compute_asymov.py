@@ -16,9 +16,7 @@ from temos.tools.geometry import matrix_of_angles
 from temos.model.utils.tools import remove_padding
 import sys
 # pdb.set_trace()
-sys.path.append('../../../../../../')
-# TODO: Handle better. Hack: change to your own local path for the viz.py file.
-sys.path.append('/ps/project/conditional_action_gen/asymov')
+sys.path.append(str(Path(__file__).parents[5]))
 from viz import very_naive_reconstruction, naive_reconstruction, naive_no_rep_reconstruction, mpjpe3d, upsample, downsample
 from scipy.ndimage import uniform_filter1d, spline_filter1d
 
