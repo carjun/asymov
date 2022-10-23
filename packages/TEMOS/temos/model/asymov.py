@@ -41,7 +41,7 @@ class Asymov(BaseModel):
         self.optimizer = instantiate(optim, params=self.parameters())
 
         self._losses = MetricCollection({split: instantiate(losses, vae=vae,
-                                                            cross_modal_loss=cross_modal_loss,           #condition to use cosSimilarity or smooth L1
+                                                            cross_modal_loss=cross_modal_loss, #either L1 or Cosine
                                                             _recursive_=False)
                                          for split in ["losses_train", "losses_val"]})
         self.losses = {key: self._losses["losses_" + key] for key in ["train", "val"]}

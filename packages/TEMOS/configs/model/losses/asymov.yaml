@@ -8,9 +8,9 @@ lmd_mw_recons_text2mw: 1.0
 lmd_mw_recons_mw2mw: ${.lmd_mw_recons_text2mw}
 
 ## Latent spaces losses
-lmd_latent: 1.0e-5
+lmd_latent: 1.0e-5 #used for either L1 or Cosine
 lmd_kl: 1.0e-05
-lmd_cos: 1.0e-05
+# lmd_cos: 1.0e-05
 
 # Ablations
 loss_on_both: true
@@ -33,7 +33,7 @@ latent_manifold: ${.lmd_latent}
 latent_manifold_func: ${model.func_latent}
 
 #Cosine similarity loss
-cosine_similarity: ${.lmd_cos}
+cosine_similarity: ${.lmd_latent}
 cosine_similarity_func: ${model.func_cos}
 
 # VAE losses
