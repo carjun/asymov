@@ -14,9 +14,9 @@ import os
 import yaml, pprint, json
 
 import sys
-sys.path.append('../../')
-from temos.data.utils import get_split_keyids
+sys.path.append(str(Path(__file__).parents[5]))
 from viz import reconstruction, ground_truth_construction
+from temos.data.utils import get_split_keyids
 import temos.launch.prepare #noqa
 
 logger = logging.getLogger(__name__)
