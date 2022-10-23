@@ -126,9 +126,12 @@ class TemosComputeLosses(Metric):
         return {loss: getattr(self, loss)/count for loss in self.losses}
 
     def _update_loss(self, loss: str, outputs, inputs):
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         # Update the loss
         if loss=='cosine_similarity':
-            val = self._losses_func[loss](outputs, inputs, torch.tensor([1]))
+            val = self._losses_func[loss](outputs, inputs, torch.tensor([1]).to(device))
         else:
             val = self._losses_func[loss](outputs, inputs)
         getattr(self, loss).__iadd__(val.detach())
