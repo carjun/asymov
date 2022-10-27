@@ -8,7 +8,7 @@ from torchmetrics import Metric
 class TemosComputeLosses(Metric):
     def __init__(self, vae: bool,
                  mode: str,
-                 cross_modal_loss: str,              #condition to use cosSimilarity or Smooth L1
+                 cross_modal_loss: str = 'func_latent',              #condition to use cosSimilarity or Smooth L1 (default)
                  loss_on_both: bool = False,
                  force_loss_on_jfeats: bool = True,
                  ablation_no_kl_combine: bool = False,
