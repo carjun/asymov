@@ -160,7 +160,6 @@ class AsymovMT(BaseModel):
         return loss
 
     def allsplit_epoch_end(self, split: str, outputs):
-        # pdb.set_trace()
         losses = self.losses[split]
         loss_dict = losses.compute(split)
         losses.reset()
@@ -181,8 +180,12 @@ class AsymovMT(BaseModel):
                 metrics_dict.update({f"Metrics/{name}/{split}": metric for name, metric in mpjpe_dict.items()})
                 _ = [metric.reset() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')] 
                 dico.update(metrics_dict)
-                
-        dico.update({monitor: float('nan') for monitor, _ in self.best_ckpt_monitors if monitor not in dico})
+            
+        # pdb.set_trace()
+        # print(dico['Metrics/acc_teachforce/val'])
+        nan_metrics = {monitor: float('nan') for monitor, _ in self.best_ckpt_monitors if (monitor.split('/')[-1]==split and monitor not in dico)}
+        dico.update(nan_metrics)
+        # print(split, nan_metrics)
             
         dico.update({"epoch": float(self.trainer.current_epoch),
                     "step": float(self.trainer.global_step)})
