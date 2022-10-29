@@ -17,8 +17,8 @@ from itertools import groupby, product
 import uuid
 
 import hydra  # https://hydra.cc/docs/intro/
-from omegaconf import DictConfig, OmegaConf  # https://github.com/omry/omegaconf
-from benedict import benedict as bd  # https://github.com/fabiocaccamo/python-benedict
+# from omegaconf import DictConfig, OmegaConf  # https://github.com/omry/omegaconf
+# from benedict import benedict as bd  # https://github.com/fabiocaccamo/python-benedict
 
 import pdb
 
@@ -58,6 +58,9 @@ class Viz:
         # Init. member vars
         self.l_samples = []
         self.n_samples = -1
+        self.og_split_file_p = Path(self.cfg.splitpath, self.cfg.split)
+        self.og_l_samples = utils.read_textf(self.og_split_file_p, ret_type='list')
+        self.og_n_samples = len(self.og_l_samples)
 
 
     def _get_l_samples(self, l_samples, n_samples):
@@ -206,6 +209,60 @@ class Viz:
                 cluster2frame_mapping_path=self.data['clid2frame'])
 
 
+    def recons_viz(self):
+        '''
+        '''
+        samples_dir = Path(self.cfg.path, self.cfg.approaches.recons_viz)
+        
+        #TODO: use pickle file everywhere
+        # Get predicted cluster IDs for all seqs. @ 12.5 fps
+        l_seq_clids = []
+        for sid in self.l_samples:
+            kp = np.array(np.load(f'{samples_dir}/{sid}.npy'), dtype=np.int64)
+            l_seq_clids.append(kp)
+
+        # Collate preds into specific compressed dataFrame
+        seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
+
+        self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
+
+
+    def sample_mt_asymov(self):
+        '''
+        Eg., path for model predictions (npy files):
+        packages/TEMOS/outputs/kit-xyz-motion-word/asymov_full_run_1/uoon5wnl/samples/neutral_0ade04bd-954f-49bd-b25f-68f3d1ab8f1a
+        '''
+        ckpt_p = Path(self.cfg.path, self.cfg.approaches.asymov_mt)
+
+        cmd = ['python', 'sample_asymov_mt.py']
+
+        # Overwrite cfg at configs/sample_asymov_mt.yaml
+        cmd.append(f'folder={ckpt_p.parent.parent}')
+        cmd.append(f'split={self.split_file_p.name}')
+        cmd.append(f'ckpt_path={ckpt_p}')
+        print(f'Run: ', ' '.join(cmd))
+
+        # Forward pass, store predictions
+        subprocess.call(cmd, cwd=str(self.cfg.path))
+
+        # Covert clids --> frames
+        clid2kp = np.array(self.data['clid2kp']['keypoints3d'])
+
+        # Destination npy files
+        npy_folder = ckpt_p.parent.parent / 'samples' / f'neutral_{self.split_file_p.name}'
+
+        # Get predicted cluster IDs for all seqs. @ 12.5 fps
+        l_seq_clids = []
+        for sid in self.l_samples:
+            kp = np.array(np.load(f'{npy_folder}/{sid}.npy'), dtype=np.int64)
+            l_seq_clids.append(kp)
+
+        # Collate preds into specific compressed dataFrame
+        seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
+
+        self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
+
+
     def sample_temos_asymov(self):
         '''
         Eg., path for model predictions (npy files):
@@ -260,7 +317,7 @@ class Viz:
         print(f'Run: ', cmd)
         os.system(cmd)
 
-        # Destination npy files:
+        # Destination npy files: 
         npy_folder = folder / 'samples' / f'neutral_{self.split_file_p.name}'
         keypoints = []
         for sid in self.l_samples:
@@ -285,9 +342,10 @@ class Viz:
             >>> viz_obj.viz_seqs(l_samples=['00002', '45', 2343], n_samples=1)
         '''
 
+        #TODO: redundant
         # Get a list of samples to viz.
-        l_samples = kwargs['l_samples'] if 'l_samples' in kwargs.keys() else []
-        n_samples = kwargs['n_samples'] if 'n_samples' in kwargs.keys() else -1
+        l_samples = kwargs['l_samples'] if 'l_samples' in kwargs.keys() else self.og_l_samples
+        n_samples = kwargs['n_samples'] if 'n_samples' in kwargs.keys() else self.og_n_samples
         self.l_samples = self._get_l_samples(l_samples, n_samples)
         self.n_samples = len(self.l_samples)
 
@@ -305,12 +363,23 @@ class Viz:
             self.viz_diff_rec_types(seq2clid_df, 'gt_cluster_recon')
 
         # Create temp file in kit-splits that sample.py can load.
-        # Debug: self.split_file_p = Path('packages/TEMOS/datasets/kit-splits/0d6f926b-52e9-4786-a1ae-1bd7dcf8d592')
-        self.split_file_p = Path('packages/TEMOS/datasets/kit-splits', str(uuid.uuid4()))
-        utils.write_textf('\n'.join(self.l_samples), self.split_file_p)
-        print('Created input seq. list file: ', self.split_file_p)
+        if self.l_samples == self.og_l_samples:
+            self.split_file_p = self.og_split_file_p
+            print(f'Using given split: {self.cfg.split}')
+        else:
+            self.split_file_p = Path(self.cfg.splitpath, str(uuid.uuid4()))
+            utils.write_textf('\n'.join(self.l_samples), self.split_file_p)
+            print('Created input seq. list file: ', self.split_file_p)
 
-        # Reconstruct with TEMOS-ASyMov model predictions
+        # Reconstruct and visualize
+        if self.cfg.approaches.recons_viz:
+            self.recons_viz()
+        
+        # Inference MT-ASyMov model and reconstruct
+        if self.cfg.approaches.asymov_mt:
+            self.sample_mt_asymov()
+
+        # Inference TEMOS-ASyMov model and reconstruct
         if self.cfg.approaches.asymov_temos:
             self.sample_temos_asymov()  # Get pred cl ids foj
 
@@ -332,8 +401,5 @@ if __name__ == '__main__':
     # viz_obj.viz_seqs(l_samples=['00002', '45', 2343], n_samples=2)
     # viz_obj.viz_seqs(l_samples=['00002', '45', 2343], n_samples=2)
 
-    # TODO: Enable directly giving split name in viz.yaml
-    filepath = Path(viz_obj.cfg.path, 'datasets/kit-splits-tiny/visu')
-    l_samples = utils.read_textf(filepath, ret_type='list')
-    viz_obj.viz_seqs(l_samples=l_samples)
+    viz_obj.viz_seqs()
 

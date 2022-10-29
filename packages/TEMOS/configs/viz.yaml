@@ -3,14 +3,14 @@
 # Designed as input for object from visualize.Viz() class.
 # 
 
-path: /ps/project/conditional_action_gen/asymov/packages/TEMOS
-viz_dir: ${path}/results_viz/ 
+path: packages\TEMOS
+viz_dir: outputs\kit-xyz-motion-word\full_dataset\asymov_mt_ps102\reconstructions
 
 cluster_data: xyz  #{tan, tan64, xyz}
 
 datapath: ${path}/datasets  # not /kit
-splitpath: ${path}/datasets/kit-splits
-split: ???
+splitpath: ${path}/datasets/kit-splits-tiny
+split: recons
 sk_type: kitml
 
 data_fnames:
@@ -27,9 +27,12 @@ fps:
 approaches:
     gt: false 
     gt_clid: false 
-    # If you want viz., give ckpt path below
+    # If you want inference, reconstruct and viz., give ckpt path below
     temos_bl: false  # pretrained_models/kit-mmm-xyz/3l49g7hv
-    asymov_temos: outputs/kit-xyz-motion-word/asymov_full_run_1/uoon5wnl/checkpoints/viz-epoch-144.ckpt
+    asymov_temos: false #outputs/kit-xyz-motion-word/asymov_full_run_1/uoon5wnl/checkpoints/viz-epoch-144.ckpt
+    asymov_mt: false #outputs/kit-xyz-motion-word/full_dataset/asymov_mt_ps102/checkpoints/viz-epoch-144.ckpt
+    # If already inferenced, just want reconstruct and viz., give inference samples path below  
+    recons_viz: outputs/kit-xyz-motion-word/full_dataset/asymov_mt_ps102/samples/neutral_recons
 
 rec_type: ['naive_no_rep', 'naive']
 
