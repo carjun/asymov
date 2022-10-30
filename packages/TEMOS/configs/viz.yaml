@@ -3,13 +3,13 @@
 # Designed as input for object from visualize.Viz() class.
 # 
 
-path: packages\TEMOS
-viz_dir: outputs\kit-xyz-motion-word\full_dataset\asymov_mt_ps102\reconstructions
+path: .
+viz_dir: ${path}/outputs/kit-xyz-motion-word/full_dataset/asymov_mt_ps102/reconstructions
 
 cluster_data: xyz  #{tan, tan64, xyz}
 
 datapath: ${path}/datasets  # not /kit
-splitpath: ${path}/datasets/kit-splits-tiny
+splitpath: ${path}/datasets/kit-splits
 split: recons
 sk_type: kitml
 
@@ -25,7 +25,7 @@ fps:
     gt_fps: 100.0  # fps of KIT Motion-Language mocap seqs.
 
 approaches:
-    gt: false 
+    gt: true 
     gt_clid: false 
     # If you want inference, reconstruct and viz., give ckpt path below
     temos_bl: false  # pretrained_models/kit-mmm-xyz/3l49g7hv

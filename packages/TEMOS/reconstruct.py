@@ -5,22 +5,28 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 import os
-import pandas as pd
-import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-
-import os
-import yaml, pprint, json
-
+import pdb
+# pdb.set_trace()
 import sys
-sys.path.append(str(Path(__file__).parents[5]))
-from viz import reconstruction, ground_truth_construction
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from viz import Viz, reconstruction, ground_truth_construction
 from temos.data.utils import get_split_keyids
 import temos.launch.prepare #noqa
 
 logger = logging.getLogger(__name__)
 
+
+@hydra.main(config_path="configs", config_name="viz")
+def _viz(cfg: DictConfig):
+    viz_obj = Viz(cfg)
+    viz_obj.viz_seqs()
+    # viz_obj.viz_seqs(n_samples=10)
+    # viz_obj.viz_seqs(n_samples=2)
+    # viz_obj.viz_seqs(l_samples=['00002', '45', 2343, 9999])
+    # viz_obj.viz_seqs(l_samples=['00002', '45', 2343], n_samples=2)
+    # viz_obj.viz_seqs(l_samples=['00002', '45', 2343], n_samples=2)
 
 @hydra.main(config_path="configs", config_name="reconstruct")
 def _reconstruct(cfg: DictConfig):
@@ -106,4 +112,5 @@ def reconstruct(cfg: DictConfig) -> None:
     # pd.DataFrame.from_dict(mpjpe_table).to_csv(pred_dir / "mpjpe_scores.csv")
 
 if __name__ == '__main__':
-    _reconstruct()
+    # _reconstruct()
+    _viz()
