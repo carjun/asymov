@@ -16,7 +16,7 @@ from temos.tools.geometry import matrix_of_angles
 from temos.model.utils.tools import remove_padding
 import sys
 # pdb.set_trace()
-sys.path.append(str(Path(__file__).parents[5]))
+sys.path.append(str(Path(__file__).resolve().parents[5]))
 from viz import very_naive_reconstruction, naive_reconstruction, naive_no_rep_reconstruction, mpjpe3d, upsample, downsample
 from scipy.ndimage import uniform_filter1d, spline_filter1d
 
