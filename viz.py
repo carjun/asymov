@@ -543,6 +543,8 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
         # Debug statement
         # pdb.set_trace()
 
+def viz_skeleton_mp(seq_folder_p, sk_type, radius): # for multi-processing, can pass only 1 arg
+    return viz_skeleton(*seq_folder_p, sk_type, radius)
 
 def write_vid_from_imgs(folder_p, fps):
     '''Collate frames into a video sequence.
@@ -564,17 +566,12 @@ def write_vid_from_imgs(folder_p, fps):
         print('*******ValueError(Error {0} executing command: {1}*********'.format(retcode, ' '.join(cmd)))
     shutil.rmtree(osp.join(folder_p, 'frames'))
 
-#TODO take fps dynamically
-# def joint2vid(name_keypoint, sk_type, frames_dir, fps):
-#     name, keypoint = name_keypoint
-#     folder_p = ospj(frames_dir, name)
-#     viz_skeleton(keypoint, folder_p, sk_type, 1.2)
-#     write_vid_from_imgs(folder_p, fps)
-#     return None
-
-
-def viz_skeleton_mp(seq_folder_p, sk_type, radius):
-    return viz_skeleton(*seq_folder_p, sk_type, radius)
+def joint2vid(name_keypoint, sk_type, frames_dir, fps): #combine viz_skeleton
+    name, keypoint = name_keypoint
+    folder_p = ospj(frames_dir, name)
+    viz_skeleton(keypoint, folder_p, sk_type, 1.2)
+    write_vid_from_imgs(folder_p, fps)
+    return None
 
 
 def viz_l_seqs(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
@@ -637,24 +634,25 @@ def viz_l_seqs(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
     # _ = [p.join() for p in tqdm(img2vid_procs, 'generating vids')]
 
     # #option 1: new process for each seq_name (with Pool, concurrent operations)
-    # n = len(viz_names)
-
-    # with Pool(15) as p:
-    #     iter = zip(viz_names, keypoints)
-    #     with tqdm(total=n) as pbar:
-    #         _ = [pbar.update() for _ in p.imap_unordered(partial(joint2vid, sk_type=sk_type, frames_dir=frames_dir, fps=fps), iter)]
-
-    # option 2: new process for each seq_name for each operation (with Pool, sequential operations)
     n = len(viz_names)
-    folders_p = [ospj(frames_dir, name) for name in viz_names]
+
     with Pool(cpu_count()*2) as p:
         chunk_size = 2
-        iter = zip(keypoints, folders_p)
-        with tqdm(desc='joint2img', total=n) as pbar:
-            _ = [pbar.update() for _ in p.imap_unordered(partial(viz_skeleton_mp, sk_type=sk_type, radius=1.2), iter, chunk_size)]
+        iter = zip(viz_names, keypoints)
+        with tqdm(desc='joint2vid', total=n) as pbar:
+            _ = [pbar.update() for _ in p.imap_unordered(partial(joint2vid, sk_type=sk_type, frames_dir=frames_dir, fps=fps), iter, chunk_size)]
 
-        with tqdm(desc='img2vid', total=n) as pbar:
-            _ = [pbar.update() for _ in p.imap_unordered(partial(write_vid_from_imgs, fps=fps), folders_p, chunk_size)]
+    # option 2: new process for each seq_name for each operation (with Pool, sequential operations)
+    # n = len(viz_names)
+    # folders_p = [ospj(frames_dir, name) for name in viz_names]
+    # with Pool(cpu_count()*2) as p:
+    #     chunk_size = 2
+    #     iter = zip(keypoints, folders_p)
+    #     with tqdm(desc='joint2img', total=n) as pbar:
+    #         _ = [pbar.update() for _ in p.imap_unordered(partial(viz_skeleton_mp, sk_type=sk_type, radius=1.2), iter, chunk_size)]
+
+    #     with tqdm(desc='img2vid', total=n) as pbar:
+    #         _ = [pbar.update() for _ in p.imap_unordered(partial(write_vid_from_imgs, fps=fps), folders_p, chunk_size)]
 
     return None
 
