@@ -2,7 +2,10 @@ import os
 import json
 import math
 import pdb
+import sys
+from pathlib import Path
 # pdb.set_trace()
+sys.path.append(str(Path(__file__).parents[3]))
 from src.data.dataset.loader import KITDataset
 
 genre_list = ["gBR", "gPO", "gLO", "gMH", "gLH", "gHO", "gWA", "gKR", "gJS", "gJB"]
