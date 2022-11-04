@@ -2,7 +2,7 @@ import argparse
 import os
 import yaml, pprint, json
 
-from viz import naive_no_rep_reconstruction, naive_reconstruction, very_naive_reconstruction, ground_truth_construction
+from viz_utils import naive_no_rep_reconstruction, naive_reconstruction, very_naive_reconstruction, ground_truth_construction
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train classification network')

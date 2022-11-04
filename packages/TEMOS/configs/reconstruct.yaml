@@ -20,8 +20,8 @@ contiguous_frame2cluster_mapping: contiguous_frame2cluster_mapping.pkl
 cluster2keypoint_mapping: proxy_centers_${cluster_data}.pkl
 cluster2frame_mapping: proxy_centers_complete_${cluster_data}.pkl
 
-fps: 25.0 #desired fps for mpjpe calculation and visualization
-recons_fps: 12.5 #same as fps of predictions
+recons_fps: 25.0 #desired fps for mpjpe calculation and visualization
+pred_fps: 12.5 #same as fps of predictions
 gt_fps: 100.0 #fps of KIT
 
 visualize: true

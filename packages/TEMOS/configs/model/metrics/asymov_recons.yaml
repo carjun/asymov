@@ -5,8 +5,8 @@ filters: ['none', 'uniform', 'spline']
 
 gt_path: ${path.datasets}/xyz_data.pkl
 
-fps: 25.0 #desired fps for mpjpe calculation and visualization
-recons_fps: 12.5 #same as fps of predictions
+recons_fps: 25.0 #desired fps for mpjpe calculation and visualization
+pred_fps: 12.5 #same as fps of predictions
 gt_fps: 100.0 #fps of KIT
 
 num_mw_clusters: ${num_mw_clusters}

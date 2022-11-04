@@ -17,7 +17,7 @@ from temos.model.utils.tools import remove_padding
 import sys
 # pdb.set_trace()
 sys.path.append(str(Path(__file__).resolve().parents[5]))
-from viz import very_naive_reconstruction, naive_reconstruction, naive_no_rep_reconstruction, mpjpe3d, upsample, downsample
+from viz_utils import mpjpe3d, change_fps
 from scipy.ndimage import uniform_filter1d, spline_filter1d
 
 def l2_norm(x1, x2, dim):
@@ -49,16 +49,16 @@ class Perplexity(MeanMetric):
 
 class ReconsMetrics(Metric):
     def __init__(self, recons_types: List[str], filters: List[str], gt_path: str,
-                 fps: float, recons_fps: float, gt_fps: float, num_mw_clusters: int,
+                 recons_fps: float, pred_fps: float, gt_fps: float, num_mw_clusters: int,
                 #  jointstype: str = "mmm",
                 #  force_in_meter: bool = True,
                  dist_sync_on_step=False, **kwargs):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
         self.recons_types = recons_types
         self.filters = filters
-        self.recons_upsample_ratio=fps/recons_fps
-        self.gt_downsample_ratio=fps/gt_fps
-        self.fps = fps
+        self.recons_fps = recons_fps
+        self.gt_fps = gt_fps
+        self.pred_fps = pred_fps
         self.num_clusters = num_mw_clusters
         self.kwargs = kwargs
 
@@ -156,7 +156,7 @@ class ReconsMetrics(Metric):
 
         # get GT
         gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]
-        gt = [downsample(keypoint, self.gt_downsample_ratio) for keypoint in gt]
+        gt = [change_fps(keypoint, self.gt_fps, self.recons_fps) for keypoint in gt]
 
         # get contiguous cluster sequences (grouping contiguous identical clusters)
         cluster_seqs = [cluster_seq.cpu().numpy() for cluster_seq in cluster_seqs]
@@ -195,7 +195,7 @@ class ReconsMetrics(Metric):
             elif recons_type == 'very_naive':
                 cluster2keypoint_mapping_path = Path(self.kwargs['cluster2keypoint_mapping_path'])
                 recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path, verbose=False)
-            recons = [upsample(keypoint, self.recons_upsample_ratio) for keypoint in recons]
+            recons = [change_fps(keypoint, self.pred_fps, self.recons_fps) for keypoint in recons]
 
             # apply different filters
             for filter in self.filters:
