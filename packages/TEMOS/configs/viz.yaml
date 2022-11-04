@@ -2,6 +2,10 @@
 # Config file containing params for visualizing results.
 # Designed as input for object from visualize.Viz() class.
 # 
+hydra:
+  run:
+    dir: .
+  output_subdir: null
 
 path: .
 viz_dir: ${path}/outputs/kit-xyz-motion-word/full_dataset/asymov_mt_ps102/reconstructions
