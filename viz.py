@@ -91,7 +91,6 @@ def cluster2vid(save_name, clusters_idx, sk_type, proxy_center_info_path, data_p
         seqs.append(change_fps(seq, gt_fps, cons_fps))
     #visualize the required fragment of complete sequence
     viz_l_seqs([str(i) for i in clusters_idx], seqs, ospj(frames_dir, str(cluster_idx)), sk_type, cons_fps, force)
-
 #-------------------------------------------------------------------------------
 
 #cluster_seq2vid----------------------------------------------------------------
@@ -453,7 +452,7 @@ class Viz:
     def recons_viz(self):
         '''
         '''
-        samples_dir = Path(self.cfg.path, self.cfg.approaches.recons_viz)
+        samples_dir = Path(self.cfg.approaches.recons_viz)
         
         #TODO: use pickle file everywhere
         # Get predicted cluster IDs for all seqs. @ 12.5 fps
@@ -473,7 +472,7 @@ class Viz:
         Eg., path for model predictions (npy files):
         packages/TEMOS/outputs/kit-xyz-motion-word/asymov_full_run_1/uoon5wnl/samples/neutral_0ade04bd-954f-49bd-b25f-68f3d1ab8f1a
         '''
-        ckpt_p = Path(self.cfg.path, self.cfg.approaches.asymov_mt)
+        ckpt_p = Path(self.cfg.approaches.asymov_mt)
 
         cmd = ['python', 'sample_asymov_mt.py']
 
@@ -509,7 +508,7 @@ class Viz:
         Eg., path for model predictions (npy files):
         packages/TEMOS/outputs/kit-xyz-motion-word/asymov_full_run_1/uoon5wnl/samples/neutral_0ade04bd-954f-49bd-b25f-68f3d1ab8f1a
         '''
-        ckpt_p = Path(self.cfg.path, self.cfg.approaches.asymov_temos)
+        ckpt_p = Path(self.cfg.approaches.asymov_temos)
 
         cmd = ['python', 'sample_asymov.py']
 
@@ -549,7 +548,7 @@ class Viz:
         '''
 
         # Load "latest ckpt" from folder spec. in viz.yaml. Overwrite TEMOS's sample cfg.
-        folder = Path(self.cfg.path, self.cfg.approaches.temos_bl)
+        folder = Path(self.cfg.approaches.temos_bl)
 
         # TEMOS's sampling script saves pred xyz motions as npy's in ${folder}/samples/${split}
         sample_args = f'folder={folder} split={self.split_file_p.name}'
