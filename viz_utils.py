@@ -748,7 +748,7 @@ def write_vid_from_imgs(folder_p, fps):
     sid = ospb(folder_p)
     vid_p = osp.join(folder_p, f'{sid}.mp4')
     cmd = ['ffmpeg', '-r', str(int(fps)), '-i',
-                    osp.join(folder_p, 'frames', '%05d.jpg'), '-y', '-c:v libvpx', vid_p]
+                    osp.join(folder_p, 'frames', '%05d.jpg'), '-y', '-c:v', 'libx264', vid_p]
     FNULL = open(os.devnull, 'w')
     retcode = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
     if not 0 == retcode:
