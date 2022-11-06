@@ -201,6 +201,65 @@ def mpjpe3d(seq_names, pred_keypoints, target_keypoints):
     return mpjpe_per_sequence
 #-------------------------------------------------------------------------------
 
+#codec---------------------------------------------------------------------
+#TODO: add option to control dest vid names in vid dir
+#vid names will remain the same saved in a different dir
+def vid_dir_to_codec_h264(src_vid_dir, dst_vid_dir=None, split_path=None, overwrite:bool=False, keep_src_vid:bool=True, faulty_path=None):
+    '''
+    Will operate on all files with the extension '.mp4'
+    Vid names will remain the same saved in a different dir
+    
+    No overwrite check for faulty path
+    '''
+    assert osp.isdir(src_vid_dir), "src dir not found"
+    assert src_vid_dir!=dst_vid_dir, "src and dst dir can't have same path"
+    if osp.isdir(dst_vid_dir): 
+        assert not overwrite, "set overwrite to True or provide different dst_vid_dir"
+    
+    #TODO: change the dir structure to contain .mp4 files directly
+    if split_path is None:
+        # vids = [i for i in os.listdir(src_vid_dir) if i.split('.')[-1]=='mp4']
+        vids = os.listdir(src_vid_dir)
+    else:
+        assert osp.isfile(split_path), "split path not found"
+        with open(split_path, 'r') as f:
+            vids = list(map(str.strip, f.readlines()))
+    pdb.set_trace()
+    
+    faulty = []
+    with tqdm(vids, desc="changing codec to h.264") as pbar:
+        for vid in pbar:
+            pbar.set_description(f"changing codec of {vid} to h.264")
+            try:
+                # vid_to_codec_h264(ospj(src_vid_dir, vid), ospj(dst_vid_dir, vid), overwrite, keep_src_vid)
+                vid_to_codec_h264(ospj(src_vid_dir, vid, f'{vid}.mp4'), ospj(dst_vid_dir, vid, f'{vid}.mp4'), overwrite, keep_src_vid)
+            except:
+                faulty.append(vid)
+    
+    if faulty_path is not None:
+        open(faulty_path, 'w').writelines(faulty)
+    print(faulty)
+    return faulty
+
+def vid_to_codec_h264(src_vid_path, dst_vid_path, overwrite:bool=False, keep_src_vid:bool=True):
+    '''
+    Cannot have same src and dst path
+    '''
+    assert osp.isfile(src_vid_path), "src vid not found"
+    assert src_vid_path!=dst_vid_path, "src and dst vid can't have same path"
+    assert osp.isfile(dst_vid_path) and not overwrite, "set overwrite to True or provide different dst_vid_path"
+
+    pdb.set_trace()
+    cmd = ['ffmpeg', '-i', src_vid_path, '-y' if overwrite else '-n', '-c:v', 'libx264', dst_vid_path]
+        
+    FNULL = open(os.devnull, 'w')
+    retcode = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+    assert retcode != 0, 'Error {0} executing command: {1}'.format(retcode, ' '.join(cmd))
+
+    if not keep_src_vid:
+        shutil.rmtree(src_vid_path)
+#-------------------------------------------------------------------------------
+
 #fps---------------------------------------------------------------------
 def change_fps(motion, ratio_or_in_fps: float, out_fps: float=None):
     if out_fps is None: # ratio given directly
@@ -215,6 +274,7 @@ def change_fps(motion, ratio_or_in_fps: float, out_fps: float=None):
     else:
         return motion 
 
+#TODO: change nomenclature, add upsampling without interpolation
 def upsample(motion, ratio):
     assert ratio >= 1.0
     motion = np.array(motion)
@@ -991,87 +1051,91 @@ def viz_l_seqs(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
 #-------------------------------------------------------------------------------
 
 if __name__ == '__main__':
+    src = 'F:/space over - dumped trash/vid tokenization/asymov_mt/naive_no_rep_uniform'
+    split = 'packages/TEMOS/datasets/kit-splits-tiny/recons'
+    vid_dir_to_codec_h264(src, src+'_', split, True)
+    
+    # # from packages.acton.src.data.dataset.loader import KITDataset
+
+    # # viz_kitml_seq()
+    # # viz_aistpp_seq()
+
+    # # d = pd.read_pickle('/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_res_150.pkl')
+    # # cluster_seq = d[d['seq_name']=='gWA_sFM_cAll_d25_mWA2_ch03']['cluster']
+    # # cluster_seq2vid(cluster_seq[:500], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl', '/content/drive/Shareddrives/vid tokenization/seq2vid', 'coco17')
+
+    # # cluster2vid(clusters_idx=[i for i in range(150)], sk_type='kitml',
+    # #     proxy_center_info_path='/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl',
+    # #     data_dir='/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/', data_name='xyz',
+    # #     frames_dir='/content/drive/Shareddrives/vid tokenization/cluster2vid')
+
+    # data_dir = '/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/'
+    # data_name = 'xyz'
     # from packages.acton.src.data.dataset.loader import KITDataset
+    # d = KITDataset(data_dir, data_name)
 
-    # viz_kitml_seq()
-    # viz_aistpp_seq()
+    # # seq_names=['02654']
+    # # seq = d.load_keypoint3d('02654')
+    # # seq_names = ['01699', #'02855',
+    # #    '00826', '02031', '01920', '02664', '01834',
+    # #    '02859', '00398', '03886', '01302', '02053', '00898', '03592',
+    # #    '03580', '00771', '01498', '00462', '01292', '02441', '03393',
+    # #    '00376', '02149', '03200', '03052', '01788', '00514', '01744',
+    # #    '02977', '00243', '02874', '00396', '03597', '02654', '03703',
+    # #    '00456', '00812', '00979', '00724', '01443', '03401', '00548',
+    # #    '00905', '00835', #'02612',
+    # #    '02388', '03788', '03870', '03181',
+    # #    '00199']
+    # seq_names = ["00017",
+    #     "00018",
+    #     "00002",
+    #     "00014",
+    #     "00005",
+    #     "00010"]
 
-    # d = pd.read_pickle('/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/advanced_tr_res_150.pkl')
-    # cluster_seq = d[d['seq_name']=='gWA_sFM_cAll_d25_mWA2_ch03']['cluster']
-    # cluster_seq2vid(cluster_seq[:500], '/content/drive/Shareddrives/vid tokenization/acton/logs/TAN/proxy_centers_tr_150.pkl', '/content/drive/Shareddrives/vid tokenization/seq2vid', 'coco17')
+    # #TODO use cofig to get viz paths
+    # frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/advanced_tr_res_150.pkl'
+    # contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/advanced_tr_150.pkl'
+    # cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/proxy_centers_tr_150.pkl'
+    # cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/proxy_centers_tr_complete_150.pkl'
+    # sk_type = 'kitml'
+    # frames_dir = '/content/drive/Shareddrives/vid tokenization/kit_reconstruction/'
 
-    # cluster2vid(clusters_idx=[i for i in range(150)], sk_type='kitml',
-    #     proxy_center_info_path='/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/proxy_centers_tr_complete_150.pkl',
-    #     data_dir='/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/', data_name='xyz',
-    #     frames_dir='/content/drive/Shareddrives/vid tokenization/cluster2vid')
+    # # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, frames_dir+'very_naive')
+    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type)
+    # print('very naive mpjpe : ', very_naive_mpjpe_mean)
 
-    data_dir = '/content/drive/Shareddrives/vid tokenization/asymov/kit-molan/'
-    data_name = 'xyz'
-    from packages.acton.src.data.dataset.loader import KITDataset
-    d = KITDataset(data_dir, data_name)
+    # # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive')
+    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
+    # print('naive mpjpe : ', naive_mpjpe_mean)
 
-    # seq_names=['02654']
-    # seq = d.load_keypoint3d('02654')
-    # seq_names = ['01699', #'02855',
-    #    '00826', '02031', '01920', '02664', '01834',
-    #    '02859', '00398', '03886', '01302', '02053', '00898', '03592',
-    #    '03580', '00771', '01498', '00462', '01292', '02441', '03393',
-    #    '00376', '02149', '03200', '03052', '01788', '00514', '01744',
-    #    '02977', '00243', '02874', '00396', '03597', '02654', '03703',
-    #    '00456', '00812', '00979', '00724', '01443', '03401', '00548',
-    #    '00905', '00835', #'02612',
-    #    '02388', '03788', '03870', '03181',
-    #    '00199']
-    seq_names = ["00017",
-        "00018",
-        "00002",
-        "00014",
-        "00005",
-        "00010"]
-
-    #TODO use cofig to get viz paths
-    frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/advanced_tr_res_150.pkl'
-    contiguous_frame2cluster_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/advanced_tr_150.pkl'
-    cluster2keypoint_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/proxy_centers_tr_150.pkl'
-    cluster2frame_mapping_path = '/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/kit_logs/tan_kitml/20220409_173106/proxy_centers_tr_complete_150.pkl'
-    sk_type = 'kitml'
-    frames_dir = '/content/drive/Shareddrives/vid tokenization/kit_reconstruction/'
-
-    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, frames_dir+'very_naive')
-    very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type)
-    print('very naive mpjpe : ', very_naive_mpjpe_mean)
-
-    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive')
-    naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
-    print('naive mpjpe : ', naive_mpjpe_mean)
-
-    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive_no_rep')
-    naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
-    print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
+    # # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, frames_dir+'naive_no_rep')
+    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type)
+    # print('naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
 
 
-    #uniform filter
-    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter = 'uniform', frames_dir=frames_dir+'very_naive_ufilter')
-    very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter='uniform')
-    print('uniform filtered very naive mpjpe : ', very_naive_mpjpe_mean)
+    # #uniform filter
+    # # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter = 'uniform', frames_dir=frames_dir+'very_naive_ufilter')
+    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter='uniform')
+    # print('uniform filtered very naive mpjpe : ', very_naive_mpjpe_mean)
 
-    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_ufilter')
-    naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
-    print('uniform filtered naive mpjpe : ', naive_mpjpe_mean)
+    # # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_ufilter')
+    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
+    # print('uniform filtered naive mpjpe : ', naive_mpjpe_mean)
 
-    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_no_rep_ufilter')
-    naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
-    print('uniform filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
+    # # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform', frames_dir=frames_dir+'naive_no_rep_ufilter')
+    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='uniform')
+    # print('uniform filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
 
-    #spline filter
-    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter = 'spline', frames_dir=frames_dir+'very_naive_sfilter')
-    very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter='spline')
-    print('spline filtered very naive mpjpe : ', very_naive_mpjpe_mean)
+    # #spline filter
+    # # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter = 'spline', frames_dir=frames_dir+'very_naive_sfilter')
+    # very_naive_mpjpe_mean, _ = very_naive_reconstruction(seq_names, d, frame2cluster_mapping_path, cluster2keypoint_mapping_path, sk_type, filter='spline')
+    # print('spline filtered very naive mpjpe : ', very_naive_mpjpe_mean)
 
-    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_sfilter')
-    naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
-    print('spline filtered naive mpjpe : ', naive_mpjpe_mean)
+    # # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_sfilter')
+    # naive_mpjpe_mean, _ = naive_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
+    # print('spline filtered naive mpjpe : ', naive_mpjpe_mean)
 
-    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_no_rep_sfilter')
-    naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
-    print('spline filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
+    # # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline', frames_dir=frames_dir+'naive_no_rep_sfilter')
+    # naive_no_rep_mpjpe_mean, _ = naive_no_rep_reconstruction(seq_names, d, contiguous_frame2cluster_mapping_path, cluster2frame_mapping_path, sk_type, filter='spline')
+    # print('spline filtered naive (no rep) mpjpe : ', naive_no_rep_mpjpe_mean)
