@@ -1,0 +1,144 @@
+<!-- OUTPUT_MODELS = -->
+
+<html>
+  <head>
+    <title>Audio Description clips</title>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/json3/3.3.2/json3.min.js'></script>    
+    <script src='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js'></script>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+	<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+	<!--<script src='https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js'></script>
+	<script
+		src="https://cdn.jsdelivr.net/npm/gasparesganga-jquery-loading-overlay@2.1.7/dist/loadingoverlay.min.js"></script>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+		integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+	<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+	<link href="https://cdn.jsdelivr.net/npm/busy-load/dist/app.min.css" rel="stylesheet">-->
+  	<!-- <style>
+		.controls button[data-state="subtitles"] {
+    		height:85%;
+    		text-indent:0;
+    		font-size:16px;
+    		font-size:1rem;
+    		font-weight:bold;
+    		color:#666;
+    		background:#000;
+    		border-radius:2px;
+		}
+		.vid {
+			height: 300px;
+		}
+  	</style> -->
+	  <style>
+		.vid{
+		/* width: 350px; */
+		width: 60%;
+		}
+		.wrapper{
+			display: flex;
+			flex-flow: row;
+			position: relative;
+		}
+	  </style>
+
+  </head>
+  <body>
+    <div class='container-fluid'>
+			<h3>Audio Description clips</h3> 
+			<p>
+	  		<ul>
+				<li>Visualizing <span id=num_videos></span> "Face expression" samples.</li>
+	  		</ul>
+			</p>
+			<p>
+				<div class='wrapper'>
+					<table class="table" id="viz-table">
+					<!-- <caption><b>Annotations from Exp. 1</b></caption> -->
+						<thead>
+						<tr>
+							<!--<th scope="col"><b>#</b></th>-->
+							<th scope="col"><b>Annotation</b></th>
+							<th scope="col"><b>gt</b></th>
+							<th scope="col"><b>naive</b></th>
+							<!-- <th scope="col"><b>Playback Speed</b></th> -->
+							<th scope="col"><b>naive_spline</b></th>
+							<th scope="col"><b>naive_uniform</b></th>
+
+							<th scope="col"><b>gt_naive</b></th>
+							<th scope="col"><b>gt_naive_spline</b></th>
+							<th scope="col"><b>gt_naive_uniform</b></th>
+						</tr>
+						</thead>
+						<tbody>
+						</tbody>
+					</table>
+				</div>
+			</p>
+  	</div>
+
+    <script type="text/javascript">
+		// console.log("hello")
+        $(function() {
+
+            console.log('in function')
+            // JSON result in `data` variable
+            $.getJSON('videos.json', function(data) {
+				console.log("DATA: ",data)
+                populate_webpage(data);
+            });
+
+        });
+
+            function populate_webpage(data) {		
+                console.log('data',data)
+                for (var j=0; j<data.ids.length; j++) {
+                    var entry = data.ids[j];
+                    add_entry(entry, j, data);
+                }
+            }
+
+            // Display video and the actions in it
+				function add_entry(entry, idx, data) {
+						console.log('entry:', entry)
+
+						// var clip_path = "C:\Users\Atharvan Dogra\Downloads\\" + entry + ".mp4" ;
+						var clip_path = 'reconstructions-simpler-converted/';
+						var annotation_path = 'annotations'+'/'+entry+'_annotations.json'
+
+
+						var request = new XMLHttpRequest();
+						request.open("GET", annotation_path, false);
+						request.send(null)
+						var row_html = '<td style="font-size:10px;">'+ JSON.parse(request.responseText)+'</td>';		//add annotation
+						// alert (my_JSON_object.result[0]);
+						console.log("row html: ", row_html)
+
+						row_html += '<td><video class="vid" id="clip-'+entry+'" loop autoplay><source src='+clip_path+'gt/'+entry+'/'+entry+'.mp4 type="video/mp4"></video></td>';
+						row_html += model_variants(data.variants, entry, row_html, clip_path)
+
+
+
+						// Append row to table
+						console.log("before append: ",row_html)
+						$('#viz-table > tbody:last-child').append("<tr>"+row_html+"</tr>");   
+						}	
+
+
+						function model_variants(variants, row_id, row_html, clip_path) {						//asymov_mt: naive, naive_spline, naive_uniform
+							console.log("in model variants: ", row_html)
+							for (var j=0; j<variants.length; j++) {
+								row_html += '<td><video class="vid" id="clip-'+ row_id +'" loop autoplay><source src=' + clip_path+ 'asymov_mt/' + variants[j]+ '/' + row_id + '/' + row_id + '.mp4' + ' type="video/mp4"></video></td>';
+							}
+
+							for (var j=0; j<variants.length; j++) {						//gt_cluster_recon
+								row_html += '<td><video class="vid" id="clip-'+ row_id +'" loop autoplay><source src=' + clip_path+ 'gt_cluster_recon/' + variants[j]+ '/' + row_id + '/' + row_id + '.mp4' + ' type="video/mp4"></video></td>';
+							}
+							console.log("in model variants 2: ", row_html)
+							return row_html
+
+						}			
+
+	</script>
+</body>
+</html>
