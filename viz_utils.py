@@ -44,14 +44,14 @@ import utils
 
 #reconstruction methods-------------------------------------------------------------------
 #TODO: naive_no_rep_reconstruction implementation
-def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path, verbose=True):
+def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path, pred_gt_fps_ratio:float=1.0, verbose=True):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
         contiguous_cluster_seqs : mapping of contiguous frames with identically predicted cluster
         ground_truth_data : ground truth 3d keypoints of skeleton joints
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
-
+        pred_gt_fps_ratio: Ratio of model-prediction fps to ground-truth fps
     Retruns:
         The reconstructed keypoints
     '''
@@ -79,6 +79,9 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
                 center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
                 center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
                 assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx]), "Incorrect center frame sequence"
+                if pred_gt_fps_ratio != 1.0:
+                    center_frame_idx  = int(center_frame_idx*pred_gt_fps_ratio)
+                    center_frame_complete_seq = change_fps(center_frame_complete_seq, pred_gt_fps_ratio)
 
                 center_frame_complete_seq_len = center_frame_complete_seq.shape[0]
                 if length >= center_frame_complete_seq_len:
@@ -103,13 +106,14 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
 
     return reconstructed_keypoints, faulty
 
-def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path, verbose=True):
+def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, cluster2frame_mapping_path, pred_gt_fps_ratio:float=1.0, verbose=True):
     '''
     Args:
         seq_names : name of video sequences to reconstruct
         contiguous_cluster_seqs : mapping of contiguous frames with identically predicted cluster
         ground_truth_data : ground truth 3d keypoints of skeleton joints
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
+        pred_gt_fps_ratio: Ratio of model-prediction fps to ground-truth fps
 
     Retruns:
         The reconstructed keypoints
@@ -135,6 +139,9 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
                 center_frame_idx, center_frame_keypoint, center_frame_seq_name = center_frame[['frame_index','keypoints3d','seq_name']]
                 center_frame_complete_seq = ground_truth_data[center_frame_seq_name]
                 assert np.array_equal(center_frame_keypoint,center_frame_complete_seq[center_frame_idx])
+                if pred_gt_fps_ratio != 1.0:
+                    center_frame_idx  = int(center_frame_idx*pred_gt_fps_ratio)
+                    center_frame_complete_seq = change_fps(center_frame_complete_seq, pred_gt_fps_ratio)
 
                 #calculate left right and center frames
                 side_length = (length-1)//2

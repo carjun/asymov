@@ -70,10 +70,10 @@ def cluster2vid(save_name, clusters_idx, sk_type, proxy_center_info_path, data_p
 
     #get GT keypoints to visualize
     if type(data_path) == dict:
-        ground_truth_data = data_path
+        gt_data = data_path
     else:
         with open(data_path, 'rb') as handle:
-            ground_truth_data = pickle.load(handle)
+            gt_data = pickle.load(handle)
     # support frames on each side of center frame
     support_frames_count = int((gt_fps*duration-1)/2) #-1 for center frame
 
@@ -86,7 +86,7 @@ def cluster2vid(save_name, clusters_idx, sk_type, proxy_center_info_path, data_p
 
     seqs = []
     for cluster_idx, center_frame_idx, seq_name in tqdm(zip(clusters_idx, center_frames_idx, seq_names), desc='clusters', total = len(seq_names)):
-        seq_complete = ground_truth_data[seq_name]
+        seq_complete = gt_data[seq_name]
         seq = seq_complete[max(0, center_frame_idx-support_frames_count):min(seq_complete.shape[0], center_frame_idx+support_frames_count+1)]
         seqs.append(change_fps(seq, gt_fps, cons_fps))
     #visualize the required fragment of complete sequence
@@ -152,14 +152,12 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps
     print('----------------------------------------------------')
     # print(recons_type+'_reconstruction')
     if type(data_path) == dict:
-        ground_truth_data = data_path
+        gt_data = data_path
     else:
         with open(data_path, 'rb') as handle:
-            ground_truth_data = pickle.load(handle)
-    gt = [ground_truth_data[name][:5000, :, :] for name in seq_names]
-    gt = [change_fps(keypoint, gt_fps, recons_fps) for keypoint in gt]
+            gt_data = pickle.load(handle)
 
-    if recons_type == 'naive_no_rep' or recons_type  == 'naive':
+    if recons_type == 'naive_no_rep' or recons_type  == 'naive':  
         contiguous_frame2cluster_mapping_path = kwargs['contiguous_frame2cluster_mapping_path']
         cluster2frame_mapping_path = kwargs['cluster2frame_mapping_path']
 
@@ -168,7 +166,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps
             contiguous_frame2cluster = pd.read_pickle(contiguous_frame2cluster_mapping_path)
         contiguous_cluster_seqs = [contiguous_frame2cluster[contiguous_frame2cluster['name']==name][['cluster', 'length']].reset_index() for name in seq_names]
 
-        output = eval(recons_type+'_reconstruction')(seq_names, contiguous_cluster_seqs,  ground_truth_data, cluster2frame_mapping_path)
+        output = eval(recons_type+'_reconstruction')(seq_names, contiguous_cluster_seqs,  gt_data, cluster2frame_mapping_path, pred_fps/gt_fps)
         if recons_type == 'naive_no_rep':
             recons, faulty = output
         else:
@@ -196,6 +194,8 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps
         recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path)
 
     # recons and gt in desired fps
+    gt = [gt_data[name][:5000, :, :] for name in seq_names]
+    gt_in_recons_fps = [change_fps(keypoint, gt_fps, recons_fps) for keypoint in gt]
     recons = [change_fps(keypoint, pred_fps, recons_fps) for keypoint in recons]
 
     mpjpe={}
@@ -212,7 +212,7 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps
             raise NameError(f'No such filter {filter}')
         print(f"Using {filter} filter")
 
-        mpjpe_per_sequence=mpjpe3d(seq_names, recons, gt)
+        mpjpe_per_sequence=mpjpe3d(seq_names, recons, gt_in_recons_fps)
         mpjpe_mean = np.mean(mpjpe_per_sequence)
         mpjpe['filter'] = mpjpe_mean
         print(f'{recons_type}_{filter} mpjpe: ', mpjpe_mean)
@@ -258,14 +258,14 @@ def ground_truth_construction(seq_names, data_path, sk_type='kitml', gt_fps:floa
     assert frames_dir is not None, "path to store gt visualizations absent"
 
     if type(data_path) == dict:
-        ground_truth_data = data_path
+        gt_data = data_path
     else:
         with open(data_path, 'rb') as handle:
-            ground_truth_data = pickle.load(handle)
+            gt_data = pickle.load(handle)
 
     print('----------------------------------------------------')
     #TODO: remove 5000 limit
-    gt = [change_fps(ground_truth_data[name][:5000, :, :], gt_fps, cons_fps)
+    gt = [change_fps(gt_data[name][:5000, :, :], gt_fps, cons_fps)
           for name in tqdm(seq_names, 'Ground Truth construction')]
     print('----------------------------------------------------')
 
