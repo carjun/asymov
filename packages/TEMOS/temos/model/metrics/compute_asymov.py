@@ -17,7 +17,7 @@ from temos.model.utils.tools import remove_padding
 import sys
 # pdb.set_trace()
 sys.path.append(str(Path(__file__).resolve().parents[5]))
-from viz_utils import mpjpe3d, change_fps
+from viz_utils import mpjpe3d, change_fps, very_naive_reconstruction, naive_reconstruction, naive_no_rep_reconstruction
 from scipy.ndimage import uniform_filter1d, spline_filter1d
 
 def l2_norm(x1, x2, dim):
@@ -204,7 +204,7 @@ class ReconsMetrics(Metric):
                 elif filter == 'spline':
                     recons = [spline_filter1d(keypoint, axis=0) for keypoint in recons]
                 elif filter == 'uniform':
-                    recons = [uniform_filter1d(keypoint, size=int(self.fps/4), axis=0) for keypoint in recons]
+                    recons = [uniform_filter1d(keypoint, size=int(self.recons_fps/4), axis=0) for keypoint in recons]
                 else :
                     raise NameError(f'No such filter {filter}')
 
