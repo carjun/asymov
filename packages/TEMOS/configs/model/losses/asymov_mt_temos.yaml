@@ -3,6 +3,9 @@ _target_: temos.model.losses.TemosComputeLosses
 mode: motion_word
 
 # Loss terms
+## Trajectory
+traj: ${model.traj}
+
 ## Reconstruction losses
 lmd_mw_recons_text2mw: 1.0
 # lmd_mw_recons_mw2mw: ${.lmd_mw_recons_text2mw}
@@ -18,6 +21,10 @@ force_loss_on_jfeats: false
 ablation_no_kl_combine: true
 ablation_no_kl_gaussian: true
 ablation_no_motionencoder: true
+
+# Trajectory
+traj_error: 1.0
+traj_error_func: ${model.func_traj}
 
 # Text => motion_words
 recons_text2mw: ${.lmd_mw_recons_text2mw}

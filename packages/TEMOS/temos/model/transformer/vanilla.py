@@ -21,7 +21,7 @@ class TokenEmbedding(nn.Module):
 
 # Seq2Seq Network
 class Seq2SeqTransformer(LightningModule):
-    def __init__(self,
+    def __init__(self, traj: bool,
                  num_encoder_layers: int,
                  num_decoder_layers: int,
                  emb_size: int,
@@ -41,10 +41,13 @@ class Seq2SeqTransformer(LightningModule):
                                        dim_feedforward=dim_feedforward,
                                        dropout=dropout)
         self.generator = nn.Linear(emb_size, tgt_vocab_size)
+        if traj:
+            self.traj_generator = nn.Linear(emb_size, 3)
+        
         self.src_tok_emb = TokenEmbedding(src_vocab_size, emb_size)
         self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size)
-        self.positional_encoding = PositionalEncoding(
-            emb_size, dropout=dropout)
+        
+        self.positional_encoding = PositionalEncoding(emb_size, dropout=dropout)
 
     def forward(self,
                 src: Tensor,
@@ -59,6 +62,8 @@ class Seq2SeqTransformer(LightningModule):
         tgt_emb = self.positional_encoding(self.tgt_tok_emb(trg))
         outs = self.transformer(src_emb, tgt_emb, src_mask, tgt_mask, None,
                                 src_padding_mask, tgt_padding_mask, memory_key_padding_mask)
+        if self.hparams.traj:
+            return self.generator(outs), self.traj_generator(outs)
         return self.generator(outs)
 
     def encode(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor = None):

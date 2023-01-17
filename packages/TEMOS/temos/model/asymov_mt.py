@@ -18,7 +18,7 @@ from temos.model.base import BaseModel
 from temos.model.utils.tools import create_mask, remove_padding, greedy_decode, batch_greedy_decode
 
 class AsymovMT(BaseModel):
-    def __init__(self,
+    def __init__(self, traj: bool,
                  transformer: DictConfig,
                  losses: DictConfig,
                  metrics: DictConfig,
@@ -108,15 +108,23 @@ class AsymovMT(BaseModel):
     def allsplit_step(self, split: str, batch: Dict, batch_idx):
         src: Tensor = batch["text"] #[Frames, Batch size]
         tgt: Tensor = batch["motion_words"] #[Frames, Batch size]
+        tgt_traj: Tensor = batch["traj"] #List[Tensor[Frames, 3]]
         tgt_input = tgt[:-1, :] #[Frames-1, Batch size]
         tgt_out = tgt[1:, :].permute(1,0) #[Batch size, Frames-1]
 
         src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, self.PAD_IDX)
-        logits = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
+        if self.hparams.traj:
+            logits, traj = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)
+            #[Frames, Batch size, 3]
+            traj = traj.permute(1,0,2) #[Batch size, Frames, 3]
+            traj = remove_padding(traj, batch["mw_length"]) #List[Tensor[Frames, 3]]
+        else:
+            logits = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)    
         logits = logits.permute(1,2,0) #[Batch size, Classes, Frames]
         
         # Compute the losses
-        loss = self.losses[split].update(ds_text=logits, ds_ref=tgt_out)
+        loss = self.losses[split].update(ds_text=logits, ds_ref=tgt_out, 
+                                         traj_text=traj, traj_ref=tgt_traj)
 
         if loss is None:
             raise ValueError("Loss is None, this happend with torchmetrics > 0.7")

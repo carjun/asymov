@@ -1,6 +1,8 @@
 modelname: asymov_machine_translation_seq2seq_transformer
 _target_: temos.model.asymov_mt.AsymovMT
 
+traj: ${traj}
+
 #TODO: verify with Attention is All You Need paper
 num_encoder_layers: 6
 num_decoder_layers: 6
@@ -25,6 +27,7 @@ defaults:
   - metrics: asymov_recons
   - optim: adamw
   - /model/losses/function/crossEntropy@func_recons
+  - /model/losses/function/mse@func_traj
 
 best_ckpt_monitors: ${callback.best_ckpt_monitors}
 
