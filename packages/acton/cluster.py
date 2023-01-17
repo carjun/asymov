@@ -98,7 +98,7 @@ def parse_args():
         ldd["CLUSTER"]["CKPT"] = ldd["NAME"]
     if args.log_ver:
         ldd["CLUSTER"]["VERSION"] = str(args.log_ver)
-    else:
+    elif not args.use_raw:
         ldd["CLUSTER"]["VERSION"] = sorted([f.name for f in os.scandir(os.path.join(args.log_dir, ldd["CLUSTER"]["CKPT"])) if f.is_dir()], reverse=True)[0]
     pprint.pprint(ldd)
     return ldd
@@ -169,8 +169,9 @@ def main():
             
             #handle empty clusters
             non_empty_clusters = np.unique(c.get_assignment(tr_stacked))
+            # pdb.set_trace()
             assert np.max(non_empty_clusters)<K, "more no. of clusters than expected"
-            assert len(non_empty_clusters)<K, "more unique clusters than expected"
+            assert len(non_empty_clusters)<=K, "more unique clusters than expected"
             
             print(f"Found {K-len(non_empty_clusters)} empty clusters")
             non_empty_cluster_centers = c.kmeans.cluster_centers_[non_empty_clusters]

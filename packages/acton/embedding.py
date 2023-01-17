@@ -20,7 +20,7 @@ from src.data.dataset.loader import KITDataset
 # from src import algo
 # from src.data.dataset.cluster_misc import lexicon#, get_names, genre_list
 
-from plb.models.self_supervised import TAN
+# from plb.models.self_supervised import TAN
 # from plb.models.self_supervised.tan import TANEvalDataTransform, TANTrainDataTransform
 # from plb.datamodules import SeqDataModule
 from plb.datamodules.data_transform import body_center, euler_rodrigues_rotation
@@ -87,7 +87,7 @@ def parse_args():
         ldd["CLUSTER"]["CKPT"] = ldd["NAME"]
     if args.log_ver:
         ldd["CLUSTER"]["VERSION"] = str(args.log_ver)
-    else:
+    elif not args.use_raw:
         ldd["CLUSTER"]["VERSION"] = sorted([f.name for f in os.scandir(os.path.join(args.log_dir, ldd["CLUSTER"]["CKPT"])) if f.is_dir()], reverse=True)[0]
     pprint.pprint(ldd)
     return ldd
@@ -160,7 +160,7 @@ def main():
         model.eval()
         model = model.to(args['DEVICE'])
     
-    with open(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], args["PRETRAIN"]["DATA"]["DATA_NAME"] + '_data_split.json'), 'r') as handle:
+    with open(os.path.join(args["PRETRAIN"]["DATA"]["DATA_DIR"], 'data_split.json'), 'r') as handle:
         data_split = json.load(handle)
 
     # Get data
