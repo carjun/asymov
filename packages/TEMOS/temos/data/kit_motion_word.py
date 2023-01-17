@@ -32,6 +32,7 @@ class KITMotionWordMTDataModule(BASEDataModule):
     def __init__(self, 
                  special_symbols: Union[List[str],ListConfig] = ['<pad>', '<bos>', '<eos>', '<unk>'],
                  num_mw_clusters: int = 1000,
+                 traj: bool = True,
                  batch_size: int = 32,
                  num_workers: int = 16,
                  collate_fn: Callable = collate_motion_words_and_text_mt,
@@ -73,7 +74,7 @@ class KITMotionWordMTDataModule(BASEDataModule):
         
         super().__init__(batch_size=batch_size,
                          num_workers=num_workers,
-                         collate_fn=partial(collate_fn, text_vocab=self.text_vocab, special_symbols=list(special_symbols)))
+                         collate_fn=partial(collate_fn, text_vocab=self.text_vocab, special_symbols=list(special_symbols), traj=traj))
 
 class KITMotionWordDataModule(BASEDataModule):
     def __init__(self, data_dir: str = "",
@@ -102,7 +103,7 @@ class KITMotionWordDataModule(BASEDataModule):
 class KITMotionWord(Dataset):
     dataname = "KIT Motion-Language Motion Word"
 
-    def __init__(self, datapath: str, dataname: str,
+    def __init__(self, datapath: str, mw_dataname: str, traj: bool, traj_dataname: str,
                  splitpath: str,
                  vocab_size: int,
                 #  transforms: Transform,
@@ -125,6 +126,7 @@ class KITMotionWord(Dataset):
         # self.load_amass_data = load_amass_data
         # self.load_with_rot = load_with_rot
         self.downsample = downsample
+        self.traj = traj
 
         # if load_amass_data and not self.load_with_rot:
         #     self.transforms_xyz = transforms_xyz
@@ -139,7 +141,7 @@ class KITMotionWord(Dataset):
         super().__init__()
         keyids = get_split_keyids(path=splitpath, split=split)
 
-        features_data = {}
+        mw_data = {}
         texts_data = {}
         durations = {}
 
@@ -163,8 +165,13 @@ class KITMotionWord(Dataset):
         #     bad_smpl = 0
         #     good_smpl = 0
         
-        with open(datapath/dataname, 'rb') as f:
+        with open(datapath/mw_dataname, 'rb') as f:
             motion_words_data = pickle.load(f)
+        if self.traj:
+            traj_data = {}
+            with open(datapath/traj_dataname, 'rb') as f:
+                trajectory_data = pickle.load(f)
+        
         for i, keyid in enumerator:
 
             anndata, success = load_annotation(keyid, datapath)
@@ -207,29 +214,41 @@ class KITMotionWord(Dataset):
             # else:
             # features = self.transforms.joints2jfeats(joints)
 
-            features_data[keyid] = motion_words
+            mw_data[keyid] = motion_words
             texts_data[keyid] = anndata
             durations[keyid] = duration
+
+            if self.traj:
+                residual_traj, _ = residual_downsample_traj(trajectory_data[keyid], downsample=self.downsample, framerate=framerate)
+                assert len(residual_traj) == duration
+                traj_data[keyid] = residual_traj
 
         # if load_amass_data and not tiny:
         #     percentage = 100 * bad_smpl / (bad_smpl + good_smpl)
         #     logger.info(f"There are {bad_smpl} sequences not found ({percentage:.4}%) in AMASS.")
 
         if split != "test" and not tiny:
-            total = len(features_data)
+            total = len(mw_data)
             percentage = 100 * num_bad / (total+num_bad)
             logger.info(f"There are {num_bad} sequences rejected by the sampler ({percentage:.4}%).")
 
-        self.features_data = features_data
+        self.mw_data = mw_data
         self.texts_data = texts_data
+        if self.traj:
+            self.traj_data = traj_data
 
-        self.keyids = list(features_data.keys())
+        self.keyids = list(mw_data.keys())
         self._split_index = list(self.keyids)
         self._num_frames_in_sequence = durations
         self.vocab_size = vocab_size
 
+    def _load_traj(self, keyid):#, frame_ix=None):
+        traj = self.traj_data[keyid]
+        # datastruct = self.transforms.Datastruct(features=features)
+        return traj
+
     def _load_motion_words(self, keyid):#, frame_ix=None):
-        motion_words = self.features_data[keyid]
+        motion_words = self.mw_data[keyid]
         # datastruct = self.transforms.Datastruct(features=features)
         return motion_words
 
@@ -254,6 +273,9 @@ class KITMotionWord(Dataset):
         text = self._load_text(keyid)
         element = {"motion_words": motion_words, "text": text,
                    "length": len(motion_words), "keyid": keyid}
+        if self.traj:
+            traj = self._load_traj(keyid)
+            element["traj"]=traj
         return element
 
     def __getitem__(self, index):
@@ -299,6 +321,20 @@ def downsample_motion_words(motion_words, *, downsample, framerate):
     duration = len(frames)
     motion_words = torch.from_numpy(np.array(motion_words, dtype='int32')[frames])
     return motion_words, duration
+
+def residual_downsample_traj(traj, *, downsample, framerate):
+    nframes_total = len(traj)
+    last_framerate = 100
+
+    if downsample:
+        frames = subsample(nframes_total, last_framerate=last_framerate, new_framerate=framerate)
+    else:
+        frames = np.arange(nframes_total, dtype='int32')
+
+    duration = len(frames)
+    traj = traj[frames]
+    residual_traj = torch.from_numpy(np.diff(traj, axis=0, prepend=traj[0:1]))
+    return residual_traj, duration
 
 # def load_amass_keyid(keyid, amass_path, *, correspondances):
 #     identifier = correspondances[keyid]["identifier"]

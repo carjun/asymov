@@ -91,7 +91,7 @@ def mw_transform(mw_cluster_ids: List[int], special_symbols: List[str]):
                              torch.tensor([special_symbols.index('<eos>')]))) # Add BOS/EOS assuming special first
     return mw_token_ids
     
-def collate_motion_words_and_text_mt(lst_elements: List, text_vocab:Vocab, special_symbols: List[str]) -> Dict:
+def collate_motion_words_and_text_mt(lst_elements: List, text_vocab:Vocab, special_symbols: List[str], traj: bool = True) -> Dict:
     # pdb.set_trace()
 
     text_batch, mw_batch = [], []
@@ -99,15 +99,18 @@ def collate_motion_words_and_text_mt(lst_elements: List, text_vocab:Vocab, speci
         text_sample, mw_sample = x['text'], x['motion_words']
         text_batch.append(text_transform(text_sample.rstrip("\n"), text_vocab))
         mw_batch.append(mw_transform(mw_sample, special_symbols))
-    
+
     PAD_IDX = text_vocab.__getitem__('<pad>')
     assert PAD_IDX == special_symbols.index('<pad>')
+    
     batch = {
         "text": pad_sequence(text_batch, padding_value=PAD_IDX), #[Frames, Batch size]
         "motion_words": pad_sequence(mw_batch, padding_value=PAD_IDX), #[Frames, Batch size]
         "text_length": [len(x) for x in text_batch],
         "mw_length": [len(x) for x in mw_batch]
         }
+    if traj:
+        batch["traj"] = [x['traj'] for x in lst_elements]
     
     otherkeys = [x for x in lst_elements[0].keys() if x not in batch]
     for key in otherkeys:
