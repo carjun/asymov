@@ -120,47 +120,76 @@ def beam_search_auto(
     src_padding_mask,
     tgt_mask,
     tgt_padding_mask,
-    predictions = 20,
+    end_symbol: int,
+    max_len = 220,
     beam_width = 5,
-    batch_size = 128
+    batch_size = 128            #CHECK: this batch size is different from the number of sequences passed
 ):
 
     with torch.no_grad():
+        # pdb.set_trace()
         memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
-
         out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask)  # [Frames, Batch Size, *]
         logits = model.generator(out[-1])
 
-        next_probabilities = logits[-1, :]
+        next_probabilities = logits#[-1, :]
         vocabulary_size = next_probabilities.shape[-1]
         probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
-        tgt = tgt.repeat((beam_width, 1))
-        next_chars = next_chars.reshape(-1, 1)
-        tgt = torch.cat((tgt, next_chars), axis=-1)
 
-        predictions_iterator = range(predictions - 1)
+        tgt = tgt.repeat((beam_width, 1))       #repeat BOS  for beam width
+        tgt_padding_mask = tgt_padding_mask.unsqueeze(0).repeat((5,1,1))
+        # next_chars = next_chars.reshape(-1, 1)
+        # tgt = torch.cat((tgt, next_chars), axis=-1)
+        tgt_len = tgt.new_full((beam_width, batch_size), max_len)#.repeat((beam_width, 1)) #[beam_width, Batch Size] #same dtype as tgt       
+                                                                               #this needs to be sorted acc to best_canditates
+        # pdb.set_trace()
+        tgt = torch.cat((tgt.unsqueeze(-2), next_chars.transpose(1,0).unsqueeze(-2)), -2)      #concat next tokens for each beam (vertically)
+
+        predictions_iterator = range(1, max_len - 1)        #1 (0th) prediction already done
         for i in predictions_iterator:
-            dataset = tud.TensorDataset(src.repeat((beam_width, 1, 1)), tgt)
-            loader = tud.DataLoader(dataset, batch_size=batch_size)
+            # dataset = tud.TensorDataset(src.repeat((beam_width, 1, 1)), tgt)
+            # loader = tud.DataLoader(dataset, batch_size=batch_size)
 
-            next_probabilities = []
-            iterator = iter(loader)
-            for x, y in iterator:
-                for i in range(beam_width):
-                    memory_temp = model.encode(x[i], src_mask, src_padding_mask)
-                    memory_temp = torch.concat([memory_temp, torch.zeros(memory_temp.shape[0], len(y[i])-memory_temp.shape[1], memory_temp.shape[2])], 1)
-                    out_temp = model.decode(y[i].reshape([1, len(y[i])]), memory_temp, tgt_mask, None, None,
-                                        None)
-                    logits_temp = model.generator(out_temp[-1])
-                    next_probabilities.append(logits_temp[-1, :].squeeze().log_softmax(-1))
+            tgt_mask = (T.generate_square_subsequent_mask(tgt.size(1))      #size(1) for num of decoded
+                    .to(tgt.device, dtype=torch.bool))                      #tokens. 0th is beam size
+            # pdb.set_trace()
+            next_probabilities = torch.tensor([]) # will be containing probabs.(logits) for [batch,1004*beam_width]
+            # iterator = iter(loader)
+            # for x, y in iterator:
 
-            next_probabilities = torch.cat(next_probabilities, axis=0)
-            next_probabilities = next_probabilities.reshape((1, next_probabilities.shape[-1]))
-            probabilities, idx = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
+            tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(-1)], dim=-1)
 
-            next_chars = torch.remainder(idx, vocabulary_size).flatten().unsqueeze(-1)
+            for b in range(beam_width):
+                # memory_temp = model.encode(x[i], src_mask, src_padding_mask)
+                # memory_temp = torch.concat([memory_temp, torch.zeros(memory_temp.shape[0], len(y[i])-memory_temp.shape[1], memory_temp.shape[2])], 1)
+                # pdb.set_trace()
+                out_temp = model.decode(tgt[b], memory, tgt_mask, None, tgt_padding_mask[b], src_padding_mask)
+                logits_temp = model.generator(out_temp[-1])
+                # next_probabilities.append(logits_temp.squeeze().log_softmax(-1))
+                next_probabilities = torch.cat((next_probabilities, logits_temp.squeeze()), axis=-1)      #probabilities [batch, beam*1004]
+                # pdb.set_trace()
+
+            # next_probabilities = torch.cat(next_probabilities, axis=0)
+            # next_probabilities = next_probabilities.reshape((1, next_probabilities.shape[-1]))
+            probabilities, idx = next_probabilities.log_softmax(-1).topk(k=beam_width, axis=-1)
+
+            next_chars = torch.remainder(idx, vocabulary_size).transpose(1,0)#.flatten().unsqueeze(-1)
             best_candidates = (idx / vocabulary_size).long()
-            # best_candidates += torch.arange(tgt.shape[1]//beam_width).unsqueeze(-1) * beam_width
-            tgt = tgt[best_candidates].flatten(end_dim=-2)
-            tgt = torch.cat((tgt, next_chars), axis=1)
+
+            # pdb.set_trace()
+
+            tgt_len = torch.where(torch.logical_and(next_chars==end_symbol, tgt_len==max_len), i+2, tgt_len)     #this requires debugging
+
+            # tgt = tgt[best_candidates]#.flatten(end_dim=-2)
+
+            for bc in range(len(best_candidates)): 
+                tgt[:,:,bc] = tgt[:,:, bc][best_candidates[bc]]
+            for i in range(len(best_candidates)):                   #IMPROVEMENT: find better method to sort tgt_len on best_candidates
+                tgt_len[:,i] = tgt_len[:,i][best_candidates[i]]     #tgt_len is for each elemement in [beam, batch] for tgt, 
+                                                                    #and arrangement of tgt keeps changing based on best_candidate beam
+
+            # pdb.set_trace()           ##
+
+            tgt = torch.cat((tgt, next_chars.unsqueeze(-2)), -2)
+
         return tgt

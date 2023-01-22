@@ -112,7 +112,7 @@ def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: in
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len <= i).unsqueeze(1)], dim=1)
 
         tgt = beam_search_auto(model, src, tgt, src_mask,src_padding_mask, tgt_mask,
-                                    tgt_padding_mask)
+                                    tgt_padding_mask, max_len = max_len)
         if (i + 2) < max_len:
             break
 
