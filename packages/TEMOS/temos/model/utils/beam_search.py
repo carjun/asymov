@@ -184,8 +184,8 @@ def beam_search_auto(
 
             for bc in range(len(best_candidates)): 
                 tgt[:,:,bc] = tgt[:,:, bc][best_candidates[bc]]
-            for i in range(len(best_candidates)):                   #IMPROVEMENT: find better method to sort tgt_len on best_candidates
-                tgt_len[:,i] = tgt_len[:,i][best_candidates[i]]     #tgt_len is for each elemement in [beam, batch] for tgt, 
+            for bc in range(len(best_candidates)):                   #IMPROVEMENT: find better method to sort tgt_len on best_candidates
+                tgt_len[:,bc] = tgt_len[:,bc][best_candidates[bc]]     #tgt_len is for each elemement in [beam, batch] for tgt, 
                                                                     #and arrangement of tgt keeps changing based on best_candidate beam
 
             # pdb.set_trace()           ##
