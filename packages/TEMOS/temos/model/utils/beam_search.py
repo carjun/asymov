@@ -165,6 +165,7 @@ def beam_search_auto(
                 # pdb.set_trace()
                 out_temp = model.decode(tgt[b], memory, tgt_mask, None, tgt_padding_mask[b], src_padding_mask)
                 logits_temp = model.generator(out_temp[-1])
+                _, a = logits_temp.log_softmax(-1).topk(k=beam_width, axis=-1)
                 # next_probabilities.append(logits_temp.squeeze().log_softmax(-1))
                 next_probabilities = torch.cat((next_probabilities, logits_temp.squeeze()), axis=-1)      #probabilities [batch, beam*1004]
                 # pdb.set_trace()
@@ -191,5 +192,77 @@ def beam_search_auto(
             # pdb.set_trace()           ##
 
             tgt = torch.cat((tgt, next_chars.unsqueeze(-2)), -2)
+
+        return tgt
+
+
+
+def diverse_beam_search_auto(                       #pre-alpha
+    model,
+    src,
+    tgt,
+    src_mask,
+    src_padding_mask,
+    tgt_mask,
+    tgt_padding_mask,
+    end_symbol: int,
+    max_len = 220,
+    beam_width = 5,
+    batch_size = 128            #CHECK: this batch size is different from the number of sequences passed
+):
+
+
+    with torch.no_grad():
+
+        memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
+        out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask)  # [Frames, Batch Size, *]
+        logits = model.generator(out[-1])
+
+        next_probabilities = logits#[-1, :]
+        vocabulary_size = next_probabilities.shape[-1]
+        probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
+        tgt = tgt.repeat((beam_width, 1))       #repeat BOS  for beam width
+        tgt_padding_mask = tgt_padding_mask.unsqueeze(0).repeat((beam_width, 1, 1))
+        # next_chars = next_chars.reshape(-1, 1)
+        # tgt = torch.cat((tgt, next_chars), axis=-1)
+        tgt_len = tgt.new_full((beam_width, batch_size), max_len)#.repeat((beam_width, 1)) #[beam_width, Batch Size] #same dtype as tgt
+        # pdb.set_trace()
+        tgt = torch.cat((tgt.unsqueeze(-2), next_chars.transpose(1,0).unsqueeze(-2)), -2)      #concat next tokens for each beam (vertically)
+        
+        # pdb.set_trace()               ##
+        
+        predictions_iterator = range(1, max_len - 1)     #1 (0th) prediction already done
+        for i in predictions_iterator:
+            tgt_mask = (T.generate_square_subsequent_mask(tgt.size(1))      #size(1) for num of decoded
+                    .to(tgt.device, dtype=torch.bool))                      #tokens. 0th is beam size
+
+            next_probabilities = torch.tensor([]) # will be containing probabs.(logits) for [batch,1004*beam_width]
+
+
+            tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(-1)], dim=-1)
+
+            for b in range(beam_width):         #if using i, it's continued outside scope of for loop
+                out_temp = model.decode(tgt[b], memory, tgt_mask, None, tgt_padding_mask[b], src_padding_mask)
+                logits_temp = model.generator(out_temp[-1])
+
+                if b == 0:
+                  probabilities, idx = logits_temp.log_softmax(-1).topk(k=1, axis=-1)    ##
+                  unique_tokens = idx           # needs to be debugged
+                  torch.cat((tgt[b], unique_tokens.unsqueeze(-2)), -2)
+
+                else:
+                  probabilities, idx = logits_temp.log_softmax(-1).topk(k=b+1, axis=-1)
+
+                  unique_mask = torch.stack([(tgt[:, -1, :] == idx.T[i]).any(dim=1) for i in range(idx.T.shape[0])], dim=1).long()
+                  first_unique = unique_mask.argmin(1)
+                  complete_index = torch.stack([torch.arange(unique_mask.shape[0]), first_unique], dim=1)   #containes coordinates -> diverse tokens, dim=0 -> batch_size
+
+                  unique_tokens = idx[complete_index]       # needs to be debugged
+
+                  torch.cat((tgt[b], unique_tokens.unsqueeze(-2)), -2)
+
+                  torch.cat((tgt[b], unique_tokens.unsqueeze(-2)), -2)
+
+            tgt_len = torch.where(torch.logical_and(next_chars==end_symbol, tgt_len==max_len), i+2, tgt_len)
 
         return tgt
