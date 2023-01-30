@@ -1,5 +1,6 @@
 import torch
-import torch.utils.data as data
+import torch.utils.data as tud
+
 
 def beam_search(model, sequences, predictions=20, beam_width=5, batch_size=16):
     """
@@ -41,8 +42,8 @@ def beam_search(model, sequences, predictions=20, beam_width=5, batch_size=16):
         predictions_iterator = range(predictions - 1) #one prediction already done before for loop
 
         for i in predictions_iterator:
-            dataset = data.TensorDataset(sequences)
-            loader = data.DataLoader(dataset, batch_size=batch_size)
+            dataset = tud.TensorDataset(sequences)
+            loader = tud.DataLoader(dataset, batch_size=batch_size)
             next_probabilities = []
             iterator = iter(loader)
 
@@ -66,3 +67,100 @@ def beam_search(model, sequences, predictions=20, beam_width=5, batch_size=16):
             sequences = sequences[best_candidates].flatten(end_dim=-2)
             sequences = torch.cat((sequences, next_chars), axis=1)
         return sequences.reshape(-1, beam_width, sequences.shape[-1]), probabilities
+
+
+def beam_search_nat(model, memory, beam_size, src_mask, max_len=256, start=0, end=1):
+    assert beam_size > 1
+    finished = torch.zeros(1, dtype=torch.bool)
+    paths = torch.full((1, max_len + 1), start)
+    probs = torch.zeros(1)
+
+    for i in range(1, max_len + 1):
+        mask = torch.triu(torch.ones((1, i,i)), diagonal=1)==0
+        logits = model.decode(memory.expand((~finished).count_nonzero(), -1, -1),
+            src_mask, paths[~finished, :i], mask)
+        print(len(logits), len(logits[0]))
+        scores = probs[~finished].unsqueeze(1) + model.generator(logits[:, -1])
+        print(len(scores))
+        if i == 1: # increase capacity to beam_size
+            finished = finished.repeat(beam_size)
+            paths = paths.repeat(beam_size, 1)
+            probs = probs.repeat(beam_size)
+
+        candidates = paths[~finished]
+        topv, topi = torch.topk(scores.flatten(), beam_size)
+        if any(finished): # length normalization
+            for j in range(beam_size):
+                finished[finished.nonzero(as_tuple=True)] ^= probs[finished] < (topv[j] / i)
+            if (~finished).count_nonzero() > beam_size:
+                beam_size = (~finished).sum()
+                topv, topi = torch.topk(scores.flatten(), beam_size)
+
+        paths[~finished] = candidates[
+            torch.div(topi, model.tgt_vocab_size, rounding_mode='trunc')
+        ]
+        paths[~finished, i] = topi % model.tgt_vocab_size
+        probs[~finished] = topv
+
+        finished |= paths[:, i] == end
+        beam_size = (~finished).count_nonzero()
+        probs[paths[:, i] == end] /= i
+        if all(finished): break
+
+    best_path = paths[probs.argmax()]
+    end_index = (best_path == end).nonzero()
+    return best_path[1:end_index] if end_index.numel() else best_path[1:]
+
+
+def beam_search_auto(
+    model,
+    src,
+    tgt,
+    src_mask,
+    src_padding_mask,
+    tgt_mask,
+    tgt_padding_mask,
+    predictions = 20,
+    beam_width = 5,
+    batch_size = 128
+):
+
+    with torch.no_grad():
+        memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
+
+        out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask)  # [Frames, Batch Size, *]
+        logits = model.generator(out[-1])
+
+        next_probabilities = logits[-1, :]
+        vocabulary_size = next_probabilities.shape[-1]
+        probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
+        tgt = tgt.repeat((beam_width, 1))
+        next_chars = next_chars.reshape(-1, 1)
+        tgt = torch.cat((tgt, next_chars), axis=-1)
+
+        predictions_iterator = range(predictions - 1)
+        for i in predictions_iterator:
+            dataset = tud.TensorDataset(src.repeat((beam_width, 1, 1)), tgt)
+            loader = tud.DataLoader(dataset, batch_size=batch_size)
+
+            next_probabilities = []
+            iterator = iter(loader)
+            for x, y in iterator:
+                for i in range(beam_width):
+                    memory_temp = model.encode(x[i], src_mask, src_padding_mask)
+                    memory_temp = torch.concat([memory_temp, torch.zeros(memory_temp.shape[0], len(y[i])-memory_temp.shape[1], memory_temp.shape[2])], 1)
+                    out_temp = model.decode(y[i].reshape([1, len(y[i])]), memory_temp, tgt_mask, None, None,
+                                        None)
+                    logits_temp = model.generator(out_temp[-1])
+                    next_probabilities.append(logits_temp[-1, :].squeeze().log_softmax(-1))
+
+            next_probabilities = torch.cat(next_probabilities, axis=0)
+            next_probabilities = next_probabilities.reshape((1, next_probabilities.shape[-1]))
+            probabilities, idx = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
+
+            next_chars = torch.remainder(idx, vocabulary_size).flatten().unsqueeze(-1)
+            best_candidates = (idx / vocabulary_size).long()
+            # best_candidates += torch.arange(tgt.shape[1]//beam_width).unsqueeze(-1) * beam_width
+            tgt = tgt[best_candidates].flatten(end_dim=-2)
+            tgt = torch.cat((tgt, next_chars), axis=1)
+        return tgt

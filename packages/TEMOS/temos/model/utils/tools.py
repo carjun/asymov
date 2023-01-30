@@ -4,6 +4,7 @@ from torch import Tensor
 from torch.nn import Module, Transformer as T
 from tqdm import tqdm
 import pdb
+from .beam_search import beam_search_auto
 
 def detach_to_numpy(tensor):
     return tensor.detach().cpu().numpy()
@@ -14,10 +15,6 @@ def remove_padding(tensors, lengths):
 
 def remove_padding_asymov(tensors, lengths):
     return [tensor[:, :tensor_length] for tensor, tensor_length in zip(tensors, lengths)]
-
-# def generate_square_subsequent_mask(sz: int) -> Tensor:
-#     mask = torch.triu(torch.full((sz, sz), float('-inf')), diagonal=1)
-#     return mask #[sz,sz]
 
 def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
     # src: [Frames, Batch size], tgt: [Frames-1, Batch size]
@@ -53,6 +50,7 @@ def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, e
             break
     return tgt #[Frames, 1]
 
+
 def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
                   src_mask: Tensor = None, src_padding_mask: Tensor = None) -> Tensor:
     # src: [Frames, Batches]
@@ -76,6 +74,7 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(1)], dim=1)
 
         out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask) #[Frames, Batch Size, *]
+        
         logits = model.generator(out[-1]) #[Batch Size, Classes]
         next_word = torch.argmax(logits, dim=-1) #[Batch Size]
         tgt = torch.cat([tgt, next_word.unsqueeze(0)]) #[Frames+1, Batch size]
@@ -88,3 +87,43 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
     
     tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
     return tgt_list #List[Tensor[Frames]]
+
+
+def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
+                        src_mask: Tensor = None, src_padding_mask: Tensor = None) -> Tensor:
+    # src: [Frames, Batches]
+    if src_mask is None:
+        num_tokens = src.shape[0]
+        src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)  # [Frames, Frames]
+
+    # memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
+
+    # pdb.set_trace()
+    batch_size = src.shape[1]
+    tgt = torch.ones(1, batch_size).fill_(start_symbol).type(torch.long)  # [1, Batch size], 1 as for 1st frame
+    tgt_len = torch.full((batch_size,), max_len)  # [Batch Size]
+
+    for i in tqdm(range((max_len - 1)), "autoregressive translation", None):
+        tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
+                    .type(torch.bool))
+        if i == 0:
+            tgt_padding_mask = torch.full((batch_size, 1), False)  # [Batch Size, 1], 1 as for 1st frame
+        else:
+            tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len <= i).unsqueeze(1)], dim=1)
+
+        tgt = beam_search_auto(model, src, tgt, src_mask,src_padding_mask, tgt_mask,
+                                    tgt_padding_mask)
+        if (i + 2) < max_len:
+            break
+
+    tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
+    return tgt_list  # List[Tensor[Frames]]
+
+# TODO: Unified search fucntion
+# def batch_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, beam: bool, beam_width: int,
+#                   src_mask: Tensor = None, src_padding_mask: Tensor = None) -> Tensor:
+#     if beam:
+#         assert beam_width>1
+#     else:
+#         assert beam_width==1
+
