@@ -104,7 +104,7 @@ class TemosComputeLosses(Metric):
                 total += self._update_loss("recons_mw2mw", ds_motion, ds_ref)
             total += self._update_loss("recons_text2mw", ds_text, ds_ref)
         
-        pdb.set_trace()
+        # pdb.set_trace()
         if self.traj:
             total += self._update_loss("traj_error", traj_text, traj_ref)
         
