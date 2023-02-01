@@ -8,6 +8,7 @@ from torchmetrics import Metric
 class TemosComputeLosses(Metric):
     def __init__(self, vae: bool,
                  mode: str,
+                 traj: bool,
                  cross_modal_loss: str = 'func_latent',              #condition to use cosSimilarity or Smooth L1 (default)
                  loss_on_both: bool = False,
                  force_loss_on_jfeats: bool = True,
@@ -20,6 +21,7 @@ class TemosComputeLosses(Metric):
         # Save parameters
         self.vae = vae
         self.mode = mode
+        self.traj = traj
 
         self.cross_modal_loss = cross_modal_loss
 
@@ -44,6 +46,9 @@ class TemosComputeLosses(Metric):
             losses.append("recons_text2mw")
         else:
             ValueError("This mode is not recognized.")
+
+        if traj:
+            losses.append("traj_error")
 
         if vae or loss_on_both:
             kl_losses = []
@@ -80,7 +85,8 @@ class TemosComputeLosses(Metric):
 
     def update(self, ds_text=None, ds_motion=None, ds_ref=None,
                lat_text=None, lat_motion=None, dis_text=None,
-               dis_motion=None, dis_ref=None):
+               dis_motion=None, dis_ref=None, 
+               traj_text=None, traj_ref=None):
         total: float = 0.0
 
         if self.mode == "xyz" or self.force_loss_on_jfeats:
@@ -97,6 +103,10 @@ class TemosComputeLosses(Metric):
             if not self.ablation_no_motionencoder:
                 total += self._update_loss("recons_mw2mw", ds_motion, ds_ref)
             total += self._update_loss("recons_text2mw", ds_text, ds_ref)
+        
+        pdb.set_trace()
+        if self.traj:
+            total += self._update_loss("traj_error", traj_text, traj_ref)
         
         if self.vae or self.loss_on_both:
             if not self.ablation_no_kl_combine and not self.ablation_no_motionencoder:
@@ -129,6 +139,8 @@ class TemosComputeLosses(Metric):
         # Update the loss
         if loss=='cosine_similarity':
             val = self._losses_func[loss](outputs, inputs, torch.tensor([1]))
+        elif loss=='traj_error':
+            val = sum([self._losses_func[loss](x, y) for x,y in zip(outputs, inputs)])
         else:
             val = self._losses_func[loss](outputs, inputs)
         getattr(self, loss).__iadd__(val.detach())
