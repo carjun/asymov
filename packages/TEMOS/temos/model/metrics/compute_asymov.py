@@ -17,7 +17,7 @@ from temos.model.utils.tools import remove_padding
 import sys
 # pdb.set_trace()
 sys.path.append(str(Path(__file__).resolve().parents[5]))
-from viz_utils import mpjpe3d, change_fps, very_naive_reconstruction, naive_reconstruction, naive_no_rep_reconstruction
+from viz_utils import add_traj, mpjpe3d, change_fps, very_naive_reconstruction, naive_reconstruction, naive_no_rep_reconstruction
 from scipy.ndimage import uniform_filter1d, spline_filter1d
 
 def l2_norm(x1, x2, dim):
@@ -48,12 +48,13 @@ class Perplexity(MeanMetric):
         return super().update(ppl)
 
 class ReconsMetrics(Metric):
-    def __init__(self, recons_types: List[str], filters: List[str], gt_path: str,
+    def __init__(self, traj: bool, recons_types: List[str], filters: List[str], gt_path: str,
                  recons_fps: float, pred_fps: float, gt_fps: float, num_mw_clusters: int,
                 #  jointstype: str = "mmm",
                 #  force_in_meter: bool = True,
                  dist_sync_on_step=False, **kwargs):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
+        self.traj=traj
         self.recons_types = recons_types
         self.filters = filters
         self.recons_fps = recons_fps
@@ -141,7 +142,10 @@ class ReconsMetrics(Metric):
                 'all_pred':self.count, 'good_pred':self.count_good, 'good_pred_%': self.count_good/self.count
                 }
 
-    def update(self, seq_names: List[str], cluster_seqs: List[Tensor]):
+    def update(self, seq_names: List[str], cluster_seqs: List[Tensor], traj: List[Tensor] = None):
+        if self.traj:
+            assert traj is not None
+
         assert len(seq_names)==len(cluster_seqs)
         self.count_seq += len(seq_names)
         self.count += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
@@ -183,7 +187,6 @@ class ReconsMetrics(Metric):
             contiguous_cluster_seqs = [contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping['name']==name][['cluster', 'length']].reset_index(drop=True) for name in seq_names]
 
         # reconstruct from predicted clusters using different strategies
-        # pdb.set_trace()
         for recons_type in self.recons_types:
             if recons_type == 'naive_no_rep' or recons_type  == 'naive':
                 cluster2frame_mapping_path = Path(self.kwargs['cluster2frame_mapping_path'])
@@ -195,6 +198,9 @@ class ReconsMetrics(Metric):
             elif recons_type == 'very_naive':
                 cluster2keypoint_mapping_path = Path(self.kwargs['cluster2keypoint_mapping_path'])
                 recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path, verbose=False)
+            # traj inclusion
+            if self.traj:
+                recons = add_traj(recons, traj)
             recons = [change_fps(keypoint, self.pred_fps, self.recons_fps) for keypoint in recons]
 
             # apply different filters

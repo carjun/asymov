@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List, Union
 import torch
 from torch import Tensor
 from torch.nn import Module, Transformer as T
@@ -32,7 +32,8 @@ def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
 
 # function to generate output sequence using greedy algorithm
-def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int) -> Tensor:
+#TODO: traj inclusion
+def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, traj: bool = True) -> Tensor:
     # src: [Frames, 1]
     num_tokens = src.shape[0]
     src_mask = src.new_zeros((num_tokens, num_tokens), dtype=torch.bool) # [Frames, Frames]
@@ -40,10 +41,18 @@ def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, e
     
     # pdb.set_trace()
     tgt = src.new_full((1, 1), start_symbol, dtype=torch.long)
-    for i in tqdm(range(max_len-1), leave=False):
+    if traj:
+        tgt_traj = src.new_zeros((1, 3), dtype=torch.long)
+
+    for i in tqdm(range(max_len), leave=False):
         tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
                     .to(tgt.device, dtype=torch.bool))
-        out = model.decode(tgt, memory, tgt_mask) #[Frames, 1, *]
+        if traj:
+            out = model.decode(tgt, memory, tgt_mask, tgt_traj = tgt_traj) #[Frames, 1, *]
+            next_root = model.traj_generator(out[-1]) #[3]
+            tgt_traj = torch.cat([tgt_traj, next_root.unsqueeze(0)]) #[Frames+1, 3]
+        else:
+            out = model.decode(tgt, memory, tgt_mask) #[Frames, 1, *]
         logits = model.generator(out[-1]) #[1, Classes]
         _, next_word = torch.max(logits, dim=-1)
         next_word = next_word.item()
@@ -51,10 +60,14 @@ def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, e
         tgt = torch.cat([tgt, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=0)
         if next_word == end_symbol:
             break
+    
+    if traj:
+        return tgt, tgt_traj
     return tgt #[Frames, 1]
 
+#TODO: traj inclusion
 def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
-                  src_mask: Tensor = None, src_padding_mask: Tensor = None) -> Tensor:
+                  src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True) -> Union[List[Tensor], Tuple[List[Tensor]]]:
     # src: [Frames, Batches]
     if src_mask is None:
         num_tokens = src.shape[0]
@@ -66,8 +79,10 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
     batch_size = src.shape[1]
     tgt = src.new_full((1, batch_size),  start_symbol, dtype=torch.long) #[1, Batch size], 1 as for 1st frame
     tgt_len = tgt.new_full((batch_size,), max_len) #[Batch Size] #same dtype as tgt
+    if traj:
+        tgt_traj = src.new_zeros((1, batch_size, 3), dtype=torch.long) #[1, Batch size, 3], 1 as for 1st frame
 
-    for i in tqdm(range((max_len-1)), "autoregressive translation", None):
+    for i in tqdm(range((max_len)), "autoregressive translation", None):
         tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
                     .to(tgt.device, dtype=torch.bool))
         if i==0:
@@ -75,7 +90,12 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
         else:
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(1)], dim=1)
 
-        out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask) #[Frames, Batch Size, *]
+        if traj:
+            out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
+            next_root = model.traj_generator(out[-1]) #[Batch Size, 3]
+            tgt_traj = torch.cat([tgt_traj, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
+        else:
+            out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask) #[Frames, Batch Size, *]
         logits = model.generator(out[-1]) #[Batch Size, Classes]
         next_word = torch.argmax(logits, dim=-1) #[Batch Size]
         tgt = torch.cat([tgt, next_word.unsqueeze(0)]) #[Frames+1, Batch size]
@@ -87,4 +107,7 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
             break
     
     tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
+    if traj:
+        tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
+        return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
     return tgt_list #List[Tensor[Frames]]

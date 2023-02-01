@@ -1,5 +1,5 @@
 from fnmatch import translate
-from typing import List, Iterable, Optional, Dict, Union
+from typing import List, Tuple, Iterable, Optional, Dict, Union
 import math
 import pdb
 import sys
@@ -84,25 +84,41 @@ class AsymovMT(BaseModel):
         self.__post_init__()
         
     #TODO:beam search
-    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int) -> List[Tensor]: # no teacher forcing, takes batched input but gives unbatched output
+    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
         # src: [Frames, Batch size] 
-        tgt_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
-                                       src_mask, src_padding_mask)
-        return tgt_list #List[Tensor[Frames]]
+        if self.hparams.traj:
+            tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+                                                      src_mask, src_padding_mask)
+            assert len(tgt_list) == len(traj_list)
+            return tgt_list, traj_list #Tuple[List[Tensor[Frames]]]
+        else:
+            tgt_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+                                           src_mask, src_padding_mask, traj=False)
+            return tgt_list #List[Tensor[Frames]]
 
-    def translate(self, src_list: List[Tensor], max_len: Union[int, List[int]]) -> List[Tensor]: # no teacher forcing
+    def translate(self, src_list: List[Tensor], max_len: Union[int, List[int]]) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing
         if type(max_len)==int:
             max_len_list = [max_len]*len(src_list)
         else:
             assert len(src_list)==len(max_len)
             max_len_list = max_len
         
+        if self.hparams.traj:
+            traj_list=[]
         tgt_list = []
         # pdb.set_trace()
         for src, max_len in tqdm(zip(src_list, max_len_list), "translating", len(src_list), None, position=0):
             src = src.view(-1,1) #[Frames, 1]
-            tgt_tokens = greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX).flatten() #[Frames]
+            if self.hparams.traj:
+                tgt_tokens, traj = [i.flatten() for i in greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX)] #[[Frames], [Frames]]
+                traj_list.append(traj)
+            else:
+                tgt_tokens = greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, traj=False).flatten() #[Frames]
             tgt_list.append(tgt_tokens) 
+        
+        if self.hparams.traj:
+            assert len(tgt_list) == len(traj_list)
+            return tgt_list, traj_list # Tuple[List[Tensor]]
         return tgt_list # List[Tensor[Frames]]
     
     def allsplit_step(self, split: str, batch: Dict, batch_idx):
@@ -160,17 +176,28 @@ class AsymovMT(BaseModel):
                 # max_len = [i+int(self.fps*5) for i in batch["length"]]
                 # pdb.set_trace()
                 
-                pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
+                if self.hparams.traj:
+                    pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
+                    pred_traj = [i.detach() for i in pred_traj]
+                    # Remove traj corresponding to terminal tokens BOS/EOS
+                    pred_traj = [traj[1:-1] if mw[-1]==self.EOS_IDX else traj[1:] for traj, mw in zip(pred_traj, pred_mw_tokens)]
+                else:
+                    pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
+                pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
+                # Remove terminal tokens BOS/EOS, shift for special symbols
+                pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]
+                
                 # pred_mw_tokens2 = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames)
                 # for mw_tokens, mw_tokens2 in zip(pred_mw_tokens, pred_mw_tokens2):
                 #     assert torch.equal(mw_tokens, mw_tokens2)
                 # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
-                pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
+                
                 self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
                 
-                # Remove terminal tokens BOS/EOS, shift for special symbols
-                pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]
-                self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters)
+                if self.hparams.traj:
+                    self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters, pred_traj)
+                else:
+                    self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters)
 
         return loss
 

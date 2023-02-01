@@ -28,6 +28,9 @@ from mpl_toolkits.mplot3d import Axes3D
 from pathlib import Path
 import utils
 
+from typing import List, Union
+from torch import Tensor
+
 #TODO: change the import path to inside acton package
 # sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
 # from packages.acton.src.data.dataset import loader,utils
@@ -41,6 +44,23 @@ import utils
 
 # sys.path.append('packages/TEMOS')
 # from  packages.TEMOS import sample_asymov_for_viz
+
+#traj inclusion-------------------------------------------------------------------
+def add_traj(in_place_keypoints: List[np.ndarray], root_traj: List[Union[Tensor,np.ndarray]], residual: bool = True) -> List[Union[Tensor,np.ndarray]]:
+    '''
+    Args:
+        in_place_keypoints: [Frames, 21, 3]
+        root_traj: [Frames, 3]
+        residual: True if root_traj is residual and requires cumulative summation, False otherwise. Defaults to True.
+    '''
+    if residual:
+        root_traj = [residual_traj.cumsum(0) for residual_traj in root_traj]
+
+    # pdb.set_trace()
+    assert type(in_place_keypoints) is not Tensor
+    if type(root_traj[0]) is Tensor:
+        root_traj = [root.numpy()  for root in root_traj]
+    return [keypoint + np.expand_dims(root, 1) for keypoint, root in zip(in_place_keypoints, root_traj)]
 
 #reconstruction methods-------------------------------------------------------------------
 #TODO: naive_no_rep_reconstruction implementation
