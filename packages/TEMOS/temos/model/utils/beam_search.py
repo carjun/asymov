@@ -112,7 +112,7 @@ def beam_search_nat(model, memory, beam_size, src_mask, max_len=256, start=0, en
     return best_path[1:end_index] if end_index.numel() else best_path[1:]
 
 
-def beam_search_auto(
+def beam_search_auto(                   #just use diverse_beam_search_auto for now [finalized, for now]
     model,
     src,
     tgt,
@@ -219,25 +219,22 @@ def diverse_beam_search_auto(                       #pre-alpha
         logits = model.generator(out[-1])
 
         next_probabilities = logits#[-1, :]
-        vocabulary_size = next_probabilities.shape[-1]
+        # vocabulary_size = next_probabilities.shape[-1]
         probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
         tgt = tgt.repeat((beam_width, 1))       #repeat BOS  for beam width
         tgt_padding_mask = tgt_padding_mask.unsqueeze(0).repeat((beam_width, 1, 1))
-        # next_chars = next_chars.reshape(-1, 1)
-        # tgt = torch.cat((tgt, next_chars), axis=-1)
-        tgt_len = tgt.new_full((beam_width, batch_size), max_len)#.repeat((beam_width, 1)) #[beam_width, Batch Size] #same dtype as tgt
-        # pdb.set_trace()
+
+        tgt_len = tgt.new_full((beam_width, batch_size), max_len)                              #[beam_width, Batch Size] #same dtype as tgt
+
         tgt = torch.cat((tgt.unsqueeze(-2), next_chars.transpose(1,0).unsqueeze(-2)), -2)      #concat next tokens for each beam (vertically)
         
-        # pdb.set_trace()               ##
+        diverse_tokens = torch.tensor([])               # to store decoded tokens in diverse fashion
+        seq_prob = torch.tensor([])                     # and corresponding probabilities in the last decoding step
         
-        predictions_iterator = range(1, max_len - 1)     #1 (0th) prediction already done
+        predictions_iterator = range(1, max_len - 1)     #1 (0th) prediction already done; max_len - 1 bec <start_id> -> 1
         for i in predictions_iterator:
             tgt_mask = (T.generate_square_subsequent_mask(tgt.size(1))      #size(1) for num of decoded
                     .to(tgt.device, dtype=torch.bool))                      #tokens. 0th is beam size
-
-            next_probabilities = torch.tensor([]) # will be containing probabs.(logits) for [batch,1004*beam_width]
-
 
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(-1)], dim=-1)
 
@@ -247,22 +244,27 @@ def diverse_beam_search_auto(                       #pre-alpha
 
                 if b == 0:
                   probabilities, idx = logits_temp.log_softmax(-1).topk(k=1, axis=-1)    ##
-                  unique_tokens = idx           # needs to be debugged
-                  torch.cat((tgt[b], unique_tokens.unsqueeze(-2)), -2)
+                  diverse_tokens = idx.squeeze().unsqueeze(0)
+                  if i == max_len - 1:                                                   #last decoded step contains final multiplied probabilities of all tokens
+                    seq_prob = probabilities.squeeze().unsqueeze(0)
 
                 else:
                   probabilities, idx = logits_temp.log_softmax(-1).topk(k=b+1, axis=-1)
 
-                  unique_mask = torch.stack([(tgt[:, -1, :] == idx.T[i]).any(dim=1) for i in range(idx.T.shape[0])], dim=1).long()
-                  first_unique = unique_mask.argmin(1)
-                  complete_index = torch.stack([torch.arange(unique_mask.shape[0]), first_unique], dim=1)   #containes coordinates -> diverse tokens, dim=0 -> batch_size
+                  unique_mask = torch.stack([(diverse_tokens == idx.T[i]).any(dim=0) for i in range(idx.T.shape[0])], dim=1).long()
+                  first_unique = unique_mask.argmin(1)                                #in all elements of batch
+                  # complete_index = torch.stack([torch.arange(unique_mask.shape[0]), first_unique], dim=1)   #containes coordinates -> diverse tokens, dim=0 -> batch_size
 
-                  unique_tokens = idx[complete_index]       # needs to be debugged
+                  unique_tokens = idx[torch.arange(first_unique.shape[0]), first_unique]      #needs to be checked
+                  current_token_prob = probabilities[torch.arange(first_unique.shape[0]), first_unique]
 
-                  torch.cat((tgt[b], unique_tokens.unsqueeze(-2)), -2)
-
-                  torch.cat((tgt[b], unique_tokens.unsqueeze(-2)), -2)
+                  diverse_tokens = torch.cat((diverse_tokens, unique_tokens.unsqueeze(0)))
+                  if i == max_len - 1:
+                    seq_prob = torch.cat((seq_prob, current_token_prob.unsqueeze(0)))
 
             tgt_len = torch.where(torch.logical_and(next_chars==end_symbol, tgt_len==max_len), i+2, tgt_len)
-
-        return tgt
+            tgt = torch.cat((tgt, diverse_tokens.unsqueeze(-2)), -2)
+        
+        top_b = torch.argmax(seq_prob[1:], axis=0)        #like top-G, but gives top beams for batch elements correspondingly, acc. to prob
+        # pdb.set_trace()
+        return tgt[top_b, :, torch.arange(tgt.size(-1))]
