@@ -28,6 +28,9 @@ from mpl_toolkits.mplot3d import Axes3D
 from pathlib import Path
 import utils
 
+from typing import List, Union
+from torch import Tensor
+
 #TODO: change the import path to inside acton package
 # sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
 # from packages.acton.src.data.dataset import loader,utils
@@ -41,6 +44,23 @@ import utils
 
 # sys.path.append('packages/TEMOS')
 # from  packages.TEMOS import sample_asymov_for_viz
+
+#traj inclusion-------------------------------------------------------------------
+def add_traj(in_place_keypoints: List[np.ndarray], root_traj: List[Union[Tensor,np.ndarray]], residual: bool = True) -> List[Union[Tensor,np.ndarray]]:
+    '''
+    Args:
+        in_place_keypoints: [Frames, 21, 3]
+        root_traj: [Frames, 3]
+        residual: True if root_traj is residual and requires cumulative summation, False otherwise. Defaults to True.
+    '''
+    if residual:
+        root_traj = [residual_traj.cumsum(0) for residual_traj in root_traj]
+
+    # pdb.set_trace()
+    assert type(in_place_keypoints) is not Tensor
+    if type(root_traj[0]) is Tensor:
+        root_traj = [root.numpy()  for root in root_traj]
+    return [keypoint + np.expand_dims(root, 1) for keypoint, root in zip(in_place_keypoints, root_traj)]
 
 #reconstruction methods-------------------------------------------------------------------
 #TODO: naive_no_rep_reconstruction implementation
@@ -655,7 +675,7 @@ def calc_angle_from_y(sk):
     return y_angle
 
 
-def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcolor='#0000ff', action='', debug=False):
+def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcolor='#0000ff', action='', inplace=False, debug=False):
     ''' Visualize skeletons for given sequence and store as images.
 
     Args:
@@ -671,7 +691,8 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
         folder_p (str): Path to root folder containing visualized frames.
             Frames are dumped to the path: folder_p/frames/*.jpg
         radius (float): Space around the subject?
-
+        inplace (bool): whether to remove translation to visualize in-place 
+            motion where root is always at origin
     Returns:
         Stores skeleton sequence as jpg frames.
     '''
@@ -689,10 +710,9 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
         joint_names = get_kitml_joint_names()
         kin_chain = get_kitml_skeleton()
         # seq[..., 1] = -seq[..., 1]
-        seq = seq[..., [2,1,0]]
-        seq = seq[..., [0, 2, 1]]
+        seq = seq[..., [2,0,1]]
         az = 60
-        radius = 1.2
+        # radius = 1.2
     elif sk_type=='coco17':
         joint_names = get_coco17_joint_names()
         kin_chain = get_coco17_skeleton()
@@ -710,14 +730,18 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
         xroot, yroot, zroot = 0.5*(seq[0,11] + seq[0,12])
         seq=seq-np.array([[[xroot, yroot, zroot]]])
         seq=seq/np.max(np.abs(seq))
-    elif sk_type == 'kitml_temos':
+    elif 'kit' in sk_type:
         # !inital translation. Subtract all frames by frame 0's pelvis.
-        seq -= seq[0, 11]
+        seq -= seq[0, 0]
         # !global translation. Subtract all frames by corresponding pelvis.
-        seq -= seq[:,11:12,:]
+        inplace_seq = seq - seq[:,0:1,:]
+
         # x, y, z --> [-1, 1]
         # seq /= np.max(np.abs(seq), axis=(0,1))  # Normalize each dim. separately.
-        seq /= np.max(np.abs(seq))  # Normalize all dim. uniformly.
+        seq /= np.max(np.abs(inplace_seq))  # Normalize all dim. uniformly. Not considering trajectory while normalizing
+
+        if inplace:
+            seq = inplace_seq
     else:
         xroot, yroot, zroot = seq[0, 0, 0], seq[0, 0, 1], seq[0, 0, 2]
 
@@ -739,13 +763,11 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
               plt.figure(figsize=(5, 5))
         ax = fig.add_subplot(111, projection='3d')
 
-        if sk_type == 'kitml_temos':
-            xroot, yroot, zroot = seq[t,11]
-        elif 'kit' in sk_type:
-            xroot, yroot, zroot = 0.5*(seq[t,11] + seq[t,12])
-        else:
-            pass  # Do not update root.  # TODO: Verify this.
-
+        # No moving camera, no root update required as `inplace` argument takes care of it if needed
+        # if 'kit' in sk_type:
+        #     xroot, yroot, zroot = seq[t,0]
+        # else:
+        #     pass  # Do not update root.  # TODO: Verify this.
         # seq[t] = seq[t] - [xroot, yroot, zroot]
 
         # More figure settings
@@ -753,7 +775,6 @@ def viz_skeleton(seq, folder_p, sk_type='smpl', radius=1, lcolor='#ff0000', rcol
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        # xroot, yroot, zroot = seq[t, 0, 0], seq[t, 0, 1], seq[t, 0, 2]
 
         # pdb.set_trace()
         ax.set_xlim3d(-radius + xroot, radius + xroot)
@@ -822,10 +843,10 @@ def write_vid_from_imgs(folder_p, fps):
         print('*******ValueError(Error {0} executing command: {1}*********'.format(retcode, ' '.join(cmd)))
     shutil.rmtree(osp.join(folder_p, 'frames'))
 
-def joint2vid(name_keypoint, sk_type, frames_dir, fps): #combine viz_skeleton
+def joint2vid(name_keypoint, sk_type, frames_dir, fps, radius=1.2): #combine viz_skeleton
     name, keypoint = name_keypoint
     folder_p = ospj(frames_dir, name)
-    viz_skeleton(keypoint, folder_p, sk_type, 1.2)
+    viz_skeleton(keypoint, folder_p, sk_type, radius)
     write_vid_from_imgs(folder_p, fps)
     return None
 

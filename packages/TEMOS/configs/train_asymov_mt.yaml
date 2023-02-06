@@ -4,6 +4,7 @@ hydra:
 
 # Global configurations shared between different modules
 experiment: ???
+traj: true
 
 seed: 1234
 
