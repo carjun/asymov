@@ -89,7 +89,7 @@ class AsymovMT(BaseModel):
     def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
         # src: [Frames, Batch size] 
         if self.hparams.traj:
-            tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+            tgt_list, traj_list = batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
                                                       src_mask, src_padding_mask)
             assert len(tgt_list) == len(traj_list)
             return tgt_list, traj_list #Tuple[List[Tensor[Frames]]]

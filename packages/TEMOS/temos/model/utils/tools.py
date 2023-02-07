@@ -111,7 +111,7 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
 
 
 def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
-                        src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True) -> Tensor:
+                        src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True, beam_width: int = 5) -> Tensor:
     # src: [Frames, Batches]
     if src_mask is None:
         num_tokens = src.shape[0]
@@ -131,15 +131,23 @@ def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: in
     #         tgt_padding_mask = torch.full((batch_size, 1), False)  # [Batch Size, 1], 1 as for 1st frame
     #     else:
     #         tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len <= i).unsqueeze(1)], dim=1)
-
-    tgt = diverse_beam_search_auto(model, src, tgt, src_mask,src_padding_mask, 
-                                    max_len = max_len, batch_size=batch_size,
-                                    beam_width=5)
+    if traj:
+        tgt_list, tgt_traj_list = diverse_beam_search_auto(model, src, tgt, src_mask,src_padding_mask, end_symbol,
+                                        traj, max_len, batch_size,
+                                        beam_width)
+        return tgt_list, tgt_traj_list  # List[Tensor[Frames]]
+        
+    else:
+        tgt_list = diverse_beam_search_auto(model, src, tgt, src_mask,src_padding_mask, end_symbol,
+                                        traj, max_len, batch_size,
+                                        beam_width)
+        return tgt_list  # List[Tensor[Frames]]
+        
         # if (i + 2) < max_len:
         #     break
 
     # tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
-    return tgt_list  # List[Tensor[Frames]]
+    # return tgt_list  # List[Tensor[Frames]]
 
 # TODO: Unified search fucntion
 # def batch_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, beam: bool, beam_width: int,

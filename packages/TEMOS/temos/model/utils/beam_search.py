@@ -209,8 +209,6 @@ def diverse_beam_search_auto(                       #alpha
     tgt,
     src_mask,
     src_padding_mask,
-    tgt_mask,
-    tgt_padding_mask,
     end_symbol: int,
     traj: bool = True,
     max_len = 220,
@@ -224,18 +222,17 @@ def diverse_beam_search_auto(                       #alpha
         src_padding_mask = src_padding_mask.repeat((beam_width,1))
         # src_padding_mask = src_padding_mask.repeat_interleave(beam_width, dim=0)
         
-        tgt = tgt.repeat((1,beam_width))
+        tgt = tgt.repeat((1, beam_width))
         tgt_padding_mask = torch.full((batch_size*beam_width, 1), False)  # [Batch Size, 1], 1 as for 1st frame
         # tgt_padding_mask = tgt_padding_mask.repeat((beam_width, 1))
-        # tgt_len = tgt.new_full((batch_size*beam_width, ), max_len)
-        tgt_len = tgt_len.repeat(beam_width, )
+        tgt_len = tgt.new_full((batch_size*beam_width, ), max_len)
+        # tgt_len = tgt_len.repeat(beam_width, )
 
         if traj:
             tgt_traj = src.new_zeros((1, batch_size*beam_width, 3), dtype=torch.long) #[1, Batch size, 3], 1 as for 1st frame
 
         memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
 
-        # predictions_iterator = range(1, max_len-1)     #1 (0th) prediction already done
         for i in tqdm(range(1,max_len-1), "diverse autoregressive translation", None):
 
             tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
@@ -261,37 +258,36 @@ def diverse_beam_search_auto(                       #alpha
                 unique_token_idx = torch.argmin(mask_num, axis=1)
                 next_token_mask[torch.arange(i, i+batch_size), unique_token_idx] = True
 
-            next_tokens = next_chars[next_token_mask].reshape(-1,batch_size).T.reshape(-1)
+            next_tokens = next_chars[next_token_mask]#.reshape(-1,batch_size).T.reshape(-1)
             next_tokens_prob = probabilities[next_token_mask]
-            # pdb.set_trace()             ##
 
             tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))
 
-            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i+2, tgt_len)     #this requires debugging
+            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i+2, tgt_len)
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(-1)], dim=-1)
         
         
-        last_probs = probabilities[next_token_mask].reshape(-1,batch_size)
-        top_b = torch.argmax(last_probs[1:], axis=0)      #like top-G, but gives top beams for batch elements correspondingly
-                                                          #removed first beam as its greedy
-        last_prob_mask = torch.zeros(last_probs[1:].shape, dtype=torch.bool)
-        last_prob_mask[top_b, torch.arange(batch_size)] = True
+        # last_probs = probabilities[next_token_mask].reshape(-1,batch_size)
+        # top_b = torch.argmax(last_probs[1:], axis=0)      #like top-G, but gives top beams for batch elements correspondingly
+        #                                                   #removed first beam as its greedy
+        # last_prob_mask = torch.zeros(last_probs[1:].shape, dtype=torch.bool)
+        # last_prob_mask[top_b, torch.arange(batch_size)] = True
 
-        final_unordered = tgt[:, batch_size:][:, last_prob_mask.reshape(-1)]              #beams with highest prob, for all batch elements
-        reorder = (last_prob_mask.reshape(-1).long().nonzero()%batch_size).squeeze()      #reorder batch elements
+        # final_unordered = tgt[:, batch_size:][:, last_prob_mask.reshape(-1)]              #beams with highest prob, for all batch elements
+        # reorder = (last_prob_mask.reshape(-1).long().nonzero()%batch_size).squeeze()      #reorder batch elements
         
-        tgt_len = tgt_len[batch_size:][last_prob_mask.reshape(-1)][reorder]
-        tgt_list=  remove_padding(final_unordered.T[reorder], tgt_len)
-        # return tgt[top_b, :, torch.arange(tgt.size(-1))]
+        # tgt_len = tgt_len[batch_size:][last_prob_mask.reshape(-1)][reorder]
+        # tgt_list=  remove_padding(final_unordered.T[reorder], tgt_len)
+
+        tgt_list =  remove_padding(tgt.permute(1, 0), tgt_len)
 
         if traj:
-            final_unordered_traj = tgt_traj[:, batch_size:][:, last_prob_mask.reshape(-1)]
-            
-            #### Check permute here ####
-            tgt_traj_list =  remove_padding(final_unordered_traj.permute(1, 0, 2)[reorder], tgt_len)
+            # final_unordered_traj = tgt_traj[:, batch_size:][:, last_prob_mask.reshape(-1)]
+            # tgt_traj_list =  remove_padding(final_unordered_traj.permute(1, 0, 2)[reorder], tgt_len)
+            tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
             return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
 
-        return final_unordered.T[reorder]
+        return tgt_list
 
 
 
