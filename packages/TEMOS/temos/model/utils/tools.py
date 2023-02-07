@@ -4,7 +4,7 @@ from torch import Tensor
 from torch.nn import Module, Transformer as T
 from tqdm import tqdm
 import pdb
-from .beam_search import beam_search_auto
+from .beam_search import beam_search_auto, diverse_beam_search_auto
 
 def detach_to_numpy(tensor):
     return tensor.detach().cpu().numpy()
@@ -111,7 +111,7 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
 
 
 def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
-                        src_mask: Tensor = None, src_padding_mask: Tensor = None) -> Tensor:
+                        src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True) -> Tensor:
     # src: [Frames, Batches]
     if src_mask is None:
         num_tokens = src.shape[0]
@@ -124,20 +124,21 @@ def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: in
     tgt = torch.ones(1, batch_size).fill_(start_symbol).type(torch.long)  # [1, Batch size], 1 as for 1st frame
     tgt_len = torch.full((batch_size,), max_len)  # [Batch Size]
 
-    for i in tqdm(range((max_len - 1)), "autoregressive translation", None):
-        tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
-                    .type(torch.bool))
-        if i == 0:
-            tgt_padding_mask = torch.full((batch_size, 1), False)  # [Batch Size, 1], 1 as for 1st frame
-        else:
-            tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len <= i).unsqueeze(1)], dim=1)
+    # for i in tqdm(range((max_len - 1)), "autoregressive translation", None):
+    #     tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
+    #                 .type(torch.bool))
+    #     if i == 0:
+    #         tgt_padding_mask = torch.full((batch_size, 1), False)  # [Batch Size, 1], 1 as for 1st frame
+    #     else:
+    #         tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len <= i).unsqueeze(1)], dim=1)
 
-        tgt = beam_search_auto(model, src, tgt, src_mask,src_padding_mask, tgt_mask,
-                                    tgt_padding_mask, max_len = max_len)
-        if (i + 2) < max_len:
-            break
+    tgt = diverse_beam_search_auto(model, src, tgt, src_mask,src_padding_mask, 
+                                    max_len = max_len, batch_size=batch_size,
+                                    beam_width=5)
+        # if (i + 2) < max_len:
+        #     break
 
-    tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
+    # tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
     return tgt_list  # List[Tensor[Frames]]
 
 # TODO: Unified search fucntion
