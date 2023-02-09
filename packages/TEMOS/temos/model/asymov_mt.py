@@ -86,16 +86,24 @@ class AsymovMT(BaseModel):
         self.__post_init__()
         
     #TODO:beam search
-    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
+    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int, decoding_scheme:str = "diverse", beam_width: int = 5) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
         # src: [Frames, Batch size] 
         if self.hparams.traj:
-            tgt_list, traj_list = batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+            if decoding_scheme == "greedy":
+                tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
                                                       src_mask, src_padding_mask)
+            else:
+                tgt_list, traj_list = batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, decoding_scheme,
+                                                        src_mask, src_padding_mask, beam_width=beam_width)
             assert len(tgt_list) == len(traj_list)
             return tgt_list, traj_list #Tuple[List[Tensor[Frames]]]
         else:
-            tgt_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
-                                           src_mask, src_padding_mask, traj=False)
+            if decoding_scheme == "greedy":
+                tgt_list= batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+                                                        src_mask, src_padding_mask, traj=False)
+            else:
+                tgt_list= batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, decoding_scheme,
+                                                        src_mask, src_padding_mask, traj=False, beam_width=beam_width)
             return tgt_list #List[Tensor[Frames]]
 
     def translate(self, src_list: List[Tensor], max_len: Union[int, List[int]]) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing
@@ -179,12 +187,12 @@ class AsymovMT(BaseModel):
                 # pdb.set_trace()
                 
                 if self.hparams.traj:
-                    pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
-                    pred_traj = [i.detach() for i in pred_traj]
-                    # Remove traj corresponding to terminal tokens BOS/EOS
+                    pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, decoding_scheme=None, beam_width=None)       #passed none so it'll pick the
+                    pred_traj = [i.detach() for i in pred_traj]                                                                                                     #default values "diverse" and 5
+                    # Remove traj corresponding to terminal tokens BOS/EOS                  
                     pred_traj = [traj[1:-1] if mw[-1]==self.EOS_IDX else traj[1:] for traj, mw in zip(pred_traj, pred_mw_tokens)]
                 else:
-                    pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
+                    pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, decoding_scheme=None, beam_width=None)
                 pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
                 # Remove terminal tokens BOS/EOS, shift for special symbols
                 pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]

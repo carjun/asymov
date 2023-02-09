@@ -110,35 +110,31 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
     return tgt_list #List[Tensor[Frames]]
 
 
-def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
+def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, decoding_scheme: str ="diverse",
                         src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True, beam_width: int = 5) -> Tensor:
+    
+    #It'll use diverse by default
+    decode_dict = {
+        "diverse": diverse_beam_search_auto, 
+        "beam": beam_search_auto,
+    }
+
     # src: [Frames, Batches]
     if src_mask is None:
         num_tokens = src.shape[0]
         src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)  # [Frames, Frames]
 
-    # memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
-
-    # pdb.set_trace()
     batch_size = src.shape[1]
     tgt = torch.ones(1, batch_size).fill_(start_symbol).type(torch.long)  # [1, Batch size], 1 as for 1st frame
-    tgt_len = torch.full((batch_size,), max_len)  # [Batch Size]
 
-    # for i in tqdm(range((max_len - 1)), "autoregressive translation", None):
-    #     tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
-    #                 .type(torch.bool))
-    #     if i == 0:
-    #         tgt_padding_mask = torch.full((batch_size, 1), False)  # [Batch Size, 1], 1 as for 1st frame
-    #     else:
-    #         tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len <= i).unsqueeze(1)], dim=1)
     if traj:
-        tgt_list, tgt_traj_list = diverse_beam_search_auto(model, src, tgt, src_mask,src_padding_mask, end_symbol,
+        tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask,src_padding_mask, end_symbol,
                                         traj, max_len, batch_size,
                                         beam_width)
-        return tgt_list, tgt_traj_list  # List[Tensor[Frames]]
-        
+        return tgt_list, tgt_traj_list  # List[Tensor[Frames]]; List_len-> batch*beam
+                                        #b:batch_element,B:beam; b1B1,b2B1,b1B2,b2B2.... 
     else:
-        tgt_list = diverse_beam_search_auto(model, src, tgt, src_mask,src_padding_mask, end_symbol,
+        tgt_list = decode_dict[decoding_scheme](model, src, tgt, src_mask,src_padding_mask, end_symbol,
                                         traj, max_len, batch_size,
                                         beam_width)
         return tgt_list  # List[Tensor[Frames]]
