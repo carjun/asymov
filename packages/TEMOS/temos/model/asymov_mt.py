@@ -30,6 +30,8 @@ class AsymovMT(BaseModel):
                  max_frames: int,
                  metrics_start_epoch: int,
                  metrics_every_n_epoch: int,
+                 decoding_scheme: str,
+                 beam_width: int,
                  best_ckpt_monitors: List,
                  **kwargs):
         super().__init__()
@@ -82,9 +84,12 @@ class AsymovMT(BaseModel):
                              }
 
         self.metrics={key: getattr(self, f"{key}_metrics") for key in ["train", "val"]}
+
+        self.decoding_scheme = decoding_scheme
+        self.beam_width = beam_width 
         
         self.__post_init__()
-        
+
     #TODO:beam search
     def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int, decoding_scheme:str = "diverse", beam_width: int = 5) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
         # src: [Frames, Batch size] 
@@ -187,12 +192,12 @@ class AsymovMT(BaseModel):
                 # pdb.set_trace()
                 
                 if self.hparams.traj:
-                    pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, decoding_scheme=None, beam_width=None)       #passed none so it'll pick the
+                    pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)       #passed none so it'll pick the
                     pred_traj = [i.detach() for i in pred_traj]                                                                                                     #default values "diverse" and 5
                     # Remove traj corresponding to terminal tokens BOS/EOS                  
                     pred_traj = [traj[1:-1] if mw[-1]==self.EOS_IDX else traj[1:] for traj, mw in zip(pred_traj, pred_mw_tokens)]
                 else:
-                    pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, decoding_scheme=None, beam_width=None)
+                    pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)
                 pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
                 # Remove terminal tokens BOS/EOS, shift for special symbols
                 pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]

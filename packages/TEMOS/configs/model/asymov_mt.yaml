@@ -21,6 +21,9 @@ max_frames: ??? # Length of largest mw sequence in train data including EOS/BOS 
 metrics_start_epoch: ${viz_metrics_start_epoch} # epoch numbering starts from 0, epoch >= metrics_start_epoch
 metrics_every_n_epoch: ${viz_metrics_every_n_epoch} # (epoch+1)%n metrics_every_n_epoch
 
+decoding_scheme: "diverse"
+beam_width: 5
+
 defaults:
   - transformer: vanilla
   - losses: asymov_mt_temos #since cross entropy loss already implemented there, may need a different class if MT specific losses are added
