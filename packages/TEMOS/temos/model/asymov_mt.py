@@ -92,7 +92,7 @@ class AsymovMT(BaseModel):
 
     #TODO:beam search
     def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int, decoding_scheme:str = "diverse", beam_width: int = 5) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
-        # src: [Frames, Batch size] 
+        # src: [Frames, Batch size]
         if self.hparams.traj:
             if decoding_scheme == "greedy":
                 tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,

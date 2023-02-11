@@ -21,7 +21,8 @@ max_frames: ??? # Length of largest mw sequence in train data including EOS/BOS 
 metrics_start_epoch: ${viz_metrics_start_epoch} # epoch numbering starts from 0, epoch >= metrics_start_epoch
 metrics_every_n_epoch: ${viz_metrics_every_n_epoch} # (epoch+1)%n metrics_every_n_epoch
 
-decoding_scheme: "diverse"
+
+decoding_scheme: "diverse"    # "diverse", "beam", "greedy"
 beam_width: 5
 
 defaults:
