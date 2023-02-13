@@ -117,25 +117,24 @@ class ReconsMetrics(Metric):
     def compute(self):
         count = self.count_good
         APE_metrics = {metric: getattr(self, metric) / count for metric in self.APE_metrics}
-
-        # Compute average of APEs
-        APE_metrics["APE_mean_pose"] = self.APE_pose.mean() / count
-        APE_metrics["APE_mean_joints"] = self.APE_joints.mean() / count
-
-        # Remove arrays
-        APE_metrics.pop("APE_pose")
-        APE_metrics.pop("APE_joints")
-
+        
         count_seq = self.count_good_seq
         AVE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.AVE_metrics}
 
-        # Compute average of AVEs
-        AVE_metrics["AVE_mean_pose"] = self.AVE_pose.mean() / count_seq
-        AVE_metrics["AVE_mean_joints"] = self.AVE_joints.mean() / count_seq
+        for recons_type in self.recons_types:
+            for filter in self.filters:
+                # Compute average of APEs
+                APE_metrics["APE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"APE_pose_{recons_type}_{filter}").mean() / count
+                APE_metrics["APE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"APE_joints_{recons_type}_{filter}").mean() / count
+                # Compute average of AVEs
+                AVE_metrics["AVE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"AVE_pose_{recons_type}_{filter}").mean() / count_seq
+                AVE_metrics["AVE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"AVE_joints_{recons_type}_{filter}").mean() / count_seq
 
-        # Remove arrays
-        AVE_metrics.pop("AVE_pose")
-        AVE_metrics.pop("AVE_joints")
+                # Remove arrays
+                APE_metrics.pop("APE_pose_{recons_type}_{filter}")
+                APE_metrics.pop("APE_joints_{recons_type}_{filter}")
+                AVE_metrics.pop("AVE_pose_{recons_type}_{filter}")
+                AVE_metrics.pop("AVE_joints_{recons_type}_{filter}")
 
         # Compute average of MPJPEs
         MPJPE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.MPJPE_metrics}
