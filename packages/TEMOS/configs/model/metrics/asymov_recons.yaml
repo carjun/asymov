@@ -5,7 +5,7 @@ traj: ${model.traj}
 recons_types: ['very_naive', 'naive', 'naive_no_rep']
 filters: ['none', 'uniform', 'spline']
 
-gt_path: ${path.datasets}/xyz_data.pkl
+gt_path: ${path.datasets}/${cluster_data}_inplace_data.pkl
 
 recons_fps: 25.0 #desired fps for mpjpe calculation and visualization
 pred_fps: 12.5 #same as fps of predictions

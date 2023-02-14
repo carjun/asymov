@@ -17,6 +17,7 @@ wandb_api_keys:
   shared: 2ec984489f9445078fa14448bc7da1f0c3604db6
 user: 
 
+cluster_data: fke
 num_mw_clusters: ???
 viz_metrics_start_epoch: 0
 viz_metrics_every_n_epoch: 5
