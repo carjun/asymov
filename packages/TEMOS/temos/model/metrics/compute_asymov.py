@@ -50,6 +50,7 @@ class Perplexity(MeanMetric):
 class ReconsMetrics(Metric):
     def __init__(self, traj: bool, recons_types: List[str], filters: List[str], gt_path: str,
                  recons_fps: float, pred_fps: float, gt_fps: float, num_mw_clusters: int,
+                 decoding_scheme: str, beam_width: int,
                 #  jointstype: str = "mmm",
                 #  force_in_meter: bool = True,
                  dist_sync_on_step=False, **kwargs):
@@ -61,6 +62,10 @@ class ReconsMetrics(Metric):
         self.gt_fps = gt_fps
         self.pred_fps = pred_fps
         self.num_clusters = num_mw_clusters
+        self.decoding_scheme = decoding_scheme
+        if decoding_scheme == 'greedy':
+            beam_width = 1
+        self.beam_width = beam_width
         self.kwargs = kwargs
 
         gt_path = Path(gt_path)
@@ -83,28 +88,26 @@ class ReconsMetrics(Metric):
         self.add_state("count_good", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("count_good_seq", default=torch.tensor(0), dist_reduce_fx="sum")
 
-        # APE
-        self.add_state("APE_root", default=torch.tensor(0.), dist_reduce_fx="sum")
-        self.add_state("APE_traj", default=torch.tensor(0.), dist_reduce_fx="sum")
-        # self.add_state("APE_pose", default=torch.zeros(20), dist_reduce_fx="sum")
-        self.add_state("APE_joints", default=torch.zeros(21), dist_reduce_fx="sum")
-        self.APE_metrics = ["APE_root", "APE_traj",
-                            # "APE_pose",
-                            "APE_joints"]
-
-        # AVE
-        self.add_state("AVE_root", default=torch.tensor(0.), dist_reduce_fx="sum")
-        self.add_state("AVE_traj", default=torch.tensor(0.), dist_reduce_fx="sum")
-        # self.add_state("AVE_pose", default=torch.zeros(20), dist_reduce_fx="sum")
-        self.add_state("AVE_joints", default=torch.zeros(21), dist_reduce_fx="sum")
-        self.AVE_metrics = ["AVE_root", "AVE_traj",
-                            # "AVE_pose",
-                            "AVE_joints"]
-
-        # MPJPE
         self.MPJPE_metrics=[]
+        self.APE_metrics=[]
+        self.AVE_metrics=[]
         for recons_type in self.recons_types:
             for filter in self.filters:
+                # APE
+                self.add_state("APE_root_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.add_state("APE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.add_state("APE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
+                self.add_state("APE_joints_{recons_type}_{filter}", default=torch.zeros(21), dist_reduce_fx="sum")
+                self.APE_metrics.extend([f"APE_{i}_{recons_type}_{filter}" for i in ["root", "traj", "pose", "joints"]])
+
+                # AVE
+                self.add_state("AVE_root_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.add_state("AVE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.add_state("AVE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
+                self.add_state("AVE_joints_{recons_type}_{filter}", default=torch.zeros(21), dist_reduce_fx="sum")
+                self.AVE_metrics.extend([f"AVE_{i}_{recons_type}_{filter}" for i in ["root", "traj", "pose", "joints"]])
+                
+                # MPJPE
                 self.add_state(f"MPJPE_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.MPJPE_metrics.append(f"MPJPE_{recons_type}_{filter}")
 
@@ -114,25 +117,24 @@ class ReconsMetrics(Metric):
     def compute(self):
         count = self.count_good
         APE_metrics = {metric: getattr(self, metric) / count for metric in self.APE_metrics}
-
-        # Compute average of APEs
-        # APE_metrics["APE_mean_pose"] = self.APE_pose.mean() / count
-        APE_metrics["APE_mean_joints"] = self.APE_joints.mean() / count
-
-        # Remove arrays
-        # APE_metrics.pop("APE_pose")
-        APE_metrics.pop("APE_joints")
-
+        
         count_seq = self.count_good_seq
         AVE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.AVE_metrics}
 
-        # Compute average of AVEs
-        # AVE_metrics["AVE_mean_pose"] = self.AVE_pose.mean() / count_seq
-        AVE_metrics["AVE_mean_joints"] = self.AVE_joints.mean() / count_seq
+        for recons_type in self.recons_types:
+            for filter in self.filters:
+                # Compute average of APEs
+                APE_metrics["APE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"APE_pose_{recons_type}_{filter}").mean() / count
+                APE_metrics["APE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"APE_joints_{recons_type}_{filter}").mean() / count
+                # Compute average of AVEs
+                AVE_metrics["AVE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"AVE_pose_{recons_type}_{filter}").mean() / count_seq
+                AVE_metrics["AVE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"AVE_joints_{recons_type}_{filter}").mean() / count_seq
 
-        # Remove arrays
-        # AVE_metrics.pop("AVE_pose")
-        AVE_metrics.pop("AVE_joints")
+                # Remove arrays
+                APE_metrics.pop("APE_pose_{recons_type}_{filter}")
+                APE_metrics.pop("APE_joints_{recons_type}_{filter}")
+                AVE_metrics.pop("AVE_pose_{recons_type}_{filter}")
+                AVE_metrics.pop("AVE_joints_{recons_type}_{filter}")
 
         # Compute average of MPJPEs
         MPJPE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.MPJPE_metrics}
@@ -146,12 +148,18 @@ class ReconsMetrics(Metric):
         if self.traj:
             assert traj is not None
 
-        assert len(seq_names)==len(cluster_seqs)
+        seq_names_with_beams = []
+        for i in range(self.beam_width):
+            seq_names_with_beams.extend([f"{seq_name}_{i}" for seq_name in seq_names])
+        assert len(seq_names)==(len(cluster_seqs)/self.beam_width)
         self.count_seq += len(seq_names)
         self.count += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
         good_idx = [i for i,cluster_seq in enumerate(cluster_seqs) \
             if cluster_seq.max()<self.num_clusters and cluster_seq.min()>=0]
-
+        
+        # now that we have beams, removing bad ones will be confusing while aggregation
+        assert good_idx == list(range(self.beam_width*self.count_seq))
+        
         # get good sequences (no <unk> or <pad>)
         seq_names = [seq_names[i] for i in good_idx]
         cluster_seqs = [cluster_seqs[i] for i in good_idx]
@@ -161,12 +169,13 @@ class ReconsMetrics(Metric):
         # get GT
         gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]
         gt = [change_fps(keypoint, self.gt_fps, self.recons_fps) for keypoint in gt]
+        gt_with_beams = gt*self.beam_width
 
         # get contiguous cluster sequences (grouping contiguous identical clusters)
         cluster_seqs = [cluster_seq.cpu().numpy() for cluster_seq in cluster_seqs]
         if ('naive_no_rep' in self.recons_types) or ('naive' in self.recons_types):
             contiguous_frame2cluster_mapping = {"name":[], "idx":[], "cluster":[], "length":[]}
-            for name, cluster_seq in zip(seq_names, cluster_seqs):
+            for name, cluster_seq in zip(seq_names_with_beams, cluster_seqs):
                 prev=-1
                 running_idx=0
                 current_len = 0
@@ -184,20 +193,20 @@ class ReconsMetrics(Metric):
                     prev = cc
             contiguous_frame2cluster_mapping = pd.DataFrame.from_dict(contiguous_frame2cluster_mapping)
             contiguous_frame2cluster_mapping = contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping["idx"]>0]
-            contiguous_cluster_seqs = [contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping['name']==name][['cluster', 'length']].reset_index(drop=True) for name in seq_names]
+            contiguous_cluster_seqs = [contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping['name']==name][['cluster', 'length']].reset_index(drop=True) for name in seq_names_with_beams]
 
         # reconstruct from predicted clusters using different strategies
         for recons_type in self.recons_types:
             if recons_type == 'naive_no_rep' or recons_type  == 'naive':
                 cluster2frame_mapping_path = Path(self.kwargs['cluster2frame_mapping_path'])
-                output = eval(recons_type+'_reconstruction')(seq_names, contiguous_cluster_seqs, self.ground_truth_data, cluster2frame_mapping_path, verbose=False)
+                output = eval(recons_type+'_reconstruction')(seq_names_with_beams, contiguous_cluster_seqs, self.ground_truth_data, cluster2frame_mapping_path, verbose=False)
                 if recons_type == 'naive_no_rep':
                     recons, faulty = output
                 else:
                     recons = output
             elif recons_type == 'very_naive':
                 cluster2keypoint_mapping_path = Path(self.kwargs['cluster2keypoint_mapping_path'])
-                recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path, verbose=False)
+                recons = eval(recons_type+'_reconstruction')(seq_names_with_beams, cluster_seqs, cluster2keypoint_mapping_path, verbose=False)
             # traj inclusion
             if self.traj:
                 recons = add_traj(recons, traj)
@@ -215,7 +224,8 @@ class ReconsMetrics(Metric):
                     raise NameError(f'No such filter {filter}')
 
                 # MPJPE
-                mpjpe_per_sequence=mpjpe3d(seq_names, recons, gt)
+                mpjpe_with_beams=mpjpe3d(seq_names_with_beams, recons, gt_with_beams)
+                mpjpe_per_sequence=[np.mean(mpjpe_with_beams[i::self.count_good_seq]) for i in range(self.count_good_seq)]
                 getattr(self, f"MPJPE_{recons_type}_{filter}").__iadd__(np.mean(mpjpe_per_sequence))
 
                 # AVE and APE
@@ -233,24 +243,32 @@ class ReconsMetrics(Metric):
                 root_ref = [jts[..., 0, :] for jts in jts_ref]
                 traj_ref = [jts[..., 0, [0, 2]] for jts in jts_ref]
 
-                for i in range(len(recons)):
-                    self.APE_root += l2_norm(root_text[i], root_ref[i], dim=1).sum()
-                    # self.APE_pose += l2_norm(poses_text[i], poses_ref[i], dim=2).sum(0)
-                    self.APE_traj += l2_norm(traj_text[i], traj_ref[i], dim=1).sum()
-                    self.APE_joints += l2_norm(jts_text[i], jts_ref[i], dim=2).sum(0)
+                for seq in range(self.count_good_seq): #aggregate over beams and update
+                    APE_root = np.mean([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(seq, len(recons), self.count_good_seq)])
+                    getattr(self, f"APE_root_{recons_type}_{filter}").__iadd__(APE_root)
+                    # APE_pose = np.mean([l2_norm(poses_text[i], poses_ref[i], dim=2).sum(0) for i in range(seq, len(recons), self.count_good_seq)])
+                    # getattr(self, f"APE_pose_{recons_type}_{filter}").__iadd__(APE_pose)
+                    APE_traj = np.mean([l2_norm(traj_text[i], traj_ref[i], dim=1).sum() for i in range(seq, len(recons), self.count_good_seq)])
+                    getattr(self, f"APE_traj_{recons_type}_{filter}").__iadd__(APE_traj)
+                    APE_joints = np.mean([l2_norm(jts_text[i], jts_ref[i], dim=2).sum(0) for i in range(seq, len(recons), self.count_good_seq)])
+                    getattr(self, f"APE_joints_{recons_type}_{filter}").__iadd__(APE_joints)
 
-                    root_sigma_text = variance(root_text[i], lengths[i], dim=0)
-                    root_sigma_ref = variance(root_ref[i], lengths[i], dim=0)
-                    self.AVE_root += l2_norm(root_sigma_text, root_sigma_ref, dim=0)
+                    root_sigma_text = [variance(root_text[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    root_sigma_ref = [variance(root_ref[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    AVE_root = np.mean([l2_norm(i, j, dim=0) for i,j in zip(root_sigma_text, root_sigma_ref)])
+                    getattr(self, f"AVE_root_{recons_type}_{filter}").__iadd__(AVE_root)
 
-                    traj_sigma_text = variance(traj_text[i], lengths[i], dim=0)
-                    traj_sigma_ref = variance(traj_ref[i], lengths[i], dim=0)
-                    self.AVE_traj += l2_norm(traj_sigma_text, traj_sigma_ref, dim=0)
+                    traj_sigma_text = [variance(traj_text[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    traj_sigma_ref = [variance(traj_ref[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    AVE_traj = np.mean([l2_norm(i, j, dim=0) for i,j in zip(traj_sigma_text, traj_sigma_ref)])
+                    getattr(self, f"AVE_traj_{recons_type}_{filter}").__iadd__(AVE_traj)
 
-                #     poses_sigma_text = variance(poses_text[i], lengths[i], dim=0)
-                #     poses_sigma_ref = variance(poses_ref[i], lengths[i], dim=0)
-                #     self.AVE_pose += l2_norm(poses_sigma_text, poses_sigma_ref, dim=1)
+                    # poses_sigma_text = [variance(poses_text[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    # poses_sigma_ref = [variance(poses_ref[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    # AVE_pose = np.mean([l2_norm(i, j, dim=0) for i,j in zip(poses_sigma_text, poses_sigma_ref)])
+                    # getattr(self, f"AVE_pose_{recons_type}_{filter}").__iadd__(AVE_pose)
 
-                    jts_sigma_text = variance(jts_text[i], lengths[i], dim=0)
-                    jts_sigma_ref = variance(jts_ref[i], lengths[i], dim=0)
-                    self.AVE_joints += l2_norm(jts_sigma_text, jts_sigma_ref, dim=1)
+                    jts_sigma_text = [variance(jts_text[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    jts_sigma_ref = [variance(jts_ref[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    AVE_joints = np.mean([l2_norm(i, j, dim=0) for i,j in zip(jts_sigma_text, jts_sigma_ref)])
+                    getattr(self, f"AVE_joints_{recons_type}_{filter}").__iadd__(AVE_joints)

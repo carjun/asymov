@@ -4,6 +4,7 @@ from torch import Tensor
 from torch.nn import Module, Transformer as T
 from tqdm import tqdm
 import pdb
+from .beam_search import beam_search_auto, diverse_beam_search_auto, diverse_beam_search_unit, beam_search_unit
 
 def detach_to_numpy(tensor):
     return tensor.detach().cpu().numpy()
@@ -14,10 +15,6 @@ def remove_padding(tensors, lengths):
 
 def remove_padding_asymov(tensors, lengths):
     return [tensor[:, :tensor_length] for tensor, tensor_length in zip(tensors, lengths)]
-
-# def generate_square_subsequent_mask(sz: int) -> Tensor:
-#     mask = torch.triu(torch.full((sz, sz), float('-inf')), diagonal=1)
-#     return mask #[sz,sz]
 
 def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
     # src: [Frames, Batch size], tgt: [Frames-1, Batch size]
@@ -111,3 +108,72 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
         tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
         return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
     return tgt_list #List[Tensor[Frames]]
+
+def beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, decoding_scheme: str ="diverse",
+                      src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True, beam_width: int = 5) -> Tensor:
+  #It'll use diverse by default
+  decode_dict = {
+      "diverse": diverse_beam_search_unit, 
+      "beam": beam_search_unit,
+  }
+
+  # src: [Frames, Batches]
+  if src_mask is None:
+      num_tokens = src.shape[0]
+      src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)  # [Frames, Frames]
+
+  # batch_size = src.shape[1]
+  tgt = src.new_full((1, 1), start_symbol, dtype=torch.long)   #start symb, 1st frame
+
+  if traj:
+    pdb.set_trace()           ##
+    tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask,src_padding_mask, 
+                                                          end_symbol, max_len, beam_width)
+    return tgt_list, tgt_traj_list  # List[Tensor[Frames]]; List_len-> batch*beam
+                                    #b:batch_element,B:beam; b1B1,b2B1,b1B2,b2B2.... 
+  else:
+    tgt_list = decode_dict[decoding_scheme](model, src, tgt, src_mask,src_padding_mask, 
+                                          end_symbol, max_len, beam_width, traj=False)
+    return tgt_list  # List[Tensor[Frames]]
+
+
+def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, decoding_scheme: str ="diverse",
+                        src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True, beam_width: int = 5) -> Tensor:
+    #It'll use diverse by default
+    decode_dict = {
+        "diverse": diverse_beam_search_auto, 
+        "beam": beam_search_auto,
+    }
+
+    # src: [Frames, Batches]
+    if src_mask is None:
+        num_tokens = src.shape[0]
+        src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)  # [Frames, Frames]
+
+    batch_size = src.shape[1]
+    tgt = torch.ones(1, batch_size).fill_(start_symbol).type(torch.long)  # [1, Batch size], 1 as for 1st frame
+
+    if traj:
+        tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask, src_padding_mask, end_symbol, 
+                                                              max_len, batch_size, beam_width)
+        return tgt_list, tgt_traj_list  # List[Tensor[Frames]]; List_len-> batch*beam
+                                        #b:batch_element,B:beam; b1B1,b2B1,b1B2,b2B2.... 
+    else:
+        tgt_list = decode_dict[decoding_scheme](model, src, tgt, src_mask,src_padding_mask, end_symbol,
+                                        max_len, batch_size, beam_width, traj=False)
+        return tgt_list  # List[Tensor[Frames]]
+        
+        # if (i + 2) < max_len:
+        #     break
+
+    # tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
+    # return tgt_list  # List[Tensor[Frames]]
+
+# TODO: Unified search fucntion
+# def batch_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, beam: bool, beam_width: int,
+#                   src_mask: Tensor = None, src_padding_mask: Tensor = None) -> Tensor:
+#     if beam:
+#         assert beam_width>1
+#     else:
+#         assert beam_width==1
+

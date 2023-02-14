@@ -15,7 +15,7 @@ from torchmetrics import MetricCollection, Accuracy, BLEUScore
 from temos.model.metrics.compute_asymov import Perplexity, ReconsMetrics
 from torchmetrics import MetricCollection, Accuracy, BLEUScore, SumMetric
 from temos.model.base import BaseModel
-from temos.model.utils.tools import create_mask, remove_padding, greedy_decode, batch_greedy_decode
+from temos.model.utils.tools import create_mask, remove_padding, greedy_decode, batch_greedy_decode, batch_beam_decode
 
 class AsymovMT(BaseModel):
     def __init__(self, traj: bool,
@@ -23,13 +23,15 @@ class AsymovMT(BaseModel):
                  losses: DictConfig,
                  metrics: DictConfig,
                  optim: DictConfig,
-                #  text_vocab_size: int,
+                 text_vocab_size: int,
                  mw_vocab_size: int,
                  special_symbols: Union[List[str],ListConfig],
                 #  fps: float,
                  max_frames: int,
                  metrics_start_epoch: int,
                  metrics_every_n_epoch: int,
+                 decoding_scheme: str,
+                 beam_width: int,
                  best_ckpt_monitors: List,
                  **kwargs):
         super().__init__()
@@ -45,7 +47,9 @@ class AsymovMT(BaseModel):
         self.metrics_every_n_epoch = metrics_every_n_epoch
         self.best_ckpt_monitors = best_ckpt_monitors
         
-        self.transformer = instantiate(transformer)#, src_vocab_size = text_vocab_size, tgt_vocab_size = mw_vocab_size)
+        self.transformer = instantiate(transformer)
+        # self.src_vocab_size = text_vocab_size
+        self.tgt_vocab_size = mw_vocab_size
         for p in self.transformer.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
@@ -80,20 +84,31 @@ class AsymovMT(BaseModel):
                              }
 
         self.metrics={key: getattr(self, f"{key}_metrics") for key in ["train", "val"]}
+
+        self.decoding_scheme = decoding_scheme
+        self.beam_width = beam_width 
         
         self.__post_init__()
-        
-    #TODO:beam search
-    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
-        # src: [Frames, Batch size] 
+
+    #TODO: add comments to understand the interleaved output of batch_beam_decode
+    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int, decoding_scheme:str = "diverse", beam_width: int = 5) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
+        # src: [Frames, Batch size]
         if self.hparams.traj:
-            tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+            if decoding_scheme == "greedy":
+                tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
                                                       src_mask, src_padding_mask)
+            else:
+                tgt_list, traj_list = batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, decoding_scheme,
+                                                        src_mask, src_padding_mask, beam_width=beam_width)
             assert len(tgt_list) == len(traj_list)
             return tgt_list, traj_list #Tuple[List[Tensor[Frames]]]
         else:
-            tgt_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
-                                           src_mask, src_padding_mask, traj=False)
+            if decoding_scheme == "greedy":
+                tgt_list= batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+                                                        src_mask, src_padding_mask, traj=False)
+            else:
+                tgt_list= batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, decoding_scheme,
+                                                        src_mask, src_padding_mask, traj=False, beam_width=beam_width)
             return tgt_list #List[Tensor[Frames]]
 
     def translate(self, src_list: List[Tensor], max_len: Union[int, List[int]]) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing
@@ -177,12 +192,12 @@ class AsymovMT(BaseModel):
                 # pdb.set_trace()
                 
                 if self.hparams.traj:
-                    pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
-                    pred_traj = [i.detach() for i in pred_traj]
-                    # Remove traj corresponding to terminal tokens BOS/EOS
+                    pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)       #passed none so it'll pick the
+                    pred_traj = [i.detach() for i in pred_traj]                                                                                                     #default values "diverse" and 5
+                    # Remove traj corresponding to terminal tokens BOS/EOS                  
                     pred_traj = [traj[1:-1] if mw[-1]==self.EOS_IDX else traj[1:] for traj, mw in zip(pred_traj, pred_mw_tokens)]
                 else:
-                    pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames)
+                    pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)
                 pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
                 # Remove terminal tokens BOS/EOS, shift for special symbols
                 pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]
@@ -192,6 +207,7 @@ class AsymovMT(BaseModel):
                 #     assert torch.equal(mw_tokens, mw_tokens2)
                 # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
                 
+                #TODO: aggregate BLEU over beams
                 self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
                 
                 if self.hparams.traj:
