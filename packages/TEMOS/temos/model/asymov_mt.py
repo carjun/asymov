@@ -90,7 +90,7 @@ class AsymovMT(BaseModel):
         
         self.__post_init__()
 
-    #TODO:beam search
+    #TODO: add comments to understand the interleaved output of batch_beam_decode
     def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int, decoding_scheme:str = "diverse", beam_width: int = 5) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
         # src: [Frames, Batch size]
         if self.hparams.traj:
@@ -207,6 +207,7 @@ class AsymovMT(BaseModel):
                 #     assert torch.equal(mw_tokens, mw_tokens2)
                 # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
                 
+                #TODO: aggregate BLEU over beams
                 self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
                 
                 if self.hparams.traj:
