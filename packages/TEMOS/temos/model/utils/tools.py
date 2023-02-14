@@ -148,10 +148,10 @@ def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: in
     # src: [Frames, Batches]
     if src_mask is None:
         num_tokens = src.shape[0]
-        src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)  # [Frames, Frames]
+        src_mask = (src.new_zeros(num_tokens, num_tokens)).type(torch.bool)  # [Frames, Frames]
 
     batch_size = src.shape[1]
-    tgt = torch.ones(1, batch_size).fill_(start_symbol).type(torch.long)  # [1, Batch size], 1 as for 1st frame
+    tgt = src.new_ones(1, batch_size).fill_(start_symbol).type(torch.long)  # [1, Batch size], 1 as for 1st frame
 
     if traj:
         tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask, src_padding_mask, end_symbol, 

@@ -139,7 +139,7 @@ def beam_search_auto(                       #alpha
         src_padding_mask = src_padding_mask.repeat_interleave(beam_width, dim=0)
 
         tgt = tgt.repeat((1,beam_width))
-        tgt_padding_mask = torch.full((batch_size*beam_width, 1), False)  # [Batch Size, 1], 1 as for 1st frame
+        tgt_padding_mask = tgt.new_full((batch_size*beam_width, 1), False, dtype=torch.bool)  # [Batch Size, 1], 1 as for 1st frame
         tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                           .to(tgt.device, dtype=torch.bool))  
         tgt_len = tgt.new_full((batch_size*beam_width, ), max_len)
@@ -331,7 +331,7 @@ def diverse_beam_search_auto(                       #alpha
         # src_padding_mask = src_padding_mask.repeat_interleave(beam_width, dim=0)
         
         tgt = tgt.repeat((1,beam_width))
-        tgt_padding_mask = torch.full((batch_size*beam_width, 1), False)  # [Batch Size, 1], 1 as for 1st frame
+        tgt_padding_mask = tgt.new_full((batch_size*beam_width, 1), False, dtype=torch.bool)  # [Batch Size, 1], 1 as for 1st frame
         # tgt_padding_mask = tgt_padding_mask.repeat((beam_width, 1))
         tgt_len = tgt.new_full((batch_size*beam_width, ), max_len)
         # tgt_len = tgt_len.repeat(beam_width, )
