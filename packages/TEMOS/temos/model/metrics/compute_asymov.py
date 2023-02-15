@@ -7,7 +7,9 @@ import numpy as np
 import pdb
 
 import torch
+from einops import rearrange
 from torch import Tensor, nn
+from torch.nn.utils.rnn import pad_sequence
 from torchmetrics import Metric, MeanMetric
 from hydra.utils import instantiate
 
@@ -51,10 +53,19 @@ class ReconsMetrics(Metric):
     def __init__(self, traj: bool, recons_types: List[str], filters: List[str], gt_path: str,
                  recons_fps: float, pred_fps: float, gt_fps: float, num_mw_clusters: int,
                  decoding_scheme: str, beam_width: int,
-                #  jointstype: str = "mmm",
-                #  force_in_meter: bool = True,
+                 jointstype: str = "mmm",
+                 force_in_meter: bool = True,
                  dist_sync_on_step=False, **kwargs):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
+        if jointstype != "mmm":
+            raise NotImplementedError("This jointstype is not implemented.")
+        
+        super().__init__()
+        self.jointstype = jointstype
+        self.rifke = Rifke(jointstype=jointstype,
+                           normalization=False)
+        
+        self.force_in_meter = force_in_meter
         self.traj=traj
         self.recons_types = recons_types
         self.filters = filters
@@ -73,16 +84,6 @@ class ReconsMetrics(Metric):
         with open(gt_path, 'rb') as handle:
             self.ground_truth_data = pickle.load(handle)
 
-
-        # if jointstype != "mmm":
-        #     raise NotImplementedError("This jointstype is not implemented.")
-
-        # super().__init__()
-        # self.jointstype = jointstype
-        # self.rifke = Rifke(jointstype=jointstype,
-        #                    normalization=False)
-
-        # self.force_in_meter = force_in_meter
         self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("count_seq", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("count_good", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -232,23 +233,24 @@ class ReconsMetrics(Metric):
                 mpjpe_per_sequence=[np.mean(mpjpe_with_beams[i::self.count_good_seq]) for i in range(self.count_good_seq)]
                 getattr(self, f"MPJPE_{recons_type}_{filter}").__iadd__(np.mean(mpjpe_per_sequence))
 
-                # AVE and APE
+                # length = min(gt, predicted)
                 lengths = [min(recons[i].shape[0], gt_with_beams[i].shape[0]) for i in range(len(recons))]
-
-                #TODO : TEMOS transforms to get jts, root, poses and traj
                 
-                # jts_text, poses_text, root_text, traj_text = self.transform(jts_text, lengths)
-                jts_text = [torch.from_numpy(keypoint)[:l] for keypoint, l in zip(recons, lengths)]
+                jts_text = pad_sequence([*map(torch.from_numpy, recons)], batch_first=True)
+                jts_text, poses_text, root_text, traj_text = self.transform(jts_text, lengths)
+                # jts_text = [torch.from_numpy(keypoint)[:l] for keypoint, l in zip(recons, lengths)]
                 # poses_text = jts_text
-                root_text = [jts[..., 0, :] for jts in jts_text]
-                traj_text = [jts[..., 0, [0, 2]] for jts in jts_text]
+                # root_text = [jts[..., 0, :] for jts in jts_text]
+                # traj_text = [jts[..., 0, [0, 2]] for jts in jts_text]
 
-                # jts_ref, poses_ref, root_ref, traj_ref = self.transform(jts_ref, lengths)
-                jts_ref = [torch.from_numpy(keypoint)[:l] for keypoint, l in zip(gt_with_beams, lengths)]
+                jts_ref = pad_sequence([*map(torch.from_numpy, gt_with_beams)], batch_first=True)
+                jts_ref, poses_ref, root_ref, traj_ref = self.transform(jts_ref, lengths)
+                # jts_ref = [torch.from_numpy(keypoint)[:l] for keypoint, l in zip(gt_with_beams, lengths)]
                 # poses_ref = jts_ref
-                root_ref = [jts[..., 0, :] for jts in jts_ref]
-                traj_ref = [jts[..., 0, [0, 2]] for jts in jts_ref]
+                # root_ref = [jts[..., 0, :] for jts in jts_ref]
+                # traj_ref = [jts[..., 0, [0, 2]] for jts in jts_ref]
 
+                # AVE and APE
                 for seq in range(self.count_good_seq): #aggregate over beams and update
                     APE_root_per_beam =  torch.stack([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(seq, len(recons), self.count_good_seq)])
                     APE_root = APE_root_per_beam.mean(0)
@@ -286,3 +288,57 @@ class ReconsMetrics(Metric):
                     AVE_joints_per_beam = torch.stack([l2_norm(i, j, dim=1) for i,j in zip(jts_sigma_text, jts_sigma_ref)])
                     AVE_joints = AVE_joints_per_beam.mean(0)
                     getattr(self, f"AVE_joints_{recons_type}_{filter}").__iadd__(AVE_joints)
+                    
+    def transform(self, joints: Tensor, lengths):
+        features = self.rifke(joints)
+
+        ret = self.rifke.extract(features)
+        root_y, poses_features, vel_angles, vel_trajectory_local = ret
+
+        # already have the good dimensionality
+        angles = torch.cumsum(vel_angles, dim=-1)
+        # First frame should be 0, but if infered it is better to ensure it
+        angles = angles - angles[..., [0]]
+
+        cos, sin = torch.cos(angles), torch.sin(angles)
+        rotations = matrix_of_angles(cos, sin, inv=False)
+
+        # Get back the local poses
+        poses_local = rearrange(poses_features, "... (joints xyz) -> ... joints xyz", xyz=3)
+
+        # Rotate the poses
+        poses = torch.einsum("...lj,...jk->...lk", poses_local[..., [0, 2]], rotations)
+        poses = torch.stack((poses[..., 0], poses_local[..., 1], poses[..., 1]), axis=-1)
+
+        # Rotate the vel_trajectory
+        vel_trajectory = torch.einsum("...j,...jk->...k", vel_trajectory_local, rotations)
+        # Integrate the trajectory
+        # Already have the good dimensionality
+        trajectory = torch.cumsum(vel_trajectory, dim=-2)
+        # First frame should be 0, but if infered it is better to ensure it
+        trajectory = trajectory - trajectory[..., [0], :]
+
+        # get the root joint
+        root = torch.cat((trajectory[..., :, [0]],
+                          root_y[..., None],
+                          trajectory[..., :, [1]]), dim=-1)
+
+        # Add the root joints (which is still zero)
+        poses = torch.cat((0 * poses[..., [0], :], poses), -2)
+        # put back the root joint y
+        poses[..., 0, 1] = root_y
+
+        # Add the trajectory globally
+        poses[..., [0, 2]] += trajectory[..., None, :]
+
+        if self.force_in_meter:
+            # return results in meters
+            return (remove_padding(poses / 1000, lengths),
+                    remove_padding(poses_local / 1000, lengths),
+                    remove_padding(root / 1000, lengths),
+                    remove_padding(trajectory / 1000, lengths))
+        else:
+            return (remove_padding(poses, lengths),
+                    remove_padding(poses_local, lengths),
+                    remove_padding(root, lengths),
+                    remove_padding(trajectory, lengths))
