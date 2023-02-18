@@ -166,6 +166,7 @@ def beam_search_auto(                       #alpha
 
         tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), 2, tgt_len)     #tNote to darsh
         
+        # TODO change to range(0 or 1, max_len)
         for i in tqdm(range(1,max_len-1), "beam autoregressive translation", None):
 
           tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
@@ -208,11 +209,14 @@ def beam_search_auto(                       #alpha
 
             tgt_traj = torch.cat([tgt_traj_temp, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
 
+          #TODO store effective length without EOS/BOS
           tgt_len = torch.where(torch.logical_and(next_tokens.reshape(-1)==end_symbol, tgt_len==max_len), i+2, tgt_len)     #this requires debugging
         
+        #TODO remove BOS and EOS (change remove_padding function)
         tgt_list =  remove_padding(tgt.permute(1, 0), tgt_len)
 
         if traj:
+          #TODO remove BOS and EOS (change remove_padding function)
           tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
           return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
 

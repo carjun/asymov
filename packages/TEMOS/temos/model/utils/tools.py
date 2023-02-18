@@ -13,6 +13,10 @@ def detach_to_numpy(tensor):
 def remove_padding(tensors, lengths):
     return [tensor[:tensor_length] for tensor, tensor_length in zip(tensors, lengths)]
 
+# dummy wrapper to make the usage clear
+def remove_padding_and_EOS(tensors, lengths):
+    return remove_padding(tensors, lengths)
+    
 def remove_padding_asymov(tensors, lengths):
     return [tensor[:, :tensor_length] for tensor, tensor_length in zip(tensors, lengths)]
 
@@ -29,7 +33,6 @@ def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
 
 # function to generate output sequence using greedy algorithm
-#TODO: traj inclusion
 def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, traj: bool = True) -> Tensor:
     # src: [Frames, 1]
     num_tokens = src.shape[0]
@@ -62,7 +65,6 @@ def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, e
         return tgt, tgt_traj
     return tgt #[Frames, 1]
 
-#TODO: traj inclusion
 def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
                   src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True) -> Union[List[Tensor], Tuple[List[Tensor]]]:
     # src: [Frames, Batches]
@@ -79,6 +81,7 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
     if traj:
         tgt_traj = src.new_zeros((1, batch_size, 3), dtype=torch.long) #[1, Batch size, 3], 1 as for 1st frame
 
+    # effective frame predictions
     for i in tqdm(range((max_len)), "autoregressive translation", None):
         tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
                     .to(tgt.device, dtype=torch.bool))
@@ -99,13 +102,15 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
         # tgt2 = torch.argmax(model.generator(out), dim=-1)
         # assert torch.equal(tgt[1:], tgt2)
         
-        tgt_len = torch.where(torch.logical_and(next_word==end_symbol, tgt_len==max_len), i+2, tgt_len)
-        if (tgt_len>(i+2)).sum()==0 and (i+2)<max_len: #2nd condition is hack to run tqdm till end, not break at last index
+        # if EOS then effective length of o/p = i (for (i+1)th iter), else same as init (max_len)
+        tgt_len = torch.where(torch.logical_and(next_word==end_symbol, tgt_len==max_len), i, tgt_len)
+        if (tgt_len>i).sum()==0: #break if each batch prediction got an EOS
             break
     
-    tgt_list = remove_padding(tgt.permute(1, 0), tgt_len)
+    #remove BOS ([1:] slicing), EOS and padding and return effective frame predictions
+    tgt_list = remove_padding_and_EOS(tgt[1:].permute(1, 0), tgt_len)
     if traj:
-        tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
+        tgt_traj_list =  remove_padding_and_EOS(tgt_traj[1:].permute(1, 0, 2), tgt_len)
         return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
     return tgt_list #List[Tensor[Frames]]
 

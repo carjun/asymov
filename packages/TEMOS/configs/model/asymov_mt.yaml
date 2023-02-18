@@ -16,7 +16,7 @@ special_symbols: ${data.special_symbols}
 dropout: 0.1
 
 fps: ${data.framerate}
-max_frames: ??? # Length of largest mw sequence in train data including EOS/BOS (max limit for mw in the predicted sequence)
+max_frames: ??? # Length of largest mw sequence in train data excluding EOS/BOS
 
 metrics_start_epoch: ${viz_metrics_start_epoch} # epoch numbering starts from 0, epoch >= metrics_start_epoch
 metrics_every_n_epoch: ${viz_metrics_every_n_epoch} # (epoch+1)%n metrics_every_n_epoch
