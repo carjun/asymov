@@ -10,7 +10,7 @@ __pycache__
 # Data, viz
 kit-molan/xyz_data.pkl
 packages/R-Drop/
-packages/TEMOS/datasets
+packages/TEMOS/datasets/fke_inplace_data.pkl
 packages/Complextext2animation/src/dataProcessing/
 
 # Output, viz., logs

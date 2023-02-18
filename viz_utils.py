@@ -72,7 +72,7 @@ def naive_no_rep_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth
         ground_truth_data : ground truth 3d keypoints of skeleton joints
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
         pred_gt_fps_ratio: Ratio of model-prediction fps to ground-truth fps
-    Retruns:
+    Returns:
         The reconstructed keypoints
     '''
     assert len(seq_names) == len(contiguous_cluster_seqs)
@@ -135,7 +135,7 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
         cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
         pred_gt_fps_ratio: Ratio of model-prediction fps to ground-truth fps
 
-    Retruns:
+    Returns:
         The reconstructed keypoints
     '''
     assert len(seq_names) == len(contiguous_cluster_seqs)
@@ -188,7 +188,7 @@ def very_naive_reconstruction(seq_names, cluster_seqs, cluster2keypoint_mapping_
         cluster_seqs : the mapping of each frame to a cluster.
         cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
 
-    Retruns:
+    Returns:
         The reconstructed keypoints
     '''
     # pdb.set_trace()
