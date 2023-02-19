@@ -69,8 +69,11 @@ class KITMotionWordMTDataModule(BASEDataModule):
         #                     self.terminal_transform] # Add BOS/EOS and create tensor
         
         self.text_vocab_size = self.text_vocab.__len__()
+        print(f"text_vocab_size set to : {self.text_vocab_size}")
         self.mw_vocab_size = num_mw_clusters + len(self.mw_special_symbols)
-        self.max_frames = max(self.train_dataset._num_frames_in_sequence.values()) + 2 # +2 for BOS/EOS
+        print(f"mw_vocab_size set to : {self.mw_vocab_size}")
+        self.max_frames = max(self.train_dataset.durations.values())
+        print(f"max_frames set to : {self.max_frames}")
         
         super().__init__(batch_size=batch_size,
                          num_workers=num_workers,
@@ -245,7 +248,7 @@ class KITMotionWord(Dataset):
 
         self.keyids = list(mw_data.keys())
         self._split_index = list(self.keyids)
-        self._num_frames_in_sequence = durations
+        self.durations = durations
         self.vocab_size = vocab_size
 
     def _load_traj(self, keyid):#, frame_ix=None):
@@ -272,7 +275,7 @@ class KITMotionWord(Dataset):
         return text
 
     def load_keyid(self, keyid):
-        num_frames = self._num_frames_in_sequence[keyid]
+        num_frames = self.durations[keyid]
         # frame_ix = self.sampler(num_frames)
 
         motion_words = self._load_motion_words(keyid)#, frame_ix)
