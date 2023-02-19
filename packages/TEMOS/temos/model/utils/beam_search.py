@@ -8,6 +8,10 @@ from torch.nn import Module, Transformer as T
 def remove_padding(tensors, lengths):
     return [tensor[:tensor_length] for tensor, tensor_length in zip(tensors, lengths)]
 
+# dummy wrapper to make the usage clear
+def remove_padding_and_EOS(tensors, lengths):
+    return remove_padding(tensors, lengths)
+
 
 def beam_search(model, sequences, predictions=20, beam_width=5, batch_size=16):
     """
@@ -164,10 +168,10 @@ def beam_search_auto(                       #alpha
         
         tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))
 
-        tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), 2, tgt_len)     #tNote to darsh
+        tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), 0, tgt_len)     #0: i(th) decoding
         
         # TODO change to range(0 or 1, max_len)
-        for i in tqdm(range(1,max_len-1), "beam autoregressive translation", None):
+        for i in tqdm(range(1,max_len), "beam autoregressive translation", None):
 
           tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                           .to(tgt.device, dtype=torch.bool))                      #tokens.
@@ -210,14 +214,14 @@ def beam_search_auto(                       #alpha
             tgt_traj = torch.cat([tgt_traj_temp, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
 
           #TODO store effective length without EOS/BOS
-          tgt_len = torch.where(torch.logical_and(next_tokens.reshape(-1)==end_symbol, tgt_len==max_len), i+2, tgt_len)     #this requires debugging
+          tgt_len = torch.where(torch.logical_and(next_tokens.reshape(-1)==end_symbol, tgt_len==max_len), i, tgt_len)     #this requires debugging
         
         #TODO remove BOS and EOS (change remove_padding function)
-        tgt_list =  remove_padding(tgt.permute(1, 0), tgt_len)
+        tgt_list =  remove_padding_and_EOS(tgt[1:].permute(1, 0), tgt_len)
 
         if traj:
           #TODO remove BOS and EOS (change remove_padding function)
-          tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
+          tgt_traj_list =  remove_padding_and_EOS(tgt_traj[1:].permute(1, 0, 2), tgt_len)
           return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
 
         return tgt_list
@@ -266,9 +270,9 @@ def beam_search_unit(                       #alpha
         
         tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))
 
-        tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), 2, tgt_len)     #tNote to darsh
+        tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), 0, tgt_len)     #0: i(th) decoding
         
-        for i in tqdm(range(1,max_len-1), "beam autoregressive translation", None):
+        for i in tqdm(range(1,max_len), "beam autoregressive translation", None):
 
           tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                           .to(tgt.device, dtype=torch.bool))                      #tokens.
@@ -304,12 +308,12 @@ def beam_search_unit(                       #alpha
 
             tgt_traj = torch.cat([tgt_traj_temp, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
 
-          tgt_len = torch.where(torch.logical_and(next_tokens.reshape(-1)==end_symbol, tgt_len==max_len), i+2, tgt_len)     #this requires debugging
+          tgt_len = torch.where(torch.logical_and(next_tokens.reshape(-1)==end_symbol, tgt_len==max_len), i, tgt_len)     #this requires debugging
         
-        tgt_list =  remove_padding(tgt.permute(1, 0), tgt_len)
+        tgt_list =  remove_padding(tgt[1:].permute(1, 0), tgt_len)
 
         if traj:
-          tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
+          tgt_traj_list =  remove_padding(tgt_traj[1:].permute(1, 0, 2), tgt_len)
           return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
 
         return tgt_list
@@ -345,7 +349,7 @@ def diverse_beam_search_auto(                       #alpha
 
         memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
 
-        for i in tqdm(range(1,max_len), "diverse autoregressive translation", None):
+        for i in tqdm(range(0,max_len), "diverse autoregressive translation", None):
 
             tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                     .to(tgt.device, dtype=torch.bool))                      #tokens.
@@ -373,7 +377,7 @@ def diverse_beam_search_auto(                       #alpha
 
             tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))
 
-            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i+2, tgt_len)     #tNote to darsh
+            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i, tgt_len)     #tNote to darsh
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(-1)], dim=-1)
 
         # last_probs = probabilities[next_token_mask].reshape(-1,batch_size)
@@ -387,12 +391,12 @@ def diverse_beam_search_auto(                       #alpha
         
         # tgt_len = tgt_len[batch_size:][last_prob_mask.reshape(-1)][reorder]
         # tgt_list=  remove_padding(final_unordered.T[reorder], tgt_len)
-        tgt_list =  remove_padding(tgt.permute(1, 0), tgt_len)
+        tgt_list =  remove_padding(tgt[1:].permute(1, 0), tgt_len)
 
         if traj:
             # final_unordered_traj = tgt_traj[:, batch_size:][:, last_prob_mask.reshape(-1)]
             # tgt_traj_list =  remove_padding(final_unordered_traj.permute(1, 0, 2)[reorder], tgt_len)
-            tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
+            tgt_traj_list =  remove_padding(tgt_traj[1:].permute(1, 0, 2), tgt_len)
             return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
 
         return tgt_list
@@ -410,8 +414,7 @@ def diverse_beam_search_unit(                       #alpha
     beam_width = 5,
     traj: bool = True,
 ):
-    with torch.no_grad():
-        pdb.set_trace()                 ##
+    with torch.no_grad():               ##
         src = src.repeat((1, beam_width))
         # src = src.repeat_interleave(beam_width, dim=1)
         src_padding_mask = src_padding_mask.repeat((beam_width,1))
@@ -428,7 +431,7 @@ def diverse_beam_search_unit(                       #alpha
 
         memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
 
-        for i in tqdm(range(1,max_len), "diverse autoregressive translation", None):
+        for i in tqdm(range(0,max_len), "diverse autoregressive translation", None):
 
             tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                     .to(tgt.device, dtype=torch.bool))                      #tokens.
@@ -458,15 +461,15 @@ def diverse_beam_search_unit(                       #alpha
 
             tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))
 
-            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i+2, tgt_len)     #tNote to darsh
+            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i, tgt_len)     #tNote to darsh
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(-1)], dim=-1)
 
-        tgt_list =  remove_padding(tgt.permute(1, 0), tgt_len)
+        tgt_list =  remove_padding_and_EOS(tgt[1:].permute(1, 0), tgt_len)
 
         if traj:
             # final_unordered_traj = tgt_traj[:, batch_size:][:, last_prob_mask.reshape(-1)]
             # tgt_traj_list =  remove_padding(final_unordered_traj.permute(1, 0, 2)[reorder], tgt_len)
-            tgt_traj_list =  remove_padding(tgt_traj.permute(1, 0, 2), tgt_len)
+            tgt_traj_list =  remove_padding_and_EOS(tgt_traj[1:].permute(1, 0, 2), tgt_len)
             return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
 
         return tgt_list
