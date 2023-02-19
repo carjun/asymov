@@ -103,7 +103,9 @@ class KITMotionWordDataModule(BASEDataModule):
 class KITMotionWord(Dataset):
     dataname = "KIT Motion-Language Motion Word"
 
-    def __init__(self, datapath: str, mw_dataname: str, traj: bool, traj_dataname: str,
+    def __init__(self, datapath: str, mw_dataname: str, 
+                 traj: bool, traj_dataname: str, 
+                 ann_dataname: str,
                  splitpath: str,
                  vocab_size: int,
                 #  transforms: Transform,
@@ -171,13 +173,17 @@ class KITMotionWord(Dataset):
             traj_data = {}
             with open(datapath/traj_dataname, 'rb') as f:
                 trajectory_data = pickle.load(f)
+                
+        with open(datapath/ann_dataname, 'r') as f:
+            ann_data = json.load(f)["anns"]
         
         for i, keyid in enumerator:
 
-            anndata, success = load_annotation(keyid, datapath)
-            if not success:
-                logger.error(f"{keyid} has no annotations")
-                continue
+            text = ann_data[keyid]
+            # ann_data, success = load_annotation(keyid, datapath)
+            # if not success:
+            #     logger.error(f"{keyid} has no annotations")
+            #     continue
 
             # read smpl params
             # if load_amass_data:
@@ -215,7 +221,7 @@ class KITMotionWord(Dataset):
             # features = self.transforms.joints2jfeats(joints)
 
             mw_data[keyid] = motion_words
-            texts_data[keyid] = anndata
+            texts_data[keyid] = text
             durations[keyid] = duration
 
             if self.traj:
@@ -289,18 +295,18 @@ class KITMotionWord(Dataset):
         return f"{self.dataname} dataset: ({len(self)}, _, ..)"
 
 
-def load_annotation(keyid, datapath):
-    metapath = datapath / (keyid + "_meta.json")
-    metadata = json.load(metapath.open())
+# def load_annotation(keyid, datapath):
+#     metapath = datapath / (keyid + "_meta.json")
+#     metadata = json.load(metapath.open())
 
-    if metadata["nb_annotations"] == 0:
-        logger.error(f"{keyid} has no annotations")
-        return None, False
+#     if metadata["nb_annotations"] == 0:
+#         logger.error(f"{keyid} has no annotations")
+#         return None, False
 
-    annpath = datapath / (keyid + "_annotations.json")
-    anndata = json.load(annpath.open())
-    assert len(anndata) == metadata["nb_annotations"]
-    return anndata, True
+#     annpath = datapath / (keyid + "_annotations.json")
+#     ann_data = json.load(annpath.open())
+#     assert len(ann_data) == metadata["nb_annotations"]
+#     return ann_data, True
 
 
 # def load_mmm_keyid(keyid, datapath):
