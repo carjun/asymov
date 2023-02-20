@@ -391,12 +391,16 @@ def diverse_beam_search_auto(                       #alpha
         
         # tgt_len = tgt_len[batch_size:][last_prob_mask.reshape(-1)][reorder]
         # tgt_list=  remove_padding(final_unordered.T[reorder], tgt_len)
-        tgt_list =  remove_padding(tgt[1:].permute(1, 0), tgt_len)
+        tgt = tgt[1:]
+        tgt = tgt.T.reshape(beam_width, -1).T.reshape(-1, tgt.shape[0], beam_width).permute(0,2,1).reshape(-1, tgt.shape[0])
+        tgt_list =  remove_padding_and_EOS(tgt, tgt_len)
 
         if traj:
+            tgt_traj = tgt_traj[1:]
+            tgt_traj.permute(1,0,2).reshape(beam_width, -1, 3).permute(1,0,2).reshape(-1, traj.shape[0], beam_width, 3).permute(0, 2, 1, 3).reshape(-1, traj.shape[0], 3)
             # final_unordered_traj = tgt_traj[:, batch_size:][:, last_prob_mask.reshape(-1)]
             # tgt_traj_list =  remove_padding(final_unordered_traj.permute(1, 0, 2)[reorder], tgt_len)
-            tgt_traj_list =  remove_padding(tgt_traj[1:].permute(1, 0, 2), tgt_len)
+            tgt_traj_list =  remove_padding_and_EOS(tgt_traj, tgt_len)
             return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
 
         return tgt_list
