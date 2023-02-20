@@ -13,6 +13,7 @@ traj: ${traj}
 datapath: ${path.datasets}/kit
 mw_dataname: ${.name}.pkl
 traj_dataname: fke_traj_data.pkl
+ann_dataname: anns.json
 splitpath: ${path.datasets}/kit-splits
 
 # Text

@@ -69,8 +69,11 @@ class KITMotionWordMTDataModule(BASEDataModule):
         #                     self.terminal_transform] # Add BOS/EOS and create tensor
         
         self.text_vocab_size = self.text_vocab.__len__()
+        print(f"text_vocab_size set to : {self.text_vocab_size}")
         self.mw_vocab_size = num_mw_clusters + len(self.mw_special_symbols)
-        self.max_frames = max(self.train_dataset._num_frames_in_sequence.values()) + 2 # +2 for BOS/EOS
+        print(f"mw_vocab_size set to : {self.mw_vocab_size}")
+        self.max_frames = max(self.train_dataset.durations.values())
+        print(f"max_frames set to : {self.max_frames}")
         
         super().__init__(batch_size=batch_size,
                          num_workers=num_workers,
@@ -103,7 +106,9 @@ class KITMotionWordDataModule(BASEDataModule):
 class KITMotionWord(Dataset):
     dataname = "KIT Motion-Language Motion Word"
 
-    def __init__(self, datapath: str, mw_dataname: str, traj: bool, traj_dataname: str,
+    def __init__(self, datapath: str, mw_dataname: str, 
+                 traj: bool, traj_dataname: str, 
+                 ann_dataname: str,
                  splitpath: str,
                  vocab_size: int,
                 #  transforms: Transform,
@@ -171,13 +176,17 @@ class KITMotionWord(Dataset):
             traj_data = {}
             with open(datapath/traj_dataname, 'rb') as f:
                 trajectory_data = pickle.load(f)
+                
+        with open(datapath/ann_dataname, 'r') as f:
+            ann_data = json.load(f)["anns"]
         
         for i, keyid in enumerator:
 
-            anndata, success = load_annotation(keyid, datapath)
-            if not success:
-                logger.error(f"{keyid} has no annotations")
-                continue
+            text = ann_data[keyid]
+            # ann_data, success = load_annotation(keyid, datapath)
+            # if not success:
+            #     logger.error(f"{keyid} has no annotations")
+            #     continue
 
             # read smpl params
             # if load_amass_data:
@@ -215,7 +224,7 @@ class KITMotionWord(Dataset):
             # features = self.transforms.joints2jfeats(joints)
 
             mw_data[keyid] = motion_words
-            texts_data[keyid] = anndata
+            texts_data[keyid] = text
             durations[keyid] = duration
 
             if self.traj:
@@ -239,7 +248,7 @@ class KITMotionWord(Dataset):
 
         self.keyids = list(mw_data.keys())
         self._split_index = list(self.keyids)
-        self._num_frames_in_sequence = durations
+        self.durations = durations
         self.vocab_size = vocab_size
 
     def _load_traj(self, keyid):#, frame_ix=None):
@@ -266,7 +275,7 @@ class KITMotionWord(Dataset):
         return text
 
     def load_keyid(self, keyid):
-        num_frames = self._num_frames_in_sequence[keyid]
+        num_frames = self.durations[keyid]
         # frame_ix = self.sampler(num_frames)
 
         motion_words = self._load_motion_words(keyid)#, frame_ix)
@@ -289,18 +298,18 @@ class KITMotionWord(Dataset):
         return f"{self.dataname} dataset: ({len(self)}, _, ..)"
 
 
-def load_annotation(keyid, datapath):
-    metapath = datapath / (keyid + "_meta.json")
-    metadata = json.load(metapath.open())
+# def load_annotation(keyid, datapath):
+#     metapath = datapath / (keyid + "_meta.json")
+#     metadata = json.load(metapath.open())
 
-    if metadata["nb_annotations"] == 0:
-        logger.error(f"{keyid} has no annotations")
-        return None, False
+#     if metadata["nb_annotations"] == 0:
+#         logger.error(f"{keyid} has no annotations")
+#         return None, False
 
-    annpath = datapath / (keyid + "_annotations.json")
-    anndata = json.load(annpath.open())
-    assert len(anndata) == metadata["nb_annotations"]
-    return anndata, True
+#     annpath = datapath / (keyid + "_annotations.json")
+#     ann_data = json.load(annpath.open())
+#     assert len(ann_data) == metadata["nb_annotations"]
+#     return ann_data, True
 
 
 # def load_mmm_keyid(keyid, datapath):
