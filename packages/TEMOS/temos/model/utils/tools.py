@@ -161,8 +161,8 @@ def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: in
     if traj:
         tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask, src_padding_mask, end_symbol, 
                                                               max_len, batch_size, beam_width)
-        return tgt_list, tgt_traj_list  # List[Tensor[Frames]]; List_len-> batch*beam
-                                        #b:batch_element,B:beam; b1B1,b2B1,b1B2,b2B2.... 
+        return tgt_list, tgt_traj_list  # List[Tensor[Frames]]; List_len-> beam*batch
+                                        #b:batch_element,B:beam; b1B1,b1B2,b1B3,b1B4,b1B5,b2B1,b2B2,b2B3... 
     else:
         tgt_list = decode_dict[decoding_scheme](model, src, tgt, src_mask,src_padding_mask, end_symbol,
                                         max_len, batch_size, beam_width, traj=False)

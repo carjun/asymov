@@ -370,10 +370,16 @@ def diverse_beam_search_auto(                       #alpha
             for i in range(batch_size, next_chars.shape[0], batch_size):
                 mask_num = (next_chars[i:i+batch_size][:, None] == next_chars[next_token_mask].reshape(-1,batch_size).T.unsqueeze(-1)).any(dim=1).long()
                 unique_token_idx = torch.argmin(mask_num, axis=1)
+                
+                assert len(unique_token_idx) == batch_size
+                
                 next_token_mask[torch.arange(i, i+batch_size), unique_token_idx] = True
 
             next_tokens = next_chars[next_token_mask]#.reshape(-1,batch_size).T.reshape(-1)
             next_tokens_prob = probabilities[next_token_mask]
+
+            assert len(next_tokens) == batch_size*beam_width, f'''Decoded T(th) tokens not equal to batch*beam size, required{batch_size*beam_width}
+                                                                                                                     current shape: {len(next_tokens)}'''
 
             tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))
 
@@ -391,9 +397,17 @@ def diverse_beam_search_auto(                       #alpha
         
         # tgt_len = tgt_len[batch_size:][last_prob_mask.reshape(-1)][reorder]
         # tgt_list=  remove_padding(final_unordered.T[reorder], tgt_len)
+        assert tgt.shape[0] == max_len+1, f"At this point, frames should be <start> frame + max_decoded: {1} + {max_len}"
+
         tgt = tgt[1:]
         tgt = tgt.T.reshape(beam_width, -1).T.reshape(-1, tgt.shape[0], beam_width).permute(0,2,1).reshape(-1, tgt.shape[0])
         tgt_list =  remove_padding_and_EOS(tgt, tgt_len)
+
+        assert torch.all(torch.tensor([len(x) for x in tgt_list]) == tgt_len), f'''Len of each tensor does not match tgt_len after BOS, pad, 
+                            EOS removal for {torch.nonzero(torch.logical_not(torch.tensor([len(x) for x in tgt_list]) == tgt_len)).squeeze()}'''
+
+        assert len(tgt_list) == beam_width*batch_size, f'''tgt_list size not equal to beam*batch, required: {beam_width*batch_size}
+                                                                                                  current shape: {len(tgt_list)}'''
 
         if traj:
             tgt_traj = tgt_traj[1:]
@@ -401,6 +415,13 @@ def diverse_beam_search_auto(                       #alpha
             # final_unordered_traj = tgt_traj[:, batch_size:][:, last_prob_mask.reshape(-1)]
             # tgt_traj_list =  remove_padding(final_unordered_traj.permute(1, 0, 2)[reorder], tgt_len)
             tgt_traj_list =  remove_padding_and_EOS(tgt_traj, tgt_len)
+
+            assert torch.all(torch.tensor([len(x) for x in tgt_traj_list]) == tgt_len), f'''Len of each tensor does not match tgt_len after BOS, pad, 
+                            EOS removal for {torch.nonzero(torch.logical_not(torch.tensor([len(x) for x in tgt_traj_list]) == tgt_len)).squeeze()}'''
+
+            assert len(tgt_traj_list) == beam_width*batch_size, f'''tgt_list size not equal to beam*batch, required: {beam_width*batch_size}
+                                                                                                           current shape: {len(tgt_traj_list)}'''
+
             return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
 
         return tgt_list
