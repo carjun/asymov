@@ -397,7 +397,7 @@ def diverse_beam_search_auto(                       #alpha
 
         if traj:
             tgt_traj = tgt_traj[1:]
-            tgt_traj.permute(1,0,2).reshape(beam_width, -1, 3).permute(1,0,2).reshape(-1, traj.shape[0], beam_width, 3).permute(0, 2, 1, 3).reshape(-1, traj.shape[0], 3)
+            tgt_traj = tgt_traj.permute(1,0,2).reshape(beam_width, -1, 3).permute(1,0,2).reshape(-1, tgt_traj.shape[0], beam_width, 3).permute(0, 2, 1, 3).reshape(-1, tgt_traj.shape[0], 3)
             # final_unordered_traj = tgt_traj[:, batch_size:][:, last_prob_mask.reshape(-1)]
             # tgt_traj_list =  remove_padding(final_unordered_traj.permute(1, 0, 2)[reorder], tgt_len)
             tgt_traj_list =  remove_padding_and_EOS(tgt_traj, tgt_len)
