@@ -32,6 +32,30 @@ def variance(x, T, dim):
     out = out.sum(dim)
     return out / (T - 1)
 
+def get_contiguous_cluster_seqs(seq_names: List[str], cluster_seqs: List[Tensor]):
+    # pdb.set_trace()
+    contiguous_frame2cluster_mapping = {"name":[], "idx":[], "cluster":[], "length":[]}
+    for name, cluster_seq in zip(seq_names, cluster_seqs):
+        prev=-1
+        running_idx=0
+        current_len = 0
+        cluster_seq = np.append(cluster_seq, [-1])
+        for cc in cluster_seq:
+            if cc == prev:
+                current_len += 1
+            else:
+                contiguous_frame2cluster_mapping["name"].append(name)
+                contiguous_frame2cluster_mapping["idx"].append(int(running_idx))
+                contiguous_frame2cluster_mapping["cluster"].append(prev)
+                contiguous_frame2cluster_mapping["length"].append(current_len)
+                running_idx += 1
+                current_len = 1
+            prev = cc
+    contiguous_frame2cluster_mapping = pd.DataFrame.from_dict(contiguous_frame2cluster_mapping)
+    contiguous_frame2cluster_mapping = contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping["idx"]>0]
+    contiguous_cluster_seqs = [contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping['name']==name][['cluster', 'length']].reset_index(drop=True) for name in seq_names]
+    return contiguous_cluster_seqs
+
 class Perplexity(MeanMetric):
     '''
     Calculates perplexity from logits and target.
@@ -150,55 +174,55 @@ class ReconsMetrics(Metric):
                 }
 
     def update(self, seq_names: List[str], cluster_seqs: List[Tensor], traj: List[Tensor] = None):
+        '''
+        Args:
+            seq_names: name of sequences in batch.
+            cluster_seqs: cluster sequences for each beam of each sequence in the batch.
+                expected order - [batch1beam1, batch2beam2, ..., batch2beam1, batch2beam2, ...]
+            traj: predicted trajectory for each beam of each sequence in the batch.
+                expected order - same as cluster_seqs
+        '''
         if self.traj:
             assert traj is not None
 
-        seq_names_with_beams = []
-        for i in range(self.beam_width):
-            seq_names_with_beams.extend([f"{seq_name}_{i}" for seq_name in seq_names])
         assert len(seq_names)==(len(cluster_seqs)/self.beam_width)
-        self.count_seq += len(seq_names)
+        
+        num_seq = len(seq_names)
+        self.count_seq += num_seq
         self.count += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
-        good_idx = [i for i,cluster_seq in enumerate(cluster_seqs) \
-            if cluster_seq.max()<self.num_clusters and cluster_seq.min()>=0]
         
-        # now that we have beams, removing bad ones will be confusing while aggregation
-        assert good_idx == list(range(self.beam_width*self.count_seq))
+        #beamed cluster seqs : List[List[beams]]
+        beamed_cluster_seqs = [cluster_seqs[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
         
-        # get good sequences (no <unk> or <pad>)
-        # seq_names = [seq_names[i] for i in good_idx]
-        # cluster_seqs = [cluster_seqs[i] for i in good_idx]
+        # get good sequences (no <bos>, <unk> or <pad>)
+        good_beams_per_seq = [[j for j in range(self.beam_width) if beam_seqs[j].max()<self.num_clusters and beam_seqs[j].min()>=0] 
+                              for beam_seqs in beamed_cluster_seqs]
+        good_seq_idx =  [i for i, good_beams in enumerate(good_beams_per_seq) if len(good_beams)>0]
+        
+        # update good stuff
+        seq_names = [seq_names[i] for i in good_seq_idx]
+        beam_count = [len(good_beams) for good_beams in good_beams_per_seq]
+        assert len(seq_names)==len(beam_count)
+        seq_names_with_beams = [f"{seq_name}_{i}" for seq_name, num_beams in zip(seq_names, beam_count) 
+                                for i in range(num_beams)]
+        beamed_cluster_seqs = [[beamed_cluster_seqs[i][j].cpu().numpy() for j in good_beams_per_seq[i]] 
+                               for i in good_seq_idx]
+        cluster_seqs = sum(beamed_cluster_seqs, [])
+
         self.count_good_seq += len(seq_names)
         self.count_good += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
 
+        # pdb.set_trace()
+        # get contiguous cluster sequences (grouping contiguous identical clusters)
+        if ('naive_no_rep' in self.recons_types) or ('naive' in self.recons_types):
+            contiguous_cluster_seqs = get_contiguous_cluster_seqs(seq_names_with_beams, cluster_seqs)
+        assert len(contiguous_cluster_seqs)==len(cluster_seqs)
+        
         # get GT
         gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]
         gt = [change_fps(keypoint, self.gt_fps, self.recons_fps) for keypoint in gt]
-        gt_with_beams = gt*self.beam_width
-
-        # get contiguous cluster sequences (grouping contiguous identical clusters)
-        cluster_seqs = [cluster_seq.cpu().numpy() for cluster_seq in cluster_seqs]
-        if ('naive_no_rep' in self.recons_types) or ('naive' in self.recons_types):
-            contiguous_frame2cluster_mapping = {"name":[], "idx":[], "cluster":[], "length":[]}
-            for name, cluster_seq in zip(seq_names_with_beams, cluster_seqs):
-                prev=-1
-                running_idx=0
-                current_len = 0
-                cluster_seq = np.append(cluster_seq, [-1])
-                for cc in cluster_seq:
-                    if cc == prev:
-                        current_len += 1
-                    else:
-                        contiguous_frame2cluster_mapping["name"].append(name)
-                        contiguous_frame2cluster_mapping["idx"].append(int(running_idx))
-                        contiguous_frame2cluster_mapping["cluster"].append(prev)
-                        contiguous_frame2cluster_mapping["length"].append(current_len)
-                        running_idx += 1
-                        current_len = 1
-                    prev = cc
-            contiguous_frame2cluster_mapping = pd.DataFrame.from_dict(contiguous_frame2cluster_mapping)
-            contiguous_frame2cluster_mapping = contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping["idx"]>0]
-            contiguous_cluster_seqs = [contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping['name']==name][['cluster', 'length']].reset_index(drop=True) for name in seq_names_with_beams]
+        gt_with_beams = [keypoint for keypoint, num_beams in zip(gt, beam_count) for i in range(num_beams)]
+        assert len(gt_with_beams)==len(cluster_seqs)
 
         # reconstruct from predicted clusters using different strategies
         for recons_type in self.recons_types:
@@ -251,40 +275,40 @@ class ReconsMetrics(Metric):
                 # traj_ref = [jts[..., 0, [0, 2]] for jts in jts_ref]
 
                 # AVE and APE
-                for seq in range(self.count_good_seq): #aggregate over beams and update
-                    APE_root_per_beam =  torch.stack([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(seq, len(recons), self.count_good_seq)])
+                for start_idx, end_idx in zip(np.cumsum([0]+beam_count[:-1]), np.cumsum(beam_count)): #aggregate over beams and update
+                    APE_root_per_beam =  torch.stack([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])
                     APE_root = APE_root_per_beam.mean(0)
                     getattr(self, f"APE_root_{recons_type}_{filter}").__iadd__(APE_root)
-                    APE_traj_per_beam = torch.stack([l2_norm(traj_text[i], traj_ref[i], dim=1).sum() for i in range(seq, len(recons), self.count_good_seq)])
+                    APE_traj_per_beam = torch.stack([l2_norm(traj_text[i], traj_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])
                     APE_traj = APE_traj_per_beam.mean(0)
                     getattr(self, f"APE_traj_{recons_type}_{filter}").__iadd__(APE_traj)
-                    APE_pose_per_beam = torch.stack([l2_norm(poses_text[i], poses_ref[i], dim=2).sum(0) for i in range(seq, len(recons), self.count_good_seq)])
+                    APE_pose_per_beam = torch.stack([l2_norm(poses_text[i], poses_ref[i], dim=2).sum(0) for i in range(start_idx, end_idx)])
                     APE_pose = APE_pose_per_beam.mean(0)
                     getattr(self, f"APE_pose_{recons_type}_{filter}").__iadd__(APE_pose)
-                    APE_joints_per_beam = torch.stack([l2_norm(jts_text[i], jts_ref[i], dim=2).sum(0) for i in range(seq, len(recons), self.count_good_seq)])
+                    APE_joints_per_beam = torch.stack([l2_norm(jts_text[i], jts_ref[i], dim=2).sum(0) for i in range(start_idx, end_idx)])
                     APE_joints = APE_joints_per_beam.mean(0)
                     getattr(self, f"APE_joints_{recons_type}_{filter}").__iadd__(APE_joints)
 
-                    root_sigma_text = [variance(root_text[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
-                    root_sigma_ref = [variance(root_ref[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    root_sigma_text = [variance(root_text[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
+                    root_sigma_ref = [variance(root_ref[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     AVE_root_per_beam = torch.stack([l2_norm(i, j, dim=0) for i,j in zip(root_sigma_text, root_sigma_ref)])
                     AVE_root = AVE_root_per_beam.mean(0)
                     getattr(self, f"AVE_root_{recons_type}_{filter}").__iadd__(AVE_root)
 
-                    traj_sigma_text = [variance(traj_text[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
-                    traj_sigma_ref = [variance(traj_ref[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    traj_sigma_text = [variance(traj_text[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
+                    traj_sigma_ref = [variance(traj_ref[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     AVE_traj_per_beam = torch.stack([l2_norm(i, j, dim=0) for i,j in zip(traj_sigma_text, traj_sigma_ref)])
                     AVE_traj = AVE_traj_per_beam.mean(0)
                     getattr(self, f"AVE_traj_{recons_type}_{filter}").__iadd__(AVE_traj)
 
-                    poses_sigma_text = [variance(poses_text[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
-                    poses_sigma_ref = [variance(poses_ref[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    poses_sigma_text = [variance(poses_text[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
+                    poses_sigma_ref = [variance(poses_ref[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     AVE_pose_per_beam = torch.stack([l2_norm(i, j, dim=1) for i,j in zip(poses_sigma_text, poses_sigma_ref)])
                     AVE_pose = AVE_pose_per_beam.mean(0)
                     getattr(self, f"AVE_pose_{recons_type}_{filter}").__iadd__(AVE_pose)
 
-                    jts_sigma_text = [variance(jts_text[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
-                    jts_sigma_ref = [variance(jts_ref[i], lengths[i], dim=0) for i in range(seq, len(recons), self.count_good_seq)]
+                    jts_sigma_text = [variance(jts_text[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
+                    jts_sigma_ref = [variance(jts_ref[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     AVE_joints_per_beam = torch.stack([l2_norm(i, j, dim=1) for i,j in zip(jts_sigma_text, jts_sigma_ref)])
                     AVE_joints = AVE_joints_per_beam.mean(0)
                     getattr(self, f"AVE_joints_{recons_type}_{filter}").__iadd__(AVE_joints)
