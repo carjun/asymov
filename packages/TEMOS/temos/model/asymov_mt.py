@@ -194,22 +194,20 @@ class AsymovMT(BaseModel):
                 if self.hparams.traj:
                     pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)       #passed none so it'll pick the
                     pred_traj = [i.detach() for i in pred_traj]                                                                                                     #default values "diverse" and 5
-                    # Remove traj corresponding to terminal tokens BOS/EOS                  
-                    pred_traj = [traj[1:-1] if mw[-1]==self.EOS_IDX else traj[1:] for traj, mw in zip(pred_traj, pred_mw_tokens)]
                 else:
                     pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)
-                pred_mw_sents = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens]
-                # Remove terminal tokens BOS/EOS, shift for special symbols
-                pred_mw_clusters = [(mw[1:-1] if mw[-1]==self.EOS_IDX else mw[1:]) - self.num_special_symbols for mw in pred_mw_tokens]
-                
                 # pred_mw_tokens2 = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames)
                 # for mw_tokens, mw_tokens2 in zip(pred_mw_tokens, pred_mw_tokens2):
                 #     assert torch.equal(mw_tokens, mw_tokens2)
                 # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
                 
                 #TODO: aggregate BLEU over beams
+                # add EOS/BOS as they were removed during translation
+                pred_mw_sents = [" ".join(map(str, [self.BOS_IDX] + mw.int().tolist() + [self.EOS_IDX])) for mw in pred_mw_tokens]
                 self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
                 
+                # shift for special symbols (EOS/BOS and padding already removed)
+                pred_mw_clusters = [mw - self.num_special_symbols for mw in pred_mw_tokens]
                 if self.hparams.traj:
                     self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters, pred_traj)
                 else:
