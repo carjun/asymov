@@ -191,8 +191,9 @@ class ReconsMetrics(Metric):
         self.count_seq += num_seq
         self.count += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
         
-        #beamed cluster seqs : List[List[beams]]
+        #beamed cluster and traj seqs : List[List[beams]]
         beamed_cluster_seqs = [cluster_seqs[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
+        beamed_traj = [traj[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
         
         # get good sequences (no <bos>, <unk> or <pad>)
         good_beams_per_seq = [[j for j in range(self.beam_width) if beam_seqs[j].max()<self.num_clusters and beam_seqs[j].min()>=0] 
@@ -207,7 +208,10 @@ class ReconsMetrics(Metric):
                                 for i in range(num_beams)]
         beamed_cluster_seqs = [[beamed_cluster_seqs[i][j].cpu().numpy() for j in good_beams_per_seq[i]] 
                                for i in good_seq_idx]
+        beamed_traj = [[beamed_traj[i][j].cpu().numpy() for j in good_beams_per_seq[i]] 
+                       for i in good_seq_idx]
         cluster_seqs = sum(beamed_cluster_seqs, [])
+        traj = sum(beamed_traj, [])
 
         self.count_good_seq += len(seq_names)
         self.count_good += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
