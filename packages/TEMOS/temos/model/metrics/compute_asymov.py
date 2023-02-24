@@ -118,7 +118,7 @@ class ReconsMetrics(Metric):
         self.AVE_metrics=[]
         for recons_type in self.recons_types:
             for filter in self.filters:
-                # APE
+                # APE (beam avg)
                 self.add_state(f"APE_root_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"APE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"APE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
@@ -126,8 +126,16 @@ class ReconsMetrics(Metric):
                 self.APE_metrics.extend([f"APE_{i}_{recons_type}_{filter}" for i in ["root", "traj", 
                                                                                      "pose", 
                                                                                      "joints"]])
+                # APE (beam min)
+                self.add_state(f"min_APE_root_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.add_state(f"min_APE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.add_state(f"min_APE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
+                self.add_state(f"min_APE_joints_{recons_type}_{filter}", default=torch.zeros(21), dist_reduce_fx="sum")
+                self.APE_metrics.extend([f"min_APE_{i}_{recons_type}_{filter}" for i in ["root", "traj", 
+                                                                                     "pose", 
+                                                                                     "joints"]])
 
-                # AVE
+                # AVE (beam avg)
                 self.add_state(f"AVE_root_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"AVE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"AVE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
@@ -135,10 +143,21 @@ class ReconsMetrics(Metric):
                 self.AVE_metrics.extend([f"AVE_{i}_{recons_type}_{filter}" for i in ["root", "traj", 
                                                                                      "pose", 
                                                                                      "joints"]])
+                # AVE (beam min)
+                self.add_state(f"min_AVE_root_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.add_state(f"min_AVE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.add_state(f"min_AVE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
+                self.add_state(f"min_AVE_joints_{recons_type}_{filter}", default=torch.zeros(21), dist_reduce_fx="sum")
+                self.AVE_metrics.extend([f"min_AVE_{i}_{recons_type}_{filter}" for i in ["root", "traj", 
+                                                                                     "pose", 
+                                                                                     "joints"]])
                 
-                # MPJPE
+                # MPJPE (beam avg)
                 self.add_state(f"MPJPE_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.MPJPE_metrics.append(f"MPJPE_{recons_type}_{filter}")
+                # MPJPE (beam min)
+                self.add_state(f"min_MPJPE_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
+                self.MPJPE_metrics.append(f"min_MPJPE_{recons_type}_{filter}")
 
         # All metric
         self.metrics = self.APE_metrics + self.AVE_metrics + self.MPJPE_metrics
@@ -152,18 +171,30 @@ class ReconsMetrics(Metric):
 
         for recons_type in self.recons_types:
             for filter in self.filters:
-                # Compute average of APEs
+                # Compute average of APEs (beam avg)
                 APE_metrics[f"APE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"APE_pose_{recons_type}_{filter}").mean() / count
                 APE_metrics[f"APE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"APE_joints_{recons_type}_{filter}").mean() / count
-                # Compute average of AVEs
+                # Compute average of APEs (beam min)
+                APE_metrics[f"min_APE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"min_APE_pose_{recons_type}_{filter}").mean() / count
+                APE_metrics[f"min_APE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"min_APE_joints_{recons_type}_{filter}").mean() / count
+                
+                # Compute average of AVEs (beam avg)
                 AVE_metrics[f"AVE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"AVE_pose_{recons_type}_{filter}").mean() / count_seq
                 AVE_metrics[f"AVE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"AVE_joints_{recons_type}_{filter}").mean() / count_seq
+                # Compute average of AVEs (beam min)
+                AVE_metrics[f"min_AVE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"min_AVE_pose_{recons_type}_{filter}").mean() / count_seq
+                AVE_metrics[f"min_AVE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"min_AVE_joints_{recons_type}_{filter}").mean() / count_seq
 
-                # Remove arrays
+                # Remove arrays (beam avg)
                 APE_metrics.pop(f"APE_pose_{recons_type}_{filter}")
                 APE_metrics.pop(f"APE_joints_{recons_type}_{filter}")
                 AVE_metrics.pop(f"AVE_pose_{recons_type}_{filter}")
                 AVE_metrics.pop(f"AVE_joints_{recons_type}_{filter}")
+                # Remove arrays (beam min)
+                APE_metrics.pop(f"min_APE_pose_{recons_type}_{filter}")
+                APE_metrics.pop(f"min_APE_joints_{recons_type}_{filter}")
+                AVE_metrics.pop(f"min_AVE_pose_{recons_type}_{filter}")
+                AVE_metrics.pop(f"min_AVE_joints_{recons_type}_{filter}")
 
         # Compute average of MPJPEs
         MPJPE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.MPJPE_metrics}
@@ -198,7 +229,7 @@ class ReconsMetrics(Metric):
         # get good sequences (no <bos>, <unk> or <pad>)
         good_beams_per_seq = [[j for j in range(self.beam_width) if beam_seqs[j].max()<self.num_clusters and beam_seqs[j].min()>=0] 
                               for beam_seqs in beamed_cluster_seqs]
-        good_seq_idx =  [i for i, good_beams in enumerate(good_beams_per_seq) if len(good_beams)>0]
+        good_seq_idx = [i for i, good_beams in enumerate(good_beams_per_seq) if len(good_beams)>0]
         
         # update good stuff
         seq_names = [seq_names[i] for i in good_seq_idx]
@@ -280,42 +311,63 @@ class ReconsMetrics(Metric):
 
                 # AVE and APE
                 for start_idx, end_idx in zip(np.cumsum([0]+beam_count[:-1]), np.cumsum(beam_count)): #aggregate over beams and update
+                    # APE
                     APE_root_per_beam =  torch.stack([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])
-                    APE_root = APE_root_per_beam.mean(0)
-                    getattr(self, f"APE_root_{recons_type}_{filter}").__iadd__(APE_root)
+                    mean_APE_root = APE_root_per_beam.mean(0)
+                    getattr(self, f"APE_root_{recons_type}_{filter}").__iadd__(mean_APE_root)
+                    min_APE_root = APE_root_per_beam.min(0)[0]
+                    getattr(self, f"min_APE_root_{recons_type}_{filter}").__iadd__(min_APE_root)
+                    
                     APE_traj_per_beam = torch.stack([l2_norm(traj_text[i], traj_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])
-                    APE_traj = APE_traj_per_beam.mean(0)
-                    getattr(self, f"APE_traj_{recons_type}_{filter}").__iadd__(APE_traj)
+                    mean_APE_traj = APE_traj_per_beam.mean(0)
+                    getattr(self, f"APE_traj_{recons_type}_{filter}").__iadd__(mean_APE_traj)
+                    min_APE_traj = APE_traj_per_beam.min(0)[0]
+                    getattr(self, f"min_APE_traj_{recons_type}_{filter}").__iadd__(min_APE_traj)
+                    
                     APE_pose_per_beam = torch.stack([l2_norm(poses_text[i], poses_ref[i], dim=2).sum(0) for i in range(start_idx, end_idx)])
-                    APE_pose = APE_pose_per_beam.mean(0)
-                    getattr(self, f"APE_pose_{recons_type}_{filter}").__iadd__(APE_pose)
+                    mean_APE_pose = APE_pose_per_beam.mean(0)
+                    getattr(self, f"APE_pose_{recons_type}_{filter}").__iadd__(mean_APE_pose)
+                    min_APE_pose = APE_pose_per_beam.min(0)[0]
+                    getattr(self, f"min_APE_pose_{recons_type}_{filter}").__iadd__(min_APE_pose)
+                    
                     APE_joints_per_beam = torch.stack([l2_norm(jts_text[i], jts_ref[i], dim=2).sum(0) for i in range(start_idx, end_idx)])
-                    APE_joints = APE_joints_per_beam.mean(0)
-                    getattr(self, f"APE_joints_{recons_type}_{filter}").__iadd__(APE_joints)
+                    mean_APE_joints = APE_joints_per_beam.mean(0)
+                    getattr(self, f"APE_joints_{recons_type}_{filter}").__iadd__(mean_APE_joints)
+                    min_APE_joints = APE_joints_per_beam.min(0)[0]
+                    getattr(self, f"min_APE_joints_{recons_type}_{filter}").__iadd__(min_APE_joints)
 
+                    # AVE
                     root_sigma_text = [variance(root_text[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     root_sigma_ref = [variance(root_ref[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     AVE_root_per_beam = torch.stack([l2_norm(i, j, dim=0) for i,j in zip(root_sigma_text, root_sigma_ref)])
-                    AVE_root = AVE_root_per_beam.mean(0)
-                    getattr(self, f"AVE_root_{recons_type}_{filter}").__iadd__(AVE_root)
+                    mean_AVE_root = AVE_root_per_beam.mean(0)
+                    getattr(self, f"AVE_root_{recons_type}_{filter}").__iadd__(mean_AVE_root)
+                    min_AVE_root = AVE_root_per_beam.min(0)[0]
+                    getattr(self, f"min_AVE_root_{recons_type}_{filter}").__iadd__(min_AVE_root)
 
                     traj_sigma_text = [variance(traj_text[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     traj_sigma_ref = [variance(traj_ref[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     AVE_traj_per_beam = torch.stack([l2_norm(i, j, dim=0) for i,j in zip(traj_sigma_text, traj_sigma_ref)])
-                    AVE_traj = AVE_traj_per_beam.mean(0)
-                    getattr(self, f"AVE_traj_{recons_type}_{filter}").__iadd__(AVE_traj)
+                    mean_AVE_traj = AVE_traj_per_beam.mean(0)
+                    getattr(self, f"AVE_traj_{recons_type}_{filter}").__iadd__(mean_AVE_traj)
+                    min_AVE_traj = AVE_traj_per_beam.min(0)[0]
+                    getattr(self, f"min_AVE_traj_{recons_type}_{filter}").__iadd__(min_AVE_traj)
 
                     poses_sigma_text = [variance(poses_text[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     poses_sigma_ref = [variance(poses_ref[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     AVE_pose_per_beam = torch.stack([l2_norm(i, j, dim=1) for i,j in zip(poses_sigma_text, poses_sigma_ref)])
-                    AVE_pose = AVE_pose_per_beam.mean(0)
-                    getattr(self, f"AVE_pose_{recons_type}_{filter}").__iadd__(AVE_pose)
+                    mean_AVE_pose = AVE_pose_per_beam.mean(0)
+                    getattr(self, f"AVE_pose_{recons_type}_{filter}").__iadd__(mean_AVE_pose)
+                    min_AVE_pose = AVE_pose_per_beam.min(0)[0]
+                    getattr(self, f"min_AVE_pose_{recons_type}_{filter}").__iadd__(min_AVE_pose)
 
                     jts_sigma_text = [variance(jts_text[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     jts_sigma_ref = [variance(jts_ref[i], lengths[i], dim=0) for i in range(start_idx, end_idx)]
                     AVE_joints_per_beam = torch.stack([l2_norm(i, j, dim=1) for i,j in zip(jts_sigma_text, jts_sigma_ref)])
-                    AVE_joints = AVE_joints_per_beam.mean(0)
-                    getattr(self, f"AVE_joints_{recons_type}_{filter}").__iadd__(AVE_joints)
+                    mean_AVE_joints = AVE_joints_per_beam.mean(0)
+                    getattr(self, f"AVE_joints_{recons_type}_{filter}").__iadd__(mean_AVE_joints)
+                    min_AVE_joints = AVE_joints_per_beam.min(0)[0]
+                    getattr(self, f"min_AVE_joints_{recons_type}_{filter}").__iadd__(min_AVE_joints)
                     
     def transform(self, joints: Tensor, lengths):
         features = self.rifke(joints)
