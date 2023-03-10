@@ -354,8 +354,8 @@ def diverse_beam_search_auto(                       #alpha
 
             tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                     .to(tgt.device, dtype=torch.bool))                      #tokens.
-            out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
             if traj:
+                out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
                 next_root = model.traj_generator(out[-1]) #[Batch Size, 3]
                 tgt_traj = torch.cat([tgt_traj, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
             else:
@@ -463,17 +463,17 @@ def diverse_beam_search_unit(                       #alpha
 
             tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                     .to(tgt.device, dtype=torch.bool))                      #tokens.
-            out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
             if traj:
+                out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
                 next_root = model.traj_generator(out[-1]) #[Batch Size, 3]
                 tgt_traj = torch.cat([tgt_traj, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
             else:
                 out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask)  # [Frames, Batch Size, *]
 
             logits = model.generator(out[-1])
-            next_probabilities = logits#[-1, :]
+            # next_probabilities = logits#[-1, :]
 
-            probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
+            probabilities, next_chars = logits.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
 
             next_token_mask = next_chars.new_zeros(next_chars.shape, dtype=torch.bool)
             next_token_mask[0, 0] = True             #first beam decoded acc to highest prob (normal beam search)
