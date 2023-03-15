@@ -86,7 +86,7 @@ def train(cfg: DictConfig) -> None:
 
     #TODO: instantiate using hydra
     logger.info("Loading trainer")
-    trainer = pl.Trainer(
+    trainer = pl.Trainer(                                       # ~80 MB
         **OmegaConf.to_container(cfg.trainer, resolve=True),
         logger=instantiate_logger(cfg),
         callbacks=callbacks,
@@ -99,7 +99,7 @@ def train(cfg: DictConfig) -> None:
     logger.info("Fitting the model..")
     if cfg.resume_ckpt_path is not None :
         logger.info(f'Resuming training from checkpoint {cfg.resume_ckpt_path}')
-    trainer.fit(model, datamodule=data_module, ckpt_path=cfg.resume_ckpt_path)
+    trainer.fit(model, datamodule=data_module, ckpt_path=cfg.resume_ckpt_path)          # ~600 MB
     logger.info("Fitting done")
 
     logger.info(f"Training done. The outputs of this experiment are stored in:\n{working_dir}")

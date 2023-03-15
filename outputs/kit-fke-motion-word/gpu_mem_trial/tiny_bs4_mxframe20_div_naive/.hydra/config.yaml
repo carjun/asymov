@@ -1,0 +1,203 @@
+data:
+  cluster_data: ${cluster_data}
+  name: kit-${.cluster_data}-motion-word
+  _target_: temos.data.kit_motion_word.KITMotionWordMTDataModule
+  special_symbols:
+  - <pad>
+  - <bos>
+  - <eos>
+  - <unk>
+  num_mw_clusters: ${num_mw_clusters}
+  traj: ${traj}
+  datapath: ${path.datasets}/kit
+  mw_dataname: ${.name}.pkl
+  traj_dataname: fke_traj_data.pkl
+  ann_dataname: anns.json
+  splitpath: ${path.datasets}/kit-splits-tiny
+  pick_one_text: true
+  batch_size: ${machine.batch_size}
+  num_workers: ${machine.num_workers}
+  vocab_size: ${num_mw_clusters}
+  framerate: 12.5
+  sampler: ${sampler}
+  tiny: false
+  progress_bar: true
+model:
+  transformer:
+    name: vanilla_transformer
+    _target_: temos.model.transformer.vanilla.Seq2SeqTransformer
+    traj: ${model.traj}
+    num_encoder_layers: ${model.num_encoder_layers}
+    num_decoder_layers: ${model.num_decoder_layers}
+    emb_size: ${model.emb_size}
+    nhead: ${model.nhead}
+    src_vocab_size: ${model.text_vocab_size}
+    tgt_vocab_size: ${model.mw_vocab_size}
+    dim_feedforward: ${model.dim_feedforward}
+    dropout: ${model.dropout}
+  losses:
+    _target_: temos.model.losses.TemosComputeLosses
+    mode: motion_word
+    traj: ${model.traj}
+    lmd_mw_recons_text2mw: 1.0
+    loss_on_both: false
+    force_loss_on_jfeats: false
+    ablation_no_kl_combine: true
+    ablation_no_kl_gaussian: true
+    ablation_no_motionencoder: true
+    traj_error: 1.0
+    traj_error_func: ${model.func_traj}
+    recons_text2mw: ${.lmd_mw_recons_text2mw}
+    recons_text2mw_func: ${model.func_recons}
+  metrics:
+    _target_: temos.model.metrics.ReconsMetrics
+    traj: ${model.traj}
+    recons_types:
+    - naive
+    filters:
+    - none
+    - uniform
+    - spline
+    gt_path: ${path.datasets}/${cluster_data}_inplace_data.pkl
+    recons_fps: 25.0
+    pred_fps: 12.5
+    gt_fps: 100.0
+    num_mw_clusters: ${num_mw_clusters}
+    decoding_scheme: ${model.decoding_scheme}
+    beam_width: ${model.beam_width}
+    cluster2keypoint_mapping_path: ${path.datasets}/proxy_centers_${data.cluster_data}.pkl
+    cluster2frame_mapping_path: ${path.datasets}/proxy_centers_complete_${data.cluster_data}.pkl
+  optim:
+    _target_: torch.optim.AdamW
+    lr: 0.0001
+  func_recons:
+    _target_: torch.nn.CrossEntropyLoss
+    ignore_index: ${special_symbol_idx:${data.special_symbols},'<pad>'}
+  func_traj:
+    _target_: torch.nn.MSELoss
+    reduction: mean
+  modelname: asymov_machine_translation_seq2seq_transformer
+  _target_: temos.model.asymov_mt.AsymovMT
+  traj: ${traj}
+  num_encoder_layers: 6
+  num_decoder_layers: 6
+  emb_size: 512
+  nhead: 8
+  text_vocab_size: ???
+  mw_vocab_size: ???
+  dim_feedforward: 2048
+  special_symbols: ${data.special_symbols}
+  dropout: 0.1
+  fps: ${data.framerate}
+  max_frames: 200
+  metrics_start_epoch: ${viz_metrics_start_epoch}
+  metrics_every_n_epoch: ${viz_metrics_every_n_epoch}
+  decoding_scheme: diverse
+  beam_width: 5
+  best_ckpt_monitors: ${callback.best_ckpt_monitors}
+machine:
+  name: server
+  batch_size: 4
+  smpl_batch_size: 256
+  num_workers: 8
+trainer:
+  auto_select_gpus: true
+  benchmark: false
+  max_epochs: 1001
+  accelerator: gpu
+  devices: auto
+  log_every_n_steps: 1
+  deterministic: false
+  detect_anomaly: false
+  enable_progress_bar: true
+sampler:
+  _target_: temos.data.sampling.FrameSampler
+  request_frames: null
+  sampling: conseq
+  sampling_step: 1
+  max_len: 500
+  min_len: 10
+logger:
+  logger_name: wandb
+  version: ${run_id}
+  save_dir: ${path.working_dir}
+  project: ${experiment}
+  offline: false
+  resume: allow
+  save_code: false
+  log_model: false
+callback:
+  viz_ckpt:
+    _target_: temos.callback.VizCheckPoint
+    start_epoch: 100
+    filename: viz-epoch-{epoch}
+    auto_insert_metric_name: false
+    dirpath: ${callback.dirpath}/checkpoints
+    monitor: step
+    mode: max
+    every_n_epochs: ${viz_metrics_every_n_epoch}
+    save_top_k: -1
+    save_last: false
+    save_weights_only: true
+  last_ckpt:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    filename: last-epoch-{epoch}
+    auto_insert_metric_name: false
+    dirpath: ${callback.dirpath}/checkpoints
+    every_n_epochs: 10
+    save_top_k: 1
+    save_last: false
+  latest_ckpt:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    filename: latest-epoch-{epoch}
+    auto_insert_metric_name: false
+    dirpath: ${callback.dirpath}/checkpoints
+    monitor: step
+    mode: max
+    every_n_epochs: 200
+    save_top_k: -1
+    save_last: false
+  best_ckpt:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    monitor: null
+    mode: null
+    filename: best-${.monitor}-{${.monitor}}-epoch-{epoch}
+    auto_insert_metric_name: false
+    dirpath: ${callback.dirpath}/checkpoints
+    every_n_epochs: 1
+    save_top_k: 1
+    save_last: false
+    save_on_train_epoch_end: false
+  progress:
+    _target_: temos.callback.ProgressLogger
+  dirpath: /ps/scratch/achandrasekaran/asymov
+  best_ckpt_monitors:
+  - - total/val
+    - min
+  - - Metrics/bleu/val
+    - max
+  - - Metrics/acc_teachforce/val
+    - max
+  - - Metrics/MPJPE_naive_none/val
+    - min
+  viz_ckpts: false
+path:
+  code_dir: C:\Users\athar\OneDrive\Documents\asymov\packages\TEMOS
+  deps: ${.code_dir}/deps
+  datasets: ${.code_dir}/datasets
+  working_dir: ${working_path:""}
+experiment: gpu_mem_trial
+traj: true
+seed: 1234
+logger_level: INFO
+run_id: tiny_bs4_mxframe20_div_naive
+resume_ckpt_path: null
+wandb_api_keys:
+  darsh: 57f6d5aab6f1a78b78fb181dcf32dfeca0e65f79
+  arjun: bac3a003428df951a8e0b9e3878002a3227bbf0c
+  shared: 2ec984489f9445078fa14448bc7da1f0c3604db6
+user: shared
+cluster_data: fke
+num_mw_clusters: 1000
+viz_metrics_start_epoch: 0
+viz_metrics_every_n_epoch: 5

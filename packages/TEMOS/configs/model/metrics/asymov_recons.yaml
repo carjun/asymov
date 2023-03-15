@@ -2,7 +2,7 @@ _target_: temos.model.metrics.ReconsMetrics
 
 traj: ${model.traj}
 
-recons_types: ['very_naive', 'naive', 'naive_no_rep']
+recons_types: ['naive'] #['very_naive', 'naive', 'naive_no_rep']
 filters: ['none', 'uniform', 'spline']
 
 gt_path: ${path.datasets}/${cluster_data}_inplace_data.pkl

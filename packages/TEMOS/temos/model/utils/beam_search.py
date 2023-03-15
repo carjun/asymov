@@ -361,6 +361,10 @@ def diverse_beam_search_auto(                       #alpha
             else:
                 out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask)  # [Frames, Batch Size, *]
             logits = model.generator(out[-1])
+            
+            del out
+            torch.cuda.empty_cache()
+
             next_probabilities = logits#[-1, :]
 
             probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
@@ -368,13 +372,13 @@ def diverse_beam_search_auto(                       #alpha
             next_token_mask = torch.zeros(next_chars.shape, dtype=torch.bool)
             next_token_mask[:batch_size, 0] = True             #first beam decoded acc to highest prob (normal beam search)
 
-            for i in range(batch_size, next_chars.shape[0], batch_size):
-                mask_num = (next_chars[i:i+batch_size][:, None] == next_chars[next_token_mask].reshape(-1,batch_size).T.unsqueeze(-1)).any(dim=1).long()
+            for j in range(batch_size, next_chars.shape[0], batch_size):
+                mask_num = (next_chars[j:j+batch_size][:, None] == next_chars[next_token_mask].reshape(-1,batch_size).T.unsqueeze(-1)).any(dim=1).long()
                 unique_token_idx = torch.argmin(mask_num, axis=1)
 
                 assert len(unique_token_idx) == batch_size
 
-                next_token_mask[torch.arange(i, i+batch_size), unique_token_idx] = True
+                next_token_mask[torch.arange(j, j+batch_size), unique_token_idx] = True
 
             next_tokens = next_chars[next_token_mask]#.reshape(-1,batch_size).T.reshape(-1)
             next_tokens_prob = probabilities[next_token_mask]
@@ -384,7 +388,7 @@ def diverse_beam_search_auto(                       #alpha
 
             tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))
 
-            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i, tgt_len)     #tNote to darsh
+            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i, tgt_len)
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(-1)], dim=-1)
 
         # last_probs = probabilities[next_token_mask].reshape(-1,batch_size)

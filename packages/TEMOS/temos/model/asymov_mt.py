@@ -149,7 +149,7 @@ class AsymovMT(BaseModel):
         src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, self.PAD_IDX)
         
         if self.hparams.traj:
-            mw_logits, traj = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_traj_input)
+            mw_logits, traj = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_traj_input)        #220MB #220MB   #Gained ~300MB somewhere after it   #300MB
             #[Frames, Batch size, 3]
             traj = traj.permute(1,0,2) #[Batch size, Frames, 3]
             traj = remove_padding(traj, batch["length"]) #List[Tensor[Frames, 3]]
@@ -182,6 +182,9 @@ class AsymovMT(BaseModel):
         self.metrics[split]['bleu_teachforce'].update(pred_mw_sents_teachforce, target_mw_sents)
         
         self.metrics[split]['ppl_teachforce'].update(mw_logits.detach().cpu(), target.cpu())
+
+        del mw_logits
+        torch.cuda.empty_cache()
 
         epoch = self.trainer.current_epoch
         if split == "val":
