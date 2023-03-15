@@ -97,6 +97,10 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
         else:
             out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask) #[Frames, Batch Size, *]
         logits = model.generator(out[-1]) #[Batch Size, Classes]
+        
+        del out
+        torch.cuda.empty_cache()
+        
         next_word = torch.argmax(logits, dim=-1) #[Batch Size]
         tgt = torch.cat([tgt, next_word.unsqueeze(0)]) #[Frames+1, Batch size]
         # tgt2 = torch.argmax(model.generator(out), dim=-1)
