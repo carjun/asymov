@@ -83,12 +83,12 @@ class ReconsMetrics(Metric):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
         if jointstype != "mmm":
             raise NotImplementedError("This jointstype is not implemented.")
-        
+
         super().__init__()
         self.jointstype = jointstype
         self.rifke = Rifke(jointstype=jointstype,
                            normalization=False)
-        
+
         self.force_in_meter = force_in_meter
         self.traj=traj
         self.recons_types = recons_types
@@ -123,16 +123,16 @@ class ReconsMetrics(Metric):
                 self.add_state(f"APE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"APE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
                 self.add_state(f"APE_joints_{recons_type}_{filter}", default=torch.zeros(21), dist_reduce_fx="sum")
-                self.APE_metrics.extend([f"APE_{i}_{recons_type}_{filter}" for i in ["root", "traj", 
-                                                                                     "pose", 
+                self.APE_metrics.extend([f"APE_{i}_{recons_type}_{filter}" for i in ["root", "traj",
+                                                                                     "pose",
                                                                                      "joints"]])
                 # APE (beam min)
                 self.add_state(f"min_APE_root_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"min_APE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"min_APE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
                 self.add_state(f"min_APE_joints_{recons_type}_{filter}", default=torch.zeros(21), dist_reduce_fx="sum")
-                self.APE_metrics.extend([f"min_APE_{i}_{recons_type}_{filter}" for i in ["root", "traj", 
-                                                                                     "pose", 
+                self.APE_metrics.extend([f"min_APE_{i}_{recons_type}_{filter}" for i in ["root", "traj",
+                                                                                     "pose",
                                                                                      "joints"]])
 
                 # AVE (beam avg)
@@ -140,18 +140,18 @@ class ReconsMetrics(Metric):
                 self.add_state(f"AVE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"AVE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
                 self.add_state(f"AVE_joints_{recons_type}_{filter}", default=torch.zeros(21), dist_reduce_fx="sum")
-                self.AVE_metrics.extend([f"AVE_{i}_{recons_type}_{filter}" for i in ["root", "traj", 
-                                                                                     "pose", 
+                self.AVE_metrics.extend([f"AVE_{i}_{recons_type}_{filter}" for i in ["root", "traj",
+                                                                                     "pose",
                                                                                      "joints"]])
                 # AVE (beam min)
                 self.add_state(f"min_AVE_root_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"min_AVE_traj_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.add_state(f"min_AVE_pose_{recons_type}_{filter}", default=torch.zeros(20), dist_reduce_fx="sum")
                 self.add_state(f"min_AVE_joints_{recons_type}_{filter}", default=torch.zeros(21), dist_reduce_fx="sum")
-                self.AVE_metrics.extend([f"min_AVE_{i}_{recons_type}_{filter}" for i in ["root", "traj", 
-                                                                                     "pose", 
+                self.AVE_metrics.extend([f"min_AVE_{i}_{recons_type}_{filter}" for i in ["root", "traj",
+                                                                                     "pose",
                                                                                      "joints"]])
-                
+
                 # MPJPE (beam avg)
                 self.add_state(f"MPJPE_{recons_type}_{filter}", default=torch.tensor(0.), dist_reduce_fx="sum")
                 self.MPJPE_metrics.append(f"MPJPE_{recons_type}_{filter}")
@@ -165,7 +165,7 @@ class ReconsMetrics(Metric):
     def compute(self):
         count = self.count_good
         APE_metrics = {metric: getattr(self, metric) / count for metric in self.APE_metrics}
-        
+
         count_seq = self.count_good_seq
         AVE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.AVE_metrics}
 
@@ -177,7 +177,7 @@ class ReconsMetrics(Metric):
                 # Compute average of APEs (beam min)
                 APE_metrics[f"min_APE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"min_APE_pose_{recons_type}_{filter}").mean() / count
                 APE_metrics[f"min_APE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"min_APE_joints_{recons_type}_{filter}").mean() / count
-                
+
                 # Compute average of AVEs (beam avg)
                 AVE_metrics[f"AVE_mean_pose_{recons_type}_{filter}"] = getattr(self, f"AVE_pose_{recons_type}_{filter}").mean() / count_seq
                 AVE_metrics[f"AVE_mean_joints_{recons_type}_{filter}"] = getattr(self, f"AVE_joints_{recons_type}_{filter}").mean() / count_seq
@@ -217,29 +217,30 @@ class ReconsMetrics(Metric):
             assert traj is not None
 
         assert len(seq_names)==(len(cluster_seqs)/self.beam_width)
-        
+
         num_seq = len(seq_names)
         self.count_seq += num_seq
         self.count += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
-        
+
         #beamed cluster and traj seqs : List[List[beams]]
         beamed_cluster_seqs = [cluster_seqs[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
         beamed_traj = [traj[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
-        
+
         # get good sequences (no <bos>, <unk> or <pad>)
-        good_beams_per_seq = [[j for j in range(self.beam_width) if beam_seqs[j].max()<self.num_clusters and beam_seqs[j].min()>=0] 
-                              for beam_seqs in beamed_cluster_seqs]
+        good_beams_per_seq = [[j for j in range(self.beam_width) if ((len(beam_seqs[j]) > 0) and \
+                               (beam_seqs[j].max()<self.num_clusters and beam_seqs[j].min()>=0))] \
+                               for beam_seqs in beamed_cluster_seqs]
         good_seq_idx = [i for i, good_beams in enumerate(good_beams_per_seq) if len(good_beams)>0]
-        
+
         # update good stuff
         seq_names = [seq_names[i] for i in good_seq_idx]
         beam_count = [len(good_beams) for good_beams in good_beams_per_seq]
         assert len(seq_names)==len(beam_count)
-        seq_names_with_beams = [f"{seq_name}_{i}" for seq_name, num_beams in zip(seq_names, beam_count) 
+        seq_names_with_beams = [f"{seq_name}_{i}" for seq_name, num_beams in zip(seq_names, beam_count)
                                 for i in range(num_beams)]
-        beamed_cluster_seqs = [[beamed_cluster_seqs[i][j].cpu().numpy() for j in good_beams_per_seq[i]] 
+        beamed_cluster_seqs = [[beamed_cluster_seqs[i][j].cpu().numpy() for j in good_beams_per_seq[i]]
                                for i in good_seq_idx]
-        beamed_traj = [[beamed_traj[i][j].cpu().numpy() for j in good_beams_per_seq[i]] 
+        beamed_traj = [[beamed_traj[i][j].cpu().numpy() for j in good_beams_per_seq[i]]
                        for i in good_seq_idx]
         cluster_seqs = sum(beamed_cluster_seqs, [])
         traj = sum(beamed_traj, [])
@@ -252,7 +253,7 @@ class ReconsMetrics(Metric):
         if ('naive_no_rep' in self.recons_types) or ('naive' in self.recons_types):
             contiguous_cluster_seqs = get_contiguous_cluster_seqs(seq_names_with_beams, cluster_seqs)
         assert len(contiguous_cluster_seqs)==len(cluster_seqs)
-        
+
         # get GT
         gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]
         gt = [change_fps(keypoint, self.gt_fps, self.recons_fps) for keypoint in gt]
@@ -294,7 +295,7 @@ class ReconsMetrics(Metric):
 
                 # length = min(gt, predicted)
                 lengths = [min(recons[i].shape[0], gt_with_beams[i].shape[0]) for i in range(len(recons))]
-                
+
                 jts_text = pad_sequence([*map(torch.from_numpy, recons)], batch_first=True)
                 jts_text, poses_text, root_text, traj_text = self.transform(jts_text, lengths)
                 # jts_text = [torch.from_numpy(keypoint)[:l] for keypoint, l in zip(recons, lengths)]
@@ -317,19 +318,19 @@ class ReconsMetrics(Metric):
                     getattr(self, f"APE_root_{recons_type}_{filter}").__iadd__(mean_APE_root)
                     min_APE_root = APE_root_per_beam.min(0)[0]
                     getattr(self, f"min_APE_root_{recons_type}_{filter}").__iadd__(min_APE_root)
-                    
+
                     APE_traj_per_beam = torch.stack([l2_norm(traj_text[i], traj_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])
                     mean_APE_traj = APE_traj_per_beam.mean(0)
                     getattr(self, f"APE_traj_{recons_type}_{filter}").__iadd__(mean_APE_traj)
                     min_APE_traj = APE_traj_per_beam.min(0)[0]
                     getattr(self, f"min_APE_traj_{recons_type}_{filter}").__iadd__(min_APE_traj)
-                    
+
                     APE_pose_per_beam = torch.stack([l2_norm(poses_text[i], poses_ref[i], dim=2).sum(0) for i in range(start_idx, end_idx)])
                     mean_APE_pose = APE_pose_per_beam.mean(0)
                     getattr(self, f"APE_pose_{recons_type}_{filter}").__iadd__(mean_APE_pose)
                     min_APE_pose = APE_pose_per_beam.min(0)[0]
                     getattr(self, f"min_APE_pose_{recons_type}_{filter}").__iadd__(min_APE_pose)
-                    
+
                     APE_joints_per_beam = torch.stack([l2_norm(jts_text[i], jts_ref[i], dim=2).sum(0) for i in range(start_idx, end_idx)])
                     mean_APE_joints = APE_joints_per_beam.mean(0)
                     getattr(self, f"APE_joints_{recons_type}_{filter}").__iadd__(mean_APE_joints)
@@ -368,7 +369,7 @@ class ReconsMetrics(Metric):
                     getattr(self, f"AVE_joints_{recons_type}_{filter}").__iadd__(mean_AVE_joints)
                     min_AVE_joints = AVE_joints_per_beam.min(0)[0]
                     getattr(self, f"min_AVE_joints_{recons_type}_{filter}").__iadd__(min_AVE_joints)
-                    
+
     def transform(self, joints: Tensor, lengths):
         features = self.rifke(joints)
 
