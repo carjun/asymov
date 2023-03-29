@@ -58,7 +58,7 @@ def add_traj(in_place_keypoints: List[np.ndarray], root_traj: List[Union[Tensor,
 
     # pdb.set_trace()
     assert type(in_place_keypoints) is not Tensor
-    if type(root_traj[0]) is Tensor:
+    if type(root_traj[0]) is Tensor:        #BUG list index out of range
         root_traj = [root.cpu().numpy()  for root in root_traj]
     return [keypoint + np.expand_dims(root, 1) for keypoint, root in zip(in_place_keypoints, root_traj)]
 

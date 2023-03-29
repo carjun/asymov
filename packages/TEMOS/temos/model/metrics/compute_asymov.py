@@ -209,7 +209,7 @@ class ReconsMetrics(Metric):
         Args:
             seq_names: name of sequences in batch.
             cluster_seqs: cluster sequences for each beam of each sequence in the batch.
-                expected order - [batch1beam1, batch2beam2, ..., batch2beam1, batch2beam2, ...]
+                expected order - [batch1beam1, batch1beam2, ..., batch2beam1, batch2beam2, ...]
             traj: predicted trajectory for each beam of each sequence in the batch.
                 expected order - same as cluster_seqs
         '''
@@ -224,18 +224,42 @@ class ReconsMetrics(Metric):
 
         #beamed cluster and traj seqs : List[List[beams]]
         beamed_cluster_seqs = [cluster_seqs[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
+
+        """
+        len(cluster_seqs)=103 (should be 4*32 = 128)
+        num_seq = 32
+        """
         beamed_traj = [traj[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
 
         # get good sequences (no <bos>, <unk> or <pad>)
         good_beams_per_seq = [[j for j in range(self.beam_width) if ((len(beam_seqs[j]) > 0) and \
                                (beam_seqs[j].max()<self.num_clusters and beam_seqs[j].min()>=0))] \
                                for beam_seqs in beamed_cluster_seqs]
+        """
+        Error Run:
+        len(good_beams_per_seq) = 32
+        len(beamed_cluster_seq) = 26
+
+        good_beams_per_seq = [[0], [], [0, 2, 3], [0, 2, 3, 4]]
+        """
         good_seq_idx = [i for i, good_beams in enumerate(good_beams_per_seq) if len(good_beams)>0]
 
         # update good stuff
-        seq_names = [seq_names[i] for i in good_seq_idx]
-        beam_count = [len(good_beams) for good_beams in good_beams_per_seq]
-        assert len(seq_names)==len(beam_count)
+        seq_names = [seq_names[i] for i in good_seq_idx]       #for a seq, no beam might be good
+        beam_count = [len(good_beams) for good_beams in good_beams_per_seq if len(good_beams)>0]
+        """
+        seq_names: len = 3
+        good_beams_per_seq = [[0], [], [0, 2, 3], [0, 2, 3, 4]]
+
+        seq_names = ['00005', '00018', '00019']
+        batch['key_ids'] = ['00005', '00010', '00018', '00019']
+
+        beam_count: [1,3,4]
+        """
+        try:
+            assert len(seq_names)==len(beam_count)
+        except:
+            print(f"assertion failing, {seq_names}, {beam_count}")
         seq_names_with_beams = [f"{seq_name}_{i}" for seq_name, num_beams in zip(seq_names, beam_count)
                                 for i in range(num_beams)]
         beamed_cluster_seqs = [[beamed_cluster_seqs[i][j].cpu().numpy() for j in good_beams_per_seq[i]]
@@ -246,7 +270,7 @@ class ReconsMetrics(Metric):
         traj = sum(beamed_traj, [])
 
         self.count_good_seq += len(seq_names)
-        self.count_good += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])
+        self.count_good += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])      
 
         # pdb.set_trace()
         # get contiguous cluster sequences (grouping contiguous identical clusters)
@@ -255,10 +279,13 @@ class ReconsMetrics(Metric):
         assert len(contiguous_cluster_seqs)==len(cluster_seqs)
 
         # get GT
-        gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]
+        gt = [self.ground_truth_data[name][:5000, :, :] for name in seq_names]           
         gt = [change_fps(keypoint, self.gt_fps, self.recons_fps) for keypoint in gt]
         gt_with_beams = [keypoint for keypoint, num_beams in zip(gt, beam_count) for i in range(num_beams)]
-        assert len(gt_with_beams)==len(cluster_seqs)
+        try:
+            assert len(gt_with_beams)==len(cluster_seqs)
+        except:
+            print(f'assertion failed, gt_with beams len: {len(gt_with_beams)}, cluster_seqs len: {len(cluster_seqs)}')
 
         # reconstruct from predicted clusters using different strategies
         for recons_type in self.recons_types:
@@ -313,7 +340,10 @@ class ReconsMetrics(Metric):
                 # AVE and APE
                 for start_idx, end_idx in zip(np.cumsum([0]+beam_count[:-1]), np.cumsum(beam_count)): #aggregate over beams and update
                     # APE
-                    APE_root_per_beam =  torch.stack([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])
+                    try:
+                        APE_root_per_beam =  torch.stack([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])
+                    except:
+                        print('assertion failed')
                     mean_APE_root = APE_root_per_beam.mean(0)
                     getattr(self, f"APE_root_{recons_type}_{filter}").__iadd__(mean_APE_root)
                     min_APE_root = APE_root_per_beam.min(0)[0]

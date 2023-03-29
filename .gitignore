@@ -24,6 +24,10 @@ packages/acton/logs/
 packages/acton/wandb/
 packages/TEMOS/outputs/
 
+logs*
+wandb/
+outputs/
+
 # Models
 packages/TEMOS/pretrained_models/
 
