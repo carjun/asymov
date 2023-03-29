@@ -22,7 +22,7 @@ metrics_start_epoch: ${viz_metrics_start_epoch} # epoch numbering starts from 0,
 metrics_every_n_epoch: ${viz_metrics_every_n_epoch} # (epoch+1)%n metrics_every_n_epoch
 
 
-decoding_scheme: "diverse"    # "diverse", "beam", "greedy"
+decoding_scheme: "greedy"    # "diverse", "beam", "greedy"
 beam_width: 5
 
 defaults:

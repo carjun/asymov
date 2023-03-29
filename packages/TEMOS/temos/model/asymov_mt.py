@@ -187,34 +187,38 @@ class AsymovMT(BaseModel):
         torch.cuda.empty_cache()
 
         epoch = self.trainer.current_epoch
-        if split == "val":
-            if (self.trainer.global_step==0 or (epoch>=self.metrics_start_epoch and (epoch+1)%self.metrics_every_n_epoch==0)):
-                # inferencing translations without teacher forcing
-                #TODO: add max_len buffer frames to config
-                # max_len = [i+int(self.fps*5) for i in batch["length"]]
-                # pdb.set_trace()
-                
-                if self.hparams.traj:
-                    pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)       #passed none so it'll pick the
-                    pred_traj = [i.detach() for i in pred_traj]                                                                                                     #default values "diverse" and 5
-                else:
-                    pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)
-                # pred_mw_tokens2 = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames)
-                # for mw_tokens, mw_tokens2 in zip(pred_mw_tokens, pred_mw_tokens2):
-                #     assert torch.equal(mw_tokens, mw_tokens2)
-                # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
-                
-                #TODO: aggregate BLEU over beams
-                # add EOS/BOS as they were removed during translation
-                pred_mw_sents = [" ".join(map(str, [self.BOS_IDX] + mw.int().tolist() + [self.EOS_IDX])) for mw in pred_mw_tokens]
-                self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
-                
-                # shift for special symbols (EOS/BOS and padding already removed)
-                pred_mw_clusters = [mw - self.num_special_symbols for mw in pred_mw_tokens]
-                if self.hparams.traj:
-                    self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters, pred_traj)
-                else:
-                    self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters)
+
+        try:
+            if split == "val":
+                if (self.trainer.global_step==0 or (epoch>=self.metrics_start_epoch and (epoch+1)%self.metrics_every_n_epoch==0)):
+                    # inferencing translations without teacher forcing
+                    #TODO: add max_len buffer frames to config
+                    # max_len = [i+int(self.fps*5) for i in batch["length"]]
+                    # pdb.set_trace()
+                    
+                    if self.hparams.traj:
+                        pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)       #passed none so it'll pick the
+                        pred_traj = [i.detach() for i in pred_traj]                                                                                                     #default values "diverse" and 5
+                    else:
+                        pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)
+                    # pred_mw_tokens2 = self.translate(remove_padding(src.permute(1,0), batch["text_length"]), self.max_frames)
+                    # for mw_tokens, mw_tokens2 in zip(pred_mw_tokens, pred_mw_tokens2):
+                    #     assert torch.equal(mw_tokens, mw_tokens2)
+                    # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
+                    
+                    #TODO: aggregate BLEU over beams
+                    # add EOS/BOS as they were removed during translation
+                    pred_mw_sents = [" ".join(map(str, [self.BOS_IDX] + mw.int().tolist() + [self.EOS_IDX])) for mw in pred_mw_tokens]
+                    self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
+                    
+                    # shift for special symbols (EOS/BOS and padding already removed)
+                    pred_mw_clusters = [mw - self.num_special_symbols for mw in pred_mw_tokens]
+                    if self.hparams.traj:
+                        self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters, pred_traj)
+                    else:
+                        self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters)
+        except Exception as err:
+             print("Val exception:", err, batch['keyid'],  "len of pred mw/traj", len(pred_mw_clusters), len(pred_traj))
 
         return loss
 
