@@ -213,6 +213,7 @@ class ReconsMetrics(Metric):
             traj: predicted trajectory for each beam of each sequence in the batch.
                 expected order - same as cluster_seqs
         '''
+        # pdb.set_trace()
         if self.traj:
             assert traj is not None
 
@@ -243,10 +244,9 @@ class ReconsMetrics(Metric):
         good_beams_per_seq = [[0], [], [0, 2, 3], [0, 2, 3, 4]]
         """
         good_seq_idx = [i for i, good_beams in enumerate(good_beams_per_seq) if len(good_beams)>0]
-
         # update good stuff
-        seq_names = [seq_names[i] for i in good_seq_idx]       #for a seq, no beam might be good
-        beam_count = [len(good_beams) for good_beams in good_beams_per_seq if len(good_beams)>0]
+        seq_names = [seq_names[i] for i in good_seq_idx]       #for a seq, no beam might be good #[2]
+        beam_count = [len(good_beams) for good_beams in good_beams_per_seq if len(good_beams)>0] #[4]
         """
         seq_names: len = 3
         good_beams_per_seq = [[0], [], [0, 2, 3], [0, 2, 3, 4]]
@@ -257,16 +257,18 @@ class ReconsMetrics(Metric):
         beam_count: [1,3,4]
         """
         try:
-            assert len(seq_names)==len(beam_count)
+            assert len(seq_names)==len(beam_count) and len(good_seq_idx)>0 
         except:
-            print(f"assertion failing, {seq_names}, {beam_count}")
+            print(f"""assertion failing: len(seq_names)==len(beam_count) and len(good_seq_idx)>0 , seq_names:{seq_names}, beam_count:{beam_count},
+                      len(good_seq_idx): {len(good_seq_idx)}""")
+            return
         seq_names_with_beams = [f"{seq_name}_{i}" for seq_name, num_beams in zip(seq_names, beam_count)
                                 for i in range(num_beams)]
         beamed_cluster_seqs = [[beamed_cluster_seqs[i][j].cpu().numpy() for j in good_beams_per_seq[i]]
                                for i in good_seq_idx]
         beamed_traj = [[beamed_traj[i][j].cpu().numpy() for j in good_beams_per_seq[i]]
                        for i in good_seq_idx]
-        cluster_seqs = sum(beamed_cluster_seqs, [])
+        cluster_seqs = sum(beamed_cluster_seqs, [])#[]
         traj = sum(beamed_traj, [])
 
         self.count_good_seq += len(seq_names)
