@@ -346,7 +346,7 @@ def diverse_beam_search_auto(                       #alpha
 
         memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
 
-        for i in tqdm(range(0,max_len), "diverse autoregressive translation", None):
+        for i in tqdm(range(0,max_len), "diverse autoregressive translation", miniters= max_len//5):
 
             tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                     .to(tgt.device, dtype=torch.bool))                      #tokens.

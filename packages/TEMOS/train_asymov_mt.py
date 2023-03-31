@@ -5,6 +5,7 @@ import temos.launch.prepare  # noqa
 import os
 import pdb
 from pytorch_lightning.accelerators import find_usable_cuda_devices
+from pytorch_lightning.callbacks import TQDMProgressBar
 
 # from pprint import pprint
 
@@ -78,7 +79,9 @@ def train(cfg: DictConfig) -> None:
     callbacks = [
         instantiate(cfg.callback.progress, metric_monitor=metric_monitor),
         instantiate(cfg.callback.latest_ckpt),
-        instantiate(cfg.callback.last_ckpt)
+        instantiate(cfg.callback.last_ckpt),
+        TQDMProgressBar(refresh_rate=100)           #Added to reduce progress bar logging in txt
+
     ]
     if cfg.callback.viz_ckpts:
         callbacks.append(instantiate(cfg.callback.viz_ckpt))
