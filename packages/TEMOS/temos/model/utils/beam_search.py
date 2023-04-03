@@ -5,6 +5,11 @@ from torch.nn import Module, Transformer as T
 # from tools import remove_padding
 import pdb
 
+from functools import wraps
+from time import time
+
+from linetimer import CodeTimer
+
 
 def remove_padding(tensors, lengths):
     return [tensor[:tensor_length] for tensor, tensor_length in zip(tensors, lengths)]
@@ -138,7 +143,9 @@ def beam_search_auto(                       #alpha
 ):
 
     with torch.no_grad():
-        # src = src.repeat((1, beam_width))
+        """
+        src (after repeat_interleave): [batch1beam1, batch2beam1, ..., batch1beam2, batch2beam2, ...]
+        """
         src = src.repeat_interleave(beam_width, dim=1)
         # src_padding_mask = src_padding_mask.repeat((beam_width,1))
         src_padding_mask = src_padding_mask.repeat_interleave(beam_width, dim=0)
@@ -328,12 +335,15 @@ def diverse_beam_search_auto(                       #alpha
     src_padding_mask,
     end_symbol: int,
     max_len = 220,
-    batch_size = 128,            #CHECK: this batch size is different from the number of sequences passed
+    batch_size = 128,
     beam_width = 5,
     traj: bool = True,
 ):
     with torch.no_grad():
 
+        """
+        src (after repeat): [batch1beam1, batch1beam2, ..., batch2beam1, batch2beam2, ...]
+        """
         src = src.repeat((1, beam_width))
         src_padding_mask = src_padding_mask.repeat((beam_width,1))
 
@@ -346,54 +356,76 @@ def diverse_beam_search_auto(                       #alpha
 
         memory = model.encode(src, src_mask, src_padding_mask)  # [Frames, Batches, *]
 
-        for i in tqdm(range(0,max_len), "diverse autoregressive translation", miniters= max_len//5):
-
+        # with CodeTimer('all loops'):
+        for i in tqdm(range(0,max_len), "diverse autoregressive translation", mininterval=60): #miniters= max_len//5): not workig after first batch of max_len//5
+            # with CodeTimer('one loop'):
+            # with CodeTimer('tgt_mask'):
             tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))      #size(0) for num of decoded
                     .to(tgt.device, dtype=torch.bool))                      #tokens.
             if traj:
+                # with CodeTimer('model.decode, model.traj_gen, cat'):
                 out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
                 next_root = model.traj_generator(out[-1]) #[Batch Size, 3]
                 tgt_traj = torch.cat([tgt_traj, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
             else:
                 out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask)  # [Frames, Batch Size, *]
+
+            # with CodeTimer('model.gen'):
             logits = model.generator(out[-1])
-            
-            del out
-            torch.cuda.empty_cache()
 
-            next_probabilities = logits#[-1, :]
-            probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
+            next_probabilities = logits.squeeze().log_softmax(-1)
+            # del out
+            # torch.cuda.empty_cache()
 
-            next_token_mask = torch.zeros(next_chars.shape, dtype=torch.bool)
-            next_token_mask[:batch_size, 0] = True             #first beam decoded acc to highest prob (normal beam search)
+            # probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
+            # with CodeTimer('next_token calc'):
+            next_tokens = []
+            selected_beam=[]
+            for j in range(next_probabilities.size(0)):
+                next_probabilities[j,selected_beam] = -100
+                selected_beam.append(next_probabilities[j].argmax().item())
+                if j%beam_width == 4:
+                    next_tokens += selected_beam
+                    selected_beam = []
 
-            for j in range(batch_size, next_chars.shape[0], batch_size):
-                mask_num = (next_chars[j:j+batch_size][:, None] == next_chars[next_token_mask].reshape(-1,batch_size).T.unsqueeze(-1)).any(dim=1).long()
-                unique_token_idx = torch.argmin(mask_num, axis=1)
 
-                assert len(unique_token_idx) == batch_size
+            # next_probabilities = logits#[-1, :]
+            # probabilities, next_chars = next_probabilities.squeeze().log_softmax(-1).topk(k=beam_width, axis=-1)
 
-                next_token_mask[torch.arange(j, j+batch_size), unique_token_idx] = True
+            # next_token_mask = torch.zeros(next_chars.shape, dtype=torch.bool)
+            # next_token_mask[:batch_size, 0] = True             #first beam decoded acc to highest prob (normal beam search)
 
-            next_tokens = next_chars[next_token_mask]
-            next_tokens_prob = probabilities[next_token_mask]
+            # with CodeTimer('next_token_mask calc'):
+            #     for j in range(batch_size, next_chars.shape[0], batch_size):
+            #         mask_num = (next_chars[j:j+batch_size][:, None] == next_chars[next_token_mask].reshape(-1,batch_size).T.unsqueeze(-1)).any(dim=1).long()
+            #         unique_token_idx = torch.argmin(mask_num, axis=1)
+
+            #         assert len(unique_token_idx) == batch_size
+
+            #         next_token_mask[torch.arange(j, j+batch_size), unique_token_idx] = True
+
+            # next_tokens = next_chars[next_token_mask]
+            # next_tokens_prob = probabilities[next_token_mask]
+            next_tokens = torch.LongTensor(next_tokens).cuda()
 
             assert len(next_tokens) == batch_size*beam_width, f'''Decoded T(th) tokens not equal to batch*beam size, required{batch_size*beam_width}
-                                                                                                                     current shape: {len(next_tokens)}'''
-
-            tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))        
-            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i, tgt_len)     #Needs to be reshaped if we change tgt shape
+                                                                                                                    current shape: {len(next_tokens)}'''
+            tgt = torch.cat((tgt, next_tokens.unsqueeze(0)))
+            tgt_len = torch.where(torch.logical_and(next_tokens==end_symbol, tgt_len==max_len), i, tgt_len)     #[Not Now] Needs to be reshaped if we change tgt shape
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(-1)], dim=-1)
 
         assert tgt.shape[0] == max_len+1, f"At this point, frames should be <start> frame + max_decoded: {1} + {max_len}"
 
-        tgt = torch.cat((tgt[1:], tgt_len.unsqueeze(0)))    #concatenating tgt_len in the end so it can be reshaped acc to tgt
-        # tgt = tgt.T.reshape(beam_width, -1).T.reshape(-1, tgt.shape[0], beam_width).permute(0,2,1).reshape(-1, tgt.shape[0])        #BUG TODO : This is wrong
-        tgt = tgt.T.reshape(beam_width,batch_size,tgt.size(0)).transpose(0,1).reshape(beam_width*batch_size,tgt.size(0))
-        tgt, tgt_len = tgt[:, :-1], tgt[:, -1]              #seperate reshaped tgt_len 
-        tgt_list = remove_padding_and_EOS(tgt, tgt_len)
+        tgt = tgt[1:]
+        # tgt = torch.cat((tgt[1:], tgt_len.unsqueeze(0)))    #concatenating tgt_len in the end so it can be reshaped acc to tgt
+        # # tgt = tgt.T.reshape(beam_width, -1).T.reshape(-1, tgt.shape[0], beam_width).permute(0,2,1).reshape(-1, tgt.shape[0])        #BUG TODO : This is wrong
+        # tgt = tgt.T.reshape(beam_width,batch_size,tgt.size(0)).transpose(0,1).reshape(beam_width*batch_size,tgt.size(0))
+        # tgt, tgt_len = tgt[:, :-1], tgt[:, -1]              #seperate reshaped tgt_len 
 
+        # with CodeTimer('remove_padding tgt_list'):
+        tgt_list = remove_padding_and_EOS(tgt, tgt_len)
         tmp = torch.tensor([len(x) for x in tgt_list]).to(tgt_len.device)
+
         assert torch.all(tmp == tgt_len), f'''Len of each tensor does not match tgt_len after BOS, pad,
                             EOS removal for {torch.nonzero(torch.logical_not(torch.tensor([len(x) for x in tgt_list]) == tgt_len)).squeeze()}'''
 
@@ -404,8 +436,9 @@ def diverse_beam_search_auto(                       #alpha
             tgt_traj = tgt_traj[1:]
             # tgt_traj = tgt_traj.permute(1,0,2).reshape(beam_width, -1, 3).permute(1,0,2).reshape(-1, tgt_traj.shape[0], beam_width, 3).permute(0, 2, 1, 3).reshape(-1, tgt_traj.shape[0], 3)
             tgt_traj = tgt_traj.transpose(0,1).reshape(beam_width, batch_size, tgt_traj.size(0), tgt_traj.size(2)).transpose(0,1).reshape(beam_width*batch_size, tgt_traj.size(0), tgt_traj.size(2))
-            tgt_traj_list =  remove_padding_and_EOS(tgt_traj, tgt_len)
 
+            # with CodeTimer('remove_paddding tgt_traj_list'):
+            tgt_traj_list =  remove_padding_and_EOS(tgt_traj, tgt_len)
             tmp = torch.tensor([len(x) for x in tgt_traj_list]).to(tgt_len.device)
             assert torch.all(tmp == tgt_len), f'''Len of each tensor does not match tgt_len after BOS, pad,
                             EOS removal for {torch.nonzero(torch.logical_not(torch.tensor([len(x) for x in tgt_traj_list]) == tgt_len)).squeeze()}'''

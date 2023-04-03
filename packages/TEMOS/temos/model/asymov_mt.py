@@ -17,6 +17,8 @@ from torchmetrics import MetricCollection, Accuracy, BLEUScore, SumMetric
 from temos.model.base import BaseModel
 from temos.model.utils.tools import create_mask, remove_padding, greedy_decode, batch_greedy_decode, batch_beam_decode
 
+from linetimer import CodeTimer
+
 class AsymovMT(BaseModel):
     def __init__(self, traj: bool,
                  transformer: DictConfig,
@@ -95,11 +97,13 @@ class AsymovMT(BaseModel):
         # src: [Frames, Batch size]
         if self.hparams.traj:
             if decoding_scheme == "greedy":
-                tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
-                                                      src_mask, src_padding_mask)
+                with CodeTimer('greedy batch_translate', unit='s'):
+                    tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
+                                                        src_mask, src_padding_mask)
             else:
-                tgt_list, traj_list = batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, decoding_scheme,
-                                                        src_mask, src_padding_mask, beam_width=beam_width)
+                with CodeTimer('div-beam batch_translate', unit='s'):
+                    tgt_list, traj_list = batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, decoding_scheme,
+                                                            src_mask, src_padding_mask, beam_width=beam_width)
             assert len(tgt_list) == len(traj_list)
             return tgt_list, traj_list #Tuple[List[Tensor[Frames]]]
         else:
@@ -130,12 +134,12 @@ class AsymovMT(BaseModel):
             else:
                 tgt_tokens = greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, traj=False).flatten() #[Frames]
             tgt_list.append(tgt_tokens) 
-        
+
         if self.hparams.traj:
             assert len(tgt_list) == len(traj_list)
             return tgt_list, traj_list # Tuple[List[Tensor]]
         return tgt_list # List[Tensor[Frames]]
-    
+
     def allsplit_step(self, split: str, batch: Dict, batch_idx):
         src: Tensor = batch["text"] #[Frames, Batch size]
         tgt: Tensor = batch["motion_words"] #[Frames, Batch size]
@@ -147,7 +151,7 @@ class AsymovMT(BaseModel):
             tgt_traj_out: Tensor = remove_padding(tgt_traj[1:].permute(1,0,2), batch["length"])  #[Batch size, Frames-1, 3]
 
         src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, self.PAD_IDX)
-        
+
         if self.hparams.traj:
             mw_logits, traj = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_traj_input)        #220MB #220MB   #Gained ~300MB somewhere after it   #300MB
             #[Frames, Batch size, 3]
@@ -156,7 +160,7 @@ class AsymovMT(BaseModel):
         else:
             mw_logits = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask)    
         mw_logits = mw_logits.permute(1,2,0) #[Batch size, Classes, Frames]
-        
+
         # Compute the losses
         if self.hparams.traj:
             loss = self.losses[split].update(ds_text=mw_logits, ds_ref=tgt_out, traj_text=traj, traj_ref=tgt_traj_out)
@@ -180,7 +184,6 @@ class AsymovMT(BaseModel):
         pred_mw_sents_teachforce = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens_teachforce]
         target_mw_sents = [[" ".join(map(str, mw.int().tolist()))] for mw in remove_padding(target, batch["length"])]
         self.metrics[split]['bleu_teachforce'].update(pred_mw_sents_teachforce, target_mw_sents)
-        
         self.metrics[split]['ppl_teachforce'].update(mw_logits.detach().cpu(), target.cpu())
 
         del mw_logits
@@ -195,9 +198,10 @@ class AsymovMT(BaseModel):
                     #TODO: add max_len buffer frames to config
                     # max_len = [i+int(self.fps*5) for i in batch["length"]]
                     # pdb.set_trace()
-                    
+
                     if self.hparams.traj:
-                        pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)       #passed none so it'll pick the
+                        with CodeTimer(f'batch_translate : {self.decoding_scheme}', unit='s'):
+                            pred_mw_tokens, pred_traj = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)       #passed none so it'll pick the
                         pred_traj = [i.detach() for i in pred_traj]                                                                                                     #default values "diverse" and 5
                     else:
                         pred_mw_tokens = self.batch_translate(src, src_mask, src_padding_mask, self.max_frames, self.decoding_scheme, self.beam_width)
@@ -205,12 +209,12 @@ class AsymovMT(BaseModel):
                     # for mw_tokens, mw_tokens2 in zip(pred_mw_tokens, pred_mw_tokens2):
                     #     assert torch.equal(mw_tokens, mw_tokens2)
                     # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
-                    
+
                     #TODO: aggregate BLEU over beams
                     # add EOS/BOS as they were removed during translation
                     pred_mw_sents = [" ".join(map(str, [self.BOS_IDX] + mw.int().tolist() + [self.EOS_IDX])) for mw in pred_mw_tokens]
                     self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
-                    
+
                     # shift for special symbols (EOS/BOS and padding already removed)
                     pred_mw_clusters = [mw - self.num_special_symbols for mw in pred_mw_tokens]
                     if self.hparams.traj:

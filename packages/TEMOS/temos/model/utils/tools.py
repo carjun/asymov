@@ -6,6 +6,11 @@ from tqdm import tqdm
 import pdb
 from .beam_search import beam_search_auto, diverse_beam_search_auto, diverse_beam_search_unit, beam_search_unit
 
+from functools import wraps
+from time import time
+
+from linetimer import CodeTimer
+
 def detach_to_numpy(tensor):
     return tensor.detach().cpu().numpy()
 
@@ -82,7 +87,8 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
         tgt_traj = src.new_zeros((1, batch_size, 3), dtype=torch.long) #[1, Batch size, 3], 1 as for 1st frame
 
     # effective frame predictions
-    for i in tqdm(range((max_len)), "autoregressive translation", None):
+    for i in tqdm(range((max_len)), "autoregressive translation", mininterval=60):
+        # with CodeTimer('one loop greedy'):
         tgt_mask = (T.generate_square_subsequent_mask(tgt.size(0))
                     .to(tgt.device, dtype=torch.bool))
         if i==0:
@@ -91,6 +97,7 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(1)], dim=1)
 
         if traj:
+            # with CodeTimer('model.decode'):
             out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
             next_root = model.traj_generator(out[-1]) #[Batch Size, 3]
             tgt_traj = torch.cat([tgt_traj, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
@@ -98,9 +105,11 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
             out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask) #[Frames, Batch Size, *]
         logits = model.generator(out[-1]) #[Batch Size, Classes]
         
-        del out
-        torch.cuda.empty_cache()
+        # del out
+        # with CodeTimer('empty cache'):
+        #     torch.cuda.empty_cache()
         
+        # with CodeTimer('argmax'):
         next_word = torch.argmax(logits, dim=-1) #[Batch Size]
         tgt = torch.cat([tgt, next_word.unsqueeze(0)]) #[Frames+1, Batch size]
         # tgt2 = torch.argmax(model.generator(out), dim=-1)
@@ -108,6 +117,7 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
         
         # if EOS then effective length of o/p = i (for (i+1)th iter), else same as init (max_len)
         tgt_len = torch.where(torch.logical_and(next_word==end_symbol, tgt_len==max_len), i, tgt_len)
+
         if (tgt_len>i).sum()==0: #break if each batch prediction got an EOS
             break
     
@@ -135,7 +145,7 @@ def beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end
   tgt = src.new_full((1, 1), start_symbol, dtype=torch.long)   #start symb, 1st frame
 
   if traj:
-    pdb.set_trace()           ##
+    # pdb.set_trace()           ##
     tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask,src_padding_mask, 
                                                           end_symbol, max_len, beam_width)
     return tgt_list, tgt_traj_list  # List[Tensor[Frames]]; List_len-> batch*beam
@@ -163,8 +173,9 @@ def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: in
     tgt = src.new_ones(1, batch_size).fill_(start_symbol).type(torch.long)  # [1, Batch size], 1 as for 1st frame
 
     if traj:
-        tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask, src_padding_mask, end_symbol, 
-                                                              max_len, batch_size, beam_width)
+        with CodeTimer('calling beam_auto'):
+            tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask, src_padding_mask, end_symbol, 
+                                                                max_len, batch_size, beam_width)
         return tgt_list, tgt_traj_list  # List[Tensor[Frames]]; List_len-> beam*batch
                                         #b:batch_element,B:beam; b1B1,b1B2,b1B3,b1B4,b1B5,b2B1,b2B2,b2B3... 
     else:

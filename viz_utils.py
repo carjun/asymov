@@ -213,9 +213,9 @@ def mpjpe3d(seq_names, pred_keypoints, target_keypoints):
     '''
     # pdb.set_trace()
     mpjpe_per_sequence=[]
-    with tqdm(zip(seq_names, pred_keypoints, target_keypoints), desc='calculating mpjpe', total=len(seq_names), position=0, leave=False) as pbar:
+    with tqdm(zip(seq_names, pred_keypoints, target_keypoints), desc='calculating mpjpe', total=len(seq_names), position=0, leave=False, mininterval=60) as pbar:
         for name, pred_keypoint, target_keypoint in pbar:
-            pbar.set_description(desc=f'calculating mpjpe for {name}')
+            # pbar.set_description(desc=f'calculating mpjpe for {name}')
 
             if pred_keypoint.shape[0]!=target_keypoint.shape[0]:
                 # if abs(pred_keypoint.shape[0]-target_keypoint.shape[0]) > 100:
