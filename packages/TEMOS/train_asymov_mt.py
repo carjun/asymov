@@ -53,7 +53,7 @@ def train(cfg: DictConfig) -> None:
                         # nfeats=data_module.nfeats,
                         # nvids_to_save=None,
                         _recursive_=False)
-    model = model.cuda()
+    # model = model.cuda()
     logger.info(f"Model '{cfg.model.modelname}' loaded")
 
     logger.info("Loading callbacks")
@@ -95,7 +95,7 @@ def train(cfg: DictConfig) -> None:
         **OmegaConf.to_container(cfg.trainer, resolve=True),
         logger=instantiate_logger(cfg),
         callbacks=callbacks,
-        devices=find_usable_cuda_devices(1)                     #TODO Atharvan: Add argument for no. of devices after DataParallel implimentation
+        # devices=find_usable_cuda_devices(1)                     #TODO Atharvan: Add argument for no. of devices after DataParallel implimentation
     )
     logger.info("Trainer initialized")
     checkpoint_folder = trainer.checkpoint_callback.dirpath

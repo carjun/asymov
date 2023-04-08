@@ -4,4 +4,4 @@ defaults:
   - /callback/latest_checkpoint@latest_ckpt
   - /callback/best_checkpoint@best_ckpt
   - /callback/progress@progress
-dirpath: /home/Atharvan/asymov_gpu_opt
+dirpath: ${path.code_dir}/

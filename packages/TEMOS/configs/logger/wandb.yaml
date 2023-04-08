@@ -1,5 +1,5 @@
 logger_name: wandb
-name: ${run_id}
+name: ${run_id} #changed this from version to name so same name can be used for multiple runs
 
 save_dir: ${path.working_dir}
 project: ${experiment}

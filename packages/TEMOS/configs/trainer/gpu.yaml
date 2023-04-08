@@ -2,7 +2,7 @@
 benchmark: False
 max_epochs: 1001
 accelerator: 'gpu'
-# devices: 'auto'
+devices: 1
 log_every_n_steps: 1
 deterministic: False
 detect_anomaly: False
