@@ -3,7 +3,7 @@ _target_: temos.callback.VizCheckPoint
 start_epoch: ???
 filename: viz-epoch-{epoch}
 auto_insert_metric_name: false
-dirpath: ${callback.dirpath}/checkpoints
+dirpath: ${callback.dirpath}/checkpoints/${run_id}
 monitor: step
 mode: max
 every_n_epochs: ???
