@@ -234,7 +234,7 @@ class AsymovMT(BaseModel):
                 for loss, value in loss_dict.items()}
 
         #Accuracy, BLEU and Perplexity Teacher-forced
-        metrics_dict_teachforce = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')}
+        metrics_dict_teachforce = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')}  #.item() to avoid "converting to float" error
         _ = [metric.reset() for name, metric in self.metrics[split].items() if name.endswith('_teachforce')]
         dico.update(metrics_dict_teachforce)
 
@@ -242,9 +242,9 @@ class AsymovMT(BaseModel):
         if split == "val":
             if (self.trainer.global_step==0 or (epoch>=self.metrics_start_epoch and (epoch+1)%self.metrics_every_n_epoch==0)):
                 # pdb.set_trace()
-                metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if (name!='mpjpe' and not name.endswith('_teachforce'))}
+                metrics_dict = {f"Metrics/{name}/{split}": metric.compute() for name, metric in self.metrics[split].items() if (name!='mpjpe' and not name.endswith('_teachforce'))}  #.item() to avoid "converting to float" error
                 mpjpe_dict = self.metrics[split]['mpjpe'].compute()     #to(self.device) gives error already synced
-                metrics_dict.update({f"Metrics/{name}/{split}": metric for name, metric in mpjpe_dict.items()})
+                metrics_dict.update({f"Metrics/{name}/{split}": metric for name, metric in mpjpe_dict.items()})     #minor BUG fix: Adding .item() to avoid "converting to float" warning
                 _ = [metric.reset() for name, metric in self.metrics[split].items() if not name.endswith('_teachforce')]
                 dico.update(metrics_dict)
             

@@ -173,7 +173,7 @@ def batch_beam_decode(model: Module, src: Tensor, max_len: int, start_symbol: in
     tgt = src.new_ones(1, batch_size).fill_(start_symbol).type(torch.long)  # [1, Batch size], 1 as for 1st frame
 
     if traj:
-        with CodeTimer('calling beam_auto'):
+        with CodeTimer('calling beam_auto', unit='s'):
             tgt_list, tgt_traj_list = decode_dict[decoding_scheme](model, src, tgt, src_mask, src_padding_mask, end_symbol, 
                                                                 max_len, batch_size, beam_width)
         return tgt_list, tgt_traj_list  # List[Tensor[Frames]]; List_len-> beam*batch

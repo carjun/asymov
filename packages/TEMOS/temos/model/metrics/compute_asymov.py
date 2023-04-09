@@ -166,7 +166,7 @@ class ReconsMetrics(Metric):
         count = self.count_good
         APE_metrics = {metric: getattr(self, metric) / count for metric in self.APE_metrics}
 
-        count_seq = self.count_good_seq
+        count_seq = self.count_good_seq             #TODO ask: comes as 4 for a batch size of 2
         AVE_metrics = {metric: getattr(self, metric) / count_seq for metric in self.AVE_metrics}
 
         for recons_type in self.recons_types:
@@ -242,19 +242,23 @@ class ReconsMetrics(Metric):
         len(beamed_cluster_seq) = 26
 
         good_beams_per_seq = [[0], [], [0, 2, 3], [0, 2, 3, 4]]
+
+        Note: [] in good_beams_per_seq (above example) is necessary to make sure we 
+        have the correct indices in good_seq_idx
         """
         good_seq_idx = [i for i, good_beams in enumerate(good_beams_per_seq) if len(good_beams)>0]
         # update good stuff
         seq_names = [seq_names[i] for i in good_seq_idx]       #for a seq, no beam might be good #[2]
-        beam_count = [len(good_beams) for good_beams in good_beams_per_seq if len(good_beams)>0] #[4]
+        beam_count = [len(good_beams) for good_beams in good_beams_per_seq if len(good_beams)>0] #[4]   #TODO Check: this len(good_beams) condition might cause troubles
         """
         seq_names: len = 3
         good_beams_per_seq = [[0], [], [0, 2, 3], [0, 2, 3, 4]]
+        good_seq_idx = [0,2,3]
 
         seq_names = ['00005', '00018', '00019']
         batch['key_ids'] = ['00005', '00010', '00018', '00019']
 
-        beam_count: [1,3,4]
+        beam_count: [1,3,4] : contains beam count only for good (enough) sequences 
         """
         try:
             assert len(seq_names)==len(beam_count) and len(good_seq_idx)>0 
@@ -304,7 +308,7 @@ class ReconsMetrics(Metric):
             # traj inclusion
             if self.traj:
                 recons = add_traj(recons, traj)
-            recons = [change_fps(keypoint, self.pred_fps, self.recons_fps) for keypoint in recons]
+            recons = [change_fps(keypoint, self.pred_fps, self.recons_fps) for keypoint in recons]  #TODO ask: FPS doubled ? (Bec words have been doubled)
 
             # apply different filters
             for filter in self.filters:
@@ -319,14 +323,26 @@ class ReconsMetrics(Metric):
 
                 # MPJPE
                 mpjpe_with_beams=mpjpe3d(seq_names_with_beams, recons, gt_with_beams)
-                mpjpe_per_sequence=[np.mean(mpjpe_with_beams[i::self.count_good_seq]) for i in range(self.count_good_seq)]
+                """
+                #BUG: getting mean of mpjpe of all beams in a seq?? why stepping?
+                #BUG (probably): self.count_good_seq=4 with batch size 2 (greedy). State variable not reset for the next step
+                """
+                # mpjpe_per_sequence=[np.mean(mpjpe_with_beams[i::self.count_good_seq]) for i in range(self.count_good_seq)]
+                mpjpe_per_sequence = []
+                for start_idx, end_idx in zip(np.cumsum([0]+beam_count[:-1]), np.cumsum(beam_count)):
+                    mpjpe_per_sequence.append(np.mean(mpjpe_with_beams[start_idx:end_idx]))
+                # start = 0
+                # for num in beam_count:
+                #     end = start + num
+                #     mpjpe_per_sequence.append(np.mean(mpjpe_with_beams[start:end]))
+                #     start = end
                 getattr(self, f"MPJPE_{recons_type}_{filter}").__iadd__(np.mean(mpjpe_per_sequence))
 
                 # length = min(gt, predicted)
                 lengths = [min(recons[i].shape[0], gt_with_beams[i].shape[0]) for i in range(len(recons))]
 
                 jts_text = pad_sequence([*map(torch.from_numpy, recons)], batch_first=True)
-                jts_text, poses_text, root_text, traj_text = self.transform(jts_text, lengths)
+                jts_text, poses_text, root_text, traj_text = self.transform(jts_text, lengths)             #TODO ask: traj_text 2D? 
                 # jts_text = [torch.from_numpy(keypoint)[:l] for keypoint, l in zip(recons, lengths)]
                 # poses_text = jts_text
                 # root_text = [jts[..., 0, :] for jts in jts_text]
@@ -343,7 +359,8 @@ class ReconsMetrics(Metric):
                 for start_idx, end_idx in zip(np.cumsum([0]+beam_count[:-1]), np.cumsum(beam_count)): #aggregate over beams and update
                     # APE
                     try:
-                        APE_root_per_beam =  torch.stack([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])
+                        APE_root_per_beam =  torch.stack([l2_norm(root_text[i], root_ref[i], dim=1).sum() for i in range(start_idx, end_idx)])      
+                        #TODO ask: why a sum for all the frames/words, why not mean?
                     except:
                         print('assertion failed')
                     mean_APE_root = APE_root_per_beam.mean(0)

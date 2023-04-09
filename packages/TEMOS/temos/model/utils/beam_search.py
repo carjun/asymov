@@ -344,8 +344,10 @@ def diverse_beam_search_auto(                       #alpha
         """
         src (after repeat): [batch1beam1, batch1beam2, ..., batch2beam1, batch2beam2, ...]
         """
-        src = src.repeat((1, beam_width))
-        src_padding_mask = src_padding_mask.repeat((beam_width,1))
+        # src = src.repeat((1, beam_width))
+        # src_padding_mask = src_padding_mask.repeat((beam_width,1))
+        src = src.repeat_interleave(beam_width, dim=1)
+        src_padding_mask = src_padding_mask.repeat_interleave(beam_width, dim=0)
 
         tgt = tgt.repeat((1,beam_width))
         tgt_padding_mask = tgt.new_full((batch_size*beam_width, 1), False, dtype=torch.bool)  # [Batch Size, 1], 1 as for 1st frame
@@ -384,7 +386,7 @@ def diverse_beam_search_auto(                       #alpha
             for j in range(next_probabilities.size(0)):
                 next_probabilities[j,selected_beam] = -100
                 selected_beam.append(next_probabilities[j].argmax().item())
-                if j%beam_width == 4:
+                if j%beam_width == beam_width-1:
                     next_tokens += selected_beam
                     selected_beam = []
 
@@ -417,6 +419,7 @@ def diverse_beam_search_auto(                       #alpha
         assert tgt.shape[0] == max_len+1, f"At this point, frames should be <start> frame + max_decoded: {1} + {max_len}"
 
         tgt = tgt[1:]
+        tgt = tgt.transpose(0,1)
         # tgt = torch.cat((tgt[1:], tgt_len.unsqueeze(0)))    #concatenating tgt_len in the end so it can be reshaped acc to tgt
         # # tgt = tgt.T.reshape(beam_width, -1).T.reshape(-1, tgt.shape[0], beam_width).permute(0,2,1).reshape(-1, tgt.shape[0])        #BUG TODO : This is wrong
         # tgt = tgt.T.reshape(beam_width,batch_size,tgt.size(0)).transpose(0,1).reshape(beam_width*batch_size,tgt.size(0))
@@ -426,8 +429,8 @@ def diverse_beam_search_auto(                       #alpha
         tgt_list = remove_padding_and_EOS(tgt, tgt_len)
         tmp = torch.tensor([len(x) for x in tgt_list]).to(tgt_len.device)
 
-        assert torch.all(tmp == tgt_len), f'''Len of each tensor does not match tgt_len after BOS, pad,
-                            EOS removal for {torch.nonzero(torch.logical_not(torch.tensor([len(x) for x in tgt_list]) == tgt_len)).squeeze()}'''
+        assert torch.all(tmp == tgt_len).item(), f'''Len of each tensor does not match tgt_len after BOS, pad,
+                            EOS removal for {torch.nonzero(torch.logical_not(tmp == tgt_len)).squeeze()}'''
 
         assert len(tgt_list) == beam_width*batch_size, f'''tgt_list size not equal to beam*batch, required: {beam_width*batch_size}
                                                                                                   current shape: {len(tgt_list)}'''
@@ -435,19 +438,21 @@ def diverse_beam_search_auto(                       #alpha
         if traj:
             tgt_traj = tgt_traj[1:]
             # tgt_traj = tgt_traj.permute(1,0,2).reshape(beam_width, -1, 3).permute(1,0,2).reshape(-1, tgt_traj.shape[0], beam_width, 3).permute(0, 2, 1, 3).reshape(-1, tgt_traj.shape[0], 3)
-            tgt_traj = tgt_traj.transpose(0,1).reshape(beam_width, batch_size, tgt_traj.size(0), tgt_traj.size(2)).transpose(0,1).reshape(beam_width*batch_size, tgt_traj.size(0), tgt_traj.size(2))
+            tgt_traj = tgt_traj.transpose(0,1)#.reshape(beam_width, batch_size, tgt_traj.size(0), tgt_traj.size(2)).transpose(0,1).reshape(beam_width*batch_size, tgt_traj.size(0), tgt_traj.size(2))
 
             # with CodeTimer('remove_paddding tgt_traj_list'):
             tgt_traj_list =  remove_padding_and_EOS(tgt_traj, tgt_len)
             tmp = torch.tensor([len(x) for x in tgt_traj_list]).to(tgt_len.device)
             assert torch.all(tmp == tgt_len), f'''Len of each tensor does not match tgt_len after BOS, pad,
-                            EOS removal for {torch.nonzero(torch.logical_not(torch.tensor([len(x) for x in tgt_traj_list]) == tgt_len)).squeeze()}'''
+                            EOS removal for {torch.nonzero(torch.logical_not(tmp == tgt_len)).squeeze()}'''
 
             assert len(tgt_traj_list) == beam_width*batch_size, f'''tgt_list size not equal to beam*batch, required: {beam_width*batch_size}
                                                                                                            current shape: {len(tgt_traj_list)}'''
 
             return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
-
+        """
+        tgt_list: [batch1beam1, batch1beam2, ..., batch2beam1, batch2beam2, ...]
+        """
         return tgt_list
 
 
