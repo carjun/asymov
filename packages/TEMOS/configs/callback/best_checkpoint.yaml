@@ -4,7 +4,7 @@ monitor:
 mode: 
 filename: best-${.monitor}-{${.monitor}}-epoch-{epoch}
 auto_insert_metric_name: false
-dirpath: ${callback.dirpath}/checkpoints/${run_id}
+dirpath: ${callback.dirpath}/outputs/kit-fke-motion-word/${experiment}/${run_id}/checkpoints/
 every_n_epochs: 1
 save_top_k: 1
 save_last: false

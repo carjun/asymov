@@ -2,7 +2,7 @@ _target_: pytorch_lightning.callbacks.ModelCheckpoint
 
 filename: latest-epoch-{epoch}
 auto_insert_metric_name: false
-dirpath: ${callback.dirpath}/checkpoints/${run_id}/
+dirpath: ${callback.dirpath}/outputs/kit-fke-motion-word/${experiment}/${run_id}/checkpoints/
 monitor: step
 mode: max
 every_n_epochs: 50
