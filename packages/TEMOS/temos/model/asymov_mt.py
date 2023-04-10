@@ -175,7 +175,8 @@ class AsymovMT(BaseModel):
         probs = mw_logits.detach().softmax(dim=1) 
         # bs, _, frames = probs.shape
         target = tgt_out.detach()
-        traj = [i.detach() for i in traj]
+        if self.hparams.traj:
+            traj = [i.detach() for i in traj]
 
         self.metrics[split]['acc_teachforce'].update(probs, target)
 
@@ -222,7 +223,7 @@ class AsymovMT(BaseModel):
                     else:
                         self.metrics[split]['mpjpe'].update(batch['keyid'], pred_mw_clusters)
         except Exception as err:
-             print("Val exception:", err, batch['keyid'],  "len of pred mw/traj", len(pred_mw_clusters), len(pred_traj))
+             print("Val exception:", err, batch['keyid'],  "len of pred mw/traj")#, len(pred_mw_clusters), len(pred_traj))
 
         return loss
 

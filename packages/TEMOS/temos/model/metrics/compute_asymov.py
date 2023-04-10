@@ -230,7 +230,8 @@ class ReconsMetrics(Metric):
         len(cluster_seqs)=103 (should be 4*32 = 128)
         num_seq = 32
         """
-        beamed_traj = [traj[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
+        if self.traj:
+            beamed_traj = [traj[i*self.beam_width:(i+1)*self.beam_width] for i in range(num_seq)]
 
         # get good sequences (no <bos>, <unk> or <pad>)
         good_beams_per_seq = [[j for j in range(self.beam_width) if ((len(beam_seqs[j]) > 0) and \
@@ -270,10 +271,12 @@ class ReconsMetrics(Metric):
                                 for i in range(num_beams)]
         beamed_cluster_seqs = [[beamed_cluster_seqs[i][j].cpu().numpy() for j in good_beams_per_seq[i]]
                                for i in good_seq_idx]
-        beamed_traj = [[beamed_traj[i][j].cpu().numpy() for j in good_beams_per_seq[i]]
+        if self.traj:
+            beamed_traj = [[beamed_traj[i][j].cpu().numpy() for j in good_beams_per_seq[i]]
                        for i in good_seq_idx]
         cluster_seqs = sum(beamed_cluster_seqs, [])#[]
-        traj = sum(beamed_traj, [])
+        if self.traj:
+            traj = sum(beamed_traj, [])
 
         self.count_good_seq += len(seq_names)
         self.count_good += sum([cluster_seq.shape[0] for cluster_seq in cluster_seqs])      
