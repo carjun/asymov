@@ -6,11 +6,11 @@ hydra:
 seed: 1234
 
 logger_level: INFO
-folder: ???
+folder: ??? #packages/TEMOS/outputs/kit-fke-motion-word/atharvan_local_run/greedy_exp1/
 
-split: ???
+split: ??? #recons
 
-ckpt_name: last.ckpt
+ckpt_name: latest-epoch-349.ckpt
 ckpt_path: ${get_last_checkpoint:${folder},${ckpt_name}}
 
 # if jointstype == vertices

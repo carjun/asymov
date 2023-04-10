@@ -77,7 +77,7 @@ def sample(newcfg: DictConfig) -> None:
 
     logger.info("Loading data module")
     data_module = instantiate(cfg.data)
-    logger.info(f"Data module '{cfg.data.dataname}' loaded")
+    logger.info(f"Data module '{cfg.data.name}' loaded")    #TODO: change data.dataname
     
     if OmegaConf.is_missing(cfg.model, 'text_vocab_size'):
         cfg.model.text_vocab_size = data_module.text_vocab_size
@@ -115,7 +115,7 @@ def sample(newcfg: DictConfig) -> None:
             tgt_input = tgt[:-1, :] #[Frames-1, Batch size]
             src_mask, _, src_padding_mask, _ = create_mask(src, tgt_input, model.PAD_IDX)
             
-            pred_mw_tokens = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
+            pred_mw_tokens, traj = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
             assert len(batch["keyid"]) == len(pred_mw_tokens)
             
             for keyid, clusters in zip(batch["keyid"], pred_mw_tokens):

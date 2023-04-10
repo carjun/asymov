@@ -28,6 +28,8 @@ logs*
 wandb/
 outputs/
 
+samples/
+
 # Models
 packages/TEMOS/pretrained_models/
 

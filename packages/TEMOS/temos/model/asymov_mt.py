@@ -93,7 +93,7 @@ class AsymovMT(BaseModel):
         self.__post_init__()
 
     #TODO: add comments to understand the interleaved output of batch_beam_decode
-    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int, decoding_scheme:str = "diverse", beam_width: int = 5) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
+    def batch_translate(self, src: Tensor, src_mask: Tensor, src_padding_mask: Tensor, max_len: int, decoding_scheme:str = "greedy", beam_width: int = 5) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing, takes batched input but gives unbatched output
         # src: [Frames, Batch size]
         if self.hparams.traj:
             if decoding_scheme == "greedy":
