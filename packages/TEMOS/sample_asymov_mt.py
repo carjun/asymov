@@ -105,6 +105,8 @@ def sample(newcfg: DictConfig) -> None:
     # remove printing for changing the seed
     logging.getLogger('pytorch_lightning.utilities.seed').setLevel(logging.WARNING)
 
+    if cfg.traj:
+        frame2traj_mapping = {}
     frame2cluster_mapping = {}
     contiguous_frame2cluster_mapping = {"name":[], "idx":[], "cluster":[], "length":[]}
     with torch.no_grad():
@@ -115,11 +117,20 @@ def sample(newcfg: DictConfig) -> None:
             tgt_input = tgt[:-1, :] #[Frames-1, Batch size]
             src_mask, _, src_padding_mask, _ = create_mask(src, tgt_input, model.PAD_IDX)
             
-            pred_mw_tokens, traj = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
+            if cfg.traj: 
+                pred_mw_tokens, pred_traj = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
+                pred_traj = [i.detach() for i in pred_traj]
+            else:
+                pred_mw_tokens = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
             assert len(batch["keyid"]) == len(pred_mw_tokens)
             
-            for keyid, clusters in zip(batch["keyid"], pred_mw_tokens):
+            for i, (keyid, clusters) in enumerate(zip(batch["keyid"], pred_mw_tokens)):
                 name = f"{keyid}"
+                
+                if cfg.traj:
+                    traj = np.array(pred_traj[i])
+                    frame2traj_mapping[name] = traj
+                
                 clusters = np.array(clusters)
                 frame2cluster_mapping[name] = clusters
                 
@@ -141,6 +152,10 @@ def sample(newcfg: DictConfig) -> None:
                         running_idx += 1
                         current_len = 1
                     prev = cc
+    
+    if cfg.traj:
+        frame2traj_mapping = pd.DataFrame.from_dict(frame2traj_mapping, orient='index', columns=['traj'])
+        frame2traj_mapping.to_pickle(path/"frame2traj_mapping.pkl")
     
     frame2cluster_mapping = pd.DataFrame.from_dict(frame2cluster_mapping, orient='index')
     frame2cluster_mapping.to_pickle(path/"frame2cluster_mapping.pkl")

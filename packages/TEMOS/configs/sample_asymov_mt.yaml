@@ -8,9 +8,12 @@ seed: 1234
 logger_level: INFO
 folder: ??? #packages/TEMOS/outputs/kit-fke-motion-word/atharvan_local_run/greedy_exp1/
 
+# no need to use traj here as in line 68 of sample_asymov_mt.py: cfg = OmegaConf.merge(prevcfg, newcfg)
+# traj: ??? #true
+
 split: ??? #recons
 
-ckpt_name: latest-epoch-349.ckpt
+ckpt_name: last.ckpt
 ckpt_path: ${get_last_checkpoint:${folder},${ckpt_name}}
 
 # if jointstype == vertices
