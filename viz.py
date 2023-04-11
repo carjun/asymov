@@ -99,6 +99,7 @@ def cluster_seq2vid(save_name, cluster_seq, cluster2keypoint_mapping_path, frame
     Maps sequence of clusters to proxy center keypoints and visualizes into an mp4 video.
 
     Args:
+        TODO save_name : ??
         cluster_seq : Array of cluster indices per frame
         cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
         frames_dir : Path to root folder that will contain frames folder
@@ -452,17 +453,19 @@ class Viz:
     def recons_viz(self):
         '''
         '''
-        samples_dir = Path(self.cfg.approaches.recons_viz)
+        samples_dir = Path(self.cfg.approaches.recons_viz, "contiguous_frame2cluster_mapping.pkl")
         
-        #TODO: use pickle file everywhere
-        # Get predicted cluster IDs for all seqs. @ 12.5 fps
-        l_seq_clids = []
-        for sid in self.l_samples:
-            kp = np.array(np.load(f'{samples_dir}/{sid}.npy'), dtype=np.int64)
-            l_seq_clids.append(kp)
+        # #TODO: use pickle file everywhere
+        # # Get predicted cluster IDs for all seqs. @ 12.5 fps
+        # l_seq_clids = []
+        # for sid in self.l_samples:
+        #     kp = np.array(np.load(f'{samples_dir}/{sid}.npy'), dtype=np.int64)
+        #     l_seq_clids.append(kp)
 
-        # Collate preds into specific compressed dataFrame
-        seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
+        # # Collate preds into specific compressed dataFrame
+        # seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
+        with open(samples_dir, 'rb') as handle:
+            seq2clid_df = pickle.load(handle)
 
         self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
 

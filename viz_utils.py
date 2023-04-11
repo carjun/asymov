@@ -917,7 +917,7 @@ def viz_l_seqs(seq_names, keypoints, frames_dir, sk_type, fps, force=False):
         chunk_size = 2
         iter = zip(viz_names, keypoints)
         with tqdm(desc='joint2vid', total=n) as pbar:
-            _ = [pbar.update() for _ in p.imap_unordered(partial(joint2vid, sk_type=sk_type, frames_dir=frames_dir, fps=fps), iter, chunk_size)]
+            _ = [pbar.update() for _ in map(partial(joint2vid, sk_type=sk_type, frames_dir=frames_dir, fps=fps), iter)]
 
     # option 2: new process for each seq_name for each operation (with Pool, sequential operations)
     # n = len(viz_names)
