@@ -160,7 +160,7 @@ def sample(newcfg: DictConfig) -> None:
     if cfg.traj:
         # frame2traj_mapping = pd.DataFrame.from_dict(frame2traj_mapping, orient='index', columns=['traj'])
         # frame2traj_mapping.to_pickle(path/"frame2traj_mapping.pkl")
-        with open(path/"frame2traj_mapping.pkl") as handle:
+        with open(path/"frame2traj_mapping.pkl", "wb+") as handle:
             pickle.dump(frame2traj_mapping, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
     # with open(path/"frame2cluster_mapping.pkl") as handle:
