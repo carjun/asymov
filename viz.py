@@ -116,9 +116,10 @@ def cluster_seq2vid(save_name, cluster_seq, cluster2keypoint_mapping_path, frame
 #-------------------------------------------------------------------------------
 
 #pred reconstruction-----------------------------------------------------------------
-def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps:float=12.5, gt_fps:float=100.0, recons_fps:float=25.0, frames_dir=None, viz_names=None, force=False, **kwargs):
+def reconstruction(traj_inclusion, recons_type, filters, seq_names, data_path, sk_type, pred_fps:float=12.5, gt_fps:float=100.0, recons_fps:float=25.0, frames_dir=None, viz_names=None, force=False, residual_traj=True, **kwargs):
     '''
     Args:
+        traj_inclusion (Bool): if traj needs to be added (change residual_traj as per need)
         recons_type (str) : reconstruction technique to be used
         filters (List[str]) : smoothing filters to apply on reconstructions. Use string 'none' for no filter.
         seq_names (List[str]): name of video sequences to reconstruct
@@ -131,11 +132,15 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization.
         viz_names (List[str]): name of video sequences to visualize. Defaults to 'seq_names' argument. Pass [] to not visualize any.
         force : If True, visualize all viz_names overwriting existing ones. Defaults to False, visualizing only those whose .mp4 videos do not already exist.
+        residual_traj: If predicted root traj coordinates are residual. Defaults to True.
         **kwargs: Must contain
+            if traj_inclusion == True
+                frame2traj_mapping_path : Path to pickled dataframe containing the mapping of each inplace frame in a video to its root trajectory.
+            
             if recons_type == 'naive_no_rep' or 'naive':
                 contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
                 cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
-            if recons_type == 'very_naive':
+            elif recons_type == 'very_naive':
                 cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
                 frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster.
                 frame2cluster_mapping_dir: Path of directory containing .npy files for TEMOS-asymov variant.
@@ -193,11 +198,28 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps
 
         recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path)
 
-    # recons and gt in desired fps
-    gt = [gt_data[name][:5000, :, :] for name in seq_names]
-    gt_in_recons_fps = [change_fps(keypoint, gt_fps, recons_fps) for keypoint in gt]
+    # traj inclusion
+    if traj_inclusion:
+        if 'frame2traj_mapping_path' in kwargs.keys():
+            frame2traj_mapping_path = kwargs['frame2traj_mapping_path']
+        else:
+            frame2traj_mapping_path = None
+        
+        if frame2traj_mapping_path is not None:
+            frame2traj = pd.read_pickle(frame2cluster_mapping_path)
+            traj = [frame2traj[name] for name in seq_names]
+        else:
+            ValueError('frame2traj not given')
+        
+        recons = add_traj(recons, traj, residual_traj)
+    
+    # recons in desired fps
     recons = [change_fps(keypoint, pred_fps, recons_fps) for keypoint in recons]
 
+    # gt in desired fps
+    gt = [gt_data[name][:5000, :, :] for name in seq_names]
+    gt_in_recons_fps = [change_fps(keypoint, gt_fps, recons_fps) for keypoint in gt]
+    
     mpjpe={}
     print('----------------------------------------------------')
     # print("MPJPE")
@@ -303,7 +325,8 @@ class Viz:
         self.og_split_file_p = Path(self.cfg.splitpath, self.cfg.split)
         self.og_l_samples = utils.read_textf(self.og_split_file_p, ret_type='list')
         self.og_n_samples = len(self.og_l_samples)
-
+        
+        self.traj = self.cfg.traj
 
     def _get_l_samples(self, l_samples, n_samples):
         '''
