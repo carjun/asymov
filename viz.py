@@ -206,7 +206,7 @@ def reconstruction(traj_inclusion, recons_type, filters, seq_names, data_path, s
             frame2traj_mapping_path = None
         
         if frame2traj_mapping_path is not None:
-            frame2traj = pd.read_pickle(frame2cluster_mapping_path)
+            frame2traj = pd.read_pickle(frame2traj_mapping_path)
             traj = [frame2traj[name] for name in seq_names]
         else:
             ValueError('frame2traj not given')
@@ -659,3 +659,6 @@ class Viz:
         return 1
 #-------------------------------------------------------------------------------
 
+# if __name__ == '__main__':
+#     # _reconstruct()
+#     _viz()
