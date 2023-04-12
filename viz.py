@@ -456,38 +456,45 @@ class Viz:
         return seq2clid_df
 
 
-    def viz_diff_rec_types(self, seq2clid_df, dir_n):
+    def viz_diff_rec_types(self, dir_n, seq2clid_df=None):
         '''
         Args:
             seq2clid_df <pd.DataFrame>: Described in _create_seq2clid_df(.).
         Frame-rate of cluster ids @ 12.5 fps.
         '''
+        samples_dir = Path(self.cfg.approaches.recons_viz)
         frames_dir = Path(self.cfg.viz_dir, dir_n)
 
         for rec_type in self.cfg.rec_type:
-            reconstruction(rec_type, self.cfg.filters, self.l_samples,
+            reconstruction(self.traj, rec_type, self.cfg.filters, self.l_samples,
                 self.data['gt'], 'kitml', self.cfg.fps.pred_fps, self.cfg.fps.gt_fps, self.cfg.fps.out_fps,
                 frames_dir, None,
-                False, contiguous_frame2cluster_mapping_path=seq2clid_df,
-                cluster2frame_mapping_path=self.data['clid2frame'])
+                False,
+                frame2traj_mapping_path=samples_dir/"frame2traj_mapping.pkl",
+                contiguous_frame2cluster_mapping_path=samples_dir/"contiguous_frame2cluster_mapping.pkl", 
+                frame2cluster_mapping_path=samples_dir/"frame2cluster_mapping_path.pkl", 
+                cluster2frame_mapping_path=self.data['clid2frame'],
+                cluster2keypoint_mapping_path=self.data['clid2kp']
+                )
 
 
     def recons_viz(self):
         '''
         '''
-        samples_dir = Path(self.cfg.approaches.recons_viz)
+        # samples_dir = Path(self.cfg.approaches.recons_viz, "contiguous_frame2cluster_mapping.pkl")
         
-        #TODO: use pickle file everywhere
-        # Get predicted cluster IDs for all seqs. @ 12.5 fps
-        l_seq_clids = []
-        for sid in self.l_samples:
-            kp = np.array(np.load(f'{samples_dir}/{sid}.npy'), dtype=np.int64)
-            l_seq_clids.append(kp)
+        # # Get predicted cluster IDs for all seqs. @ 12.5 fps
+        # l_seq_clids = []
+        # for sid in self.l_samples:
+        #     kp = np.array(np.load(f'{samples_dir}/{sid}.npy'), dtype=np.int64)
+        #     l_seq_clids.append(kp)
 
-        # Collate preds into specific compressed dataFrame
-        seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
-
-        self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
+        # # Collate preds into specific compressed dataFrame
+        # seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
+        
+        # self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
+        
+        self.viz_diff_rec_types('asymov_mt')
 
 
     def sample_mt_asymov(self):
@@ -523,7 +530,7 @@ class Viz:
         # Collate preds into specific compressed dataFrame
         seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
 
-        self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
+        self.viz_diff_rec_types('asymov_mt', seq2clid_df)
 
 
     def sample_temos_asymov(self):
@@ -559,7 +566,7 @@ class Viz:
         # Collate preds into specific compressed dataFrame
         seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
 
-        self.viz_diff_rec_types(seq2clid_df, 'asymov_temos')
+        self.viz_diff_rec_types('asymov_temos', seq2clid_df)
 
 
     def sample_temos_bl(self):
@@ -623,7 +630,7 @@ class Viz:
         # Reconstruct with GT Cluster ids
         if self.cfg.approaches.gt_clid:
             seq2clid_df = self._create_seq2clid_df_gt_cl()  # GT cl ids for seqs.
-            self.viz_diff_rec_types(seq2clid_df, 'gt_cluster_recon')
+            self.viz_diff_rec_types('gt_cluster_recon', seq2clid_df)
 
         # Create temp file in kit-splits that sample.py can load.
         if self.l_samples == self.og_l_samples:
@@ -638,11 +645,11 @@ class Viz:
         if self.cfg.approaches.recons_viz:
             self.recons_viz()
         
-        # Inference MT-ASyMov model and reconstruct
+        # Inference MT-ASyMov model, reconstruct and visualize
         if self.cfg.approaches.asymov_mt:
             self.sample_mt_asymov()
 
-        # Inference TEMOS-ASyMov model and reconstruct
+        # Inference TEMOS-ASyMov model, reconstruct and visualize
         if self.cfg.approaches.asymov_temos:
             self.sample_temos_asymov()  # Get pred cl ids foj
 
