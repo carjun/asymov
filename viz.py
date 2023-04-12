@@ -116,9 +116,10 @@ def cluster_seq2vid(save_name, cluster_seq, cluster2keypoint_mapping_path, frame
 #-------------------------------------------------------------------------------
 
 #pred reconstruction-----------------------------------------------------------------
-def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps:float=12.5, gt_fps:float=100.0, recons_fps:float=25.0, frames_dir=None, viz_names=None, force=False, **kwargs):
+def reconstruction(traj_inclusion, recons_type, filters, seq_names, data_path, sk_type, pred_fps:float=12.5, gt_fps:float=100.0, recons_fps:float=25.0, frames_dir=None, viz_names=None, force=False, residual_traj=True, **kwargs):
     '''
     Args:
+        traj_inclusion (Bool): if traj needs to be added (change residual_traj as per need)
         recons_type (str) : reconstruction technique to be used
         filters (List[str]) : smoothing filters to apply on reconstructions. Use string 'none' for no filter.
         seq_names (List[str]): name of video sequences to reconstruct
@@ -131,11 +132,15 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps
         frames_dir : Path to root folder that will contain frames folder for visualization. If None, won't create visualization.
         viz_names (List[str]): name of video sequences to visualize. Defaults to 'seq_names' argument. Pass [] to not visualize any.
         force : If True, visualize all viz_names overwriting existing ones. Defaults to False, visualizing only those whose .mp4 videos do not already exist.
+        residual_traj: If predicted root traj coordinates are residual. Defaults to True.
         **kwargs: Must contain
+            if traj_inclusion == True
+                frame2traj_mapping_path : Path to pickled dataframe containing the mapping of each inplace frame in a video to its root trajectory.
+            
             if recons_type == 'naive_no_rep' or 'naive':
                 contiguous_frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of contiguous frames in a video to a cluster
                 cluster2frame_mapping_path : Path to pickled dataframe containing the mapping of cluster to the proxy center frame (and the video sequence containing it)
-            if recons_type == 'very_naive':
+            elif recons_type == 'very_naive':
                 cluster2keypoint_mapping_path : Path to pickled dataframe containing the mapping of cluster to proxy center keypoints
                 frame2cluster_mapping_path : Path to pickled dataframe containing the mapping of each frame in a video to a cluster.
                 frame2cluster_mapping_dir: Path of directory containing .npy files for TEMOS-asymov variant.
@@ -193,11 +198,28 @@ def reconstruction(recons_type, filters, seq_names, data_path, sk_type, pred_fps
 
         recons = eval(recons_type+'_reconstruction')(seq_names, cluster_seqs, cluster2keypoint_mapping_path)
 
-    # recons and gt in desired fps
-    gt = [gt_data[name][:5000, :, :] for name in seq_names]
-    gt_in_recons_fps = [change_fps(keypoint, gt_fps, recons_fps) for keypoint in gt]
+    # traj inclusion
+    if traj_inclusion:
+        if 'frame2traj_mapping_path' in kwargs.keys():
+            frame2traj_mapping_path = kwargs['frame2traj_mapping_path']
+        else:
+            frame2traj_mapping_path = None
+        
+        if frame2traj_mapping_path is not None:
+            frame2traj = pd.read_pickle(frame2cluster_mapping_path)
+            traj = [frame2traj[name] for name in seq_names]
+        else:
+            ValueError('frame2traj not given')
+        
+        recons = add_traj(recons, traj, residual_traj)
+    
+    # recons in desired fps
     recons = [change_fps(keypoint, pred_fps, recons_fps) for keypoint in recons]
 
+    # gt in desired fps
+    gt = [gt_data[name][:5000, :, :] for name in seq_names]
+    gt_in_recons_fps = [change_fps(keypoint, gt_fps, recons_fps) for keypoint in gt]
+    
     mpjpe={}
     print('----------------------------------------------------')
     # print("MPJPE")
@@ -303,7 +325,8 @@ class Viz:
         self.og_split_file_p = Path(self.cfg.splitpath, self.cfg.split)
         self.og_l_samples = utils.read_textf(self.og_split_file_p, ret_type='list')
         self.og_n_samples = len(self.og_l_samples)
-
+        
+        self.traj = self.cfg.traj
 
     def _get_l_samples(self, l_samples, n_samples):
         '''
@@ -433,38 +456,45 @@ class Viz:
         return seq2clid_df
 
 
-    def viz_diff_rec_types(self, seq2clid_df, dir_n):
+    def viz_diff_rec_types(self, dir_n, seq2clid_df=None):
         '''
         Args:
             seq2clid_df <pd.DataFrame>: Described in _create_seq2clid_df(.).
         Frame-rate of cluster ids @ 12.5 fps.
         '''
+        samples_dir = Path(self.cfg.approaches.recons_viz)
         frames_dir = Path(self.cfg.viz_dir, dir_n)
 
         for rec_type in self.cfg.rec_type:
-            reconstruction(rec_type, self.cfg.filters, self.l_samples,
+            reconstruction(self.traj, rec_type, self.cfg.filters, self.l_samples,
                 self.data['gt'], 'kitml', self.cfg.fps.pred_fps, self.cfg.fps.gt_fps, self.cfg.fps.out_fps,
                 frames_dir, None,
-                False, contiguous_frame2cluster_mapping_path=seq2clid_df,
-                cluster2frame_mapping_path=self.data['clid2frame'])
+                False,
+                frame2traj_mapping_path=samples_dir/"frame2traj_mapping.pkl",
+                contiguous_frame2cluster_mapping_path=samples_dir/"contiguous_frame2cluster_mapping.pkl", 
+                frame2cluster_mapping_path=samples_dir/"frame2cluster_mapping_path.pkl", 
+                cluster2frame_mapping_path=self.data['clid2frame'],
+                cluster2keypoint_mapping_path=self.data['clid2kp']
+                )
 
 
     def recons_viz(self):
         '''
         '''
-        samples_dir = Path(self.cfg.approaches.recons_viz)
+        # samples_dir = Path(self.cfg.approaches.recons_viz, "contiguous_frame2cluster_mapping.pkl")
         
-        #TODO: use pickle file everywhere
-        # Get predicted cluster IDs for all seqs. @ 12.5 fps
-        l_seq_clids = []
-        for sid in self.l_samples:
-            kp = np.array(np.load(f'{samples_dir}/{sid}.npy'), dtype=np.int64)
-            l_seq_clids.append(kp)
+        # # Get predicted cluster IDs for all seqs. @ 12.5 fps
+        # l_seq_clids = []
+        # for sid in self.l_samples:
+        #     kp = np.array(np.load(f'{samples_dir}/{sid}.npy'), dtype=np.int64)
+        #     l_seq_clids.append(kp)
 
-        # Collate preds into specific compressed dataFrame
-        seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
-
-        self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
+        # # Collate preds into specific compressed dataFrame
+        # seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
+        
+        # self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
+        
+        self.viz_diff_rec_types('asymov_mt')
 
 
     def sample_mt_asymov(self):
@@ -500,7 +530,7 @@ class Viz:
         # Collate preds into specific compressed dataFrame
         seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
 
-        self.viz_diff_rec_types(seq2clid_df, 'asymov_mt')
+        self.viz_diff_rec_types('asymov_mt', seq2clid_df)
 
 
     def sample_temos_asymov(self):
@@ -536,7 +566,7 @@ class Viz:
         # Collate preds into specific compressed dataFrame
         seq2clid_df = self._create_seq2clid_df_preds(l_seq_clids)
 
-        self.viz_diff_rec_types(seq2clid_df, 'asymov_temos')
+        self.viz_diff_rec_types('asymov_temos', seq2clid_df)
 
 
     def sample_temos_bl(self):
@@ -600,7 +630,7 @@ class Viz:
         # Reconstruct with GT Cluster ids
         if self.cfg.approaches.gt_clid:
             seq2clid_df = self._create_seq2clid_df_gt_cl()  # GT cl ids for seqs.
-            self.viz_diff_rec_types(seq2clid_df, 'gt_cluster_recon')
+            self.viz_diff_rec_types('gt_cluster_recon', seq2clid_df)
 
         # Create temp file in kit-splits that sample.py can load.
         if self.l_samples == self.og_l_samples:
@@ -615,11 +645,11 @@ class Viz:
         if self.cfg.approaches.recons_viz:
             self.recons_viz()
         
-        # Inference MT-ASyMov model and reconstruct
+        # Inference MT-ASyMov model, reconstruct and visualize
         if self.cfg.approaches.asymov_mt:
             self.sample_mt_asymov()
 
-        # Inference TEMOS-ASyMov model and reconstruct
+        # Inference TEMOS-ASyMov model, reconstruct and visualize
         if self.cfg.approaches.asymov_temos:
             self.sample_temos_asymov()  # Get pred cl ids foj
 
