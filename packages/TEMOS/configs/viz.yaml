@@ -20,6 +20,7 @@ sk_type: kitml
 
 data_fnames:
     gt: ${cluster_data}_inplace_data.pkl
+    gt_traj: ${cluster_data}_traj_data.pkl
     clid2kp: proxy_centers_${cluster_data}.pkl
     clid2frame: proxy_centers_complete_${cluster_data}.pkl
     # seq2clidx: ${datapath}/contiguous_frame2cluster_mapping.pkl

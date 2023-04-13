@@ -259,20 +259,23 @@ def reconstruction(traj_inclusion, recons_type, filters, seq_names, data_path, s
 #-------------------------------------------------------------------------------
 
 #gt construction-----------------------------------------------------------------
-def ground_truth_construction(seq_names, data_path, sk_type='kitml', gt_fps:float=100.0, cons_fps:float=25.0, frames_dir=None, force=False):
+def ground_truth_construction(traj_inclusion, seq_names, data_path,  traj_path=None, sk_type='kitml', gt_fps:float=100.0, cons_fps:float=25.0, frames_dir=None, force=False, residual_traj=False):
     '''
     Constructs original video from ground truth sequences, which are used as reference for mpjpe calculation.
 
     Args:
+        traj_inclusion (Bool): if traj needs to be added (change residual_traj as per need)
         seq_names : name of video sequences to construct and visualize ground truth
         data_path : path to the pickled dictionary containing the per frame ground truth 3d keypoints of skeleton joints of the specified video sequence name
                     or the GT dictionary itself
+        traj_path : Path to pickled dataframe containing the mapping of each inplace frame in a video to its root trajectory.
         sk_type : {'smpl', 'nturgbd', 'kitml', 'coco17'}
         gt_fps : Ground truth framerate. Default = 100.0 (KIT)
         cons_fps (float): Construction output framerate. Default = 25.0
         frames_dir : Path to root folder that will contain frames folder for visualization.
         force (Bool): If True visualizes all sequences even if already exists in frames_dir.
                     Defaults to False, only visualizes incomplete or un-visualized sequences.
+        residual_traj: If predicted root traj coordinates are residual. Defaults to False.
     Returns:
         None.
         The reconstructed videos are saved in {frames_dir}/{seq_name} as {seq_name}.mp4
@@ -286,6 +289,15 @@ def ground_truth_construction(seq_names, data_path, sk_type='kitml', gt_fps:floa
             gt_data = pickle.load(handle)
 
     print('----------------------------------------------------')
+    # traj inclusion
+    if traj_inclusion:
+        if traj_path is not None:
+            traj_data = pd.read_pickle(traj_path)
+            traj = [traj_data[name] for name in seq_names]
+        else:
+            ValueError('traj not given')
+        recons = add_traj(recons, traj, residual_traj)
+
     #TODO: remove 5000 limit
     gt = [change_fps(gt_data[name][:5000, :, :], gt_fps, cons_fps)
           for name in tqdm(seq_names, 'Ground Truth construction')]
@@ -624,8 +636,9 @@ class Viz:
         # Viz. GT seqs.
         if self.cfg.approaches.gt:
             frames_dir = str(Path(self.cfg.viz_dir, 'gt'))
-            ground_truth_construction(self.l_samples, self.data['gt'], 'kitml', self.cfg.fps.gt_fps, self.cfg.fps.out_fps,
-                        frames_dir, force=False)
+            ground_truth_construction(self.traj, self.l_samples, self.data['gt'], self.data['gt_traj'], 
+                                      'kitml', self.cfg.fps.gt_fps, self.cfg.fps.out_fps,
+                                      frames_dir, force=False)
 
         # Reconstruct with GT Cluster ids
         if self.cfg.approaches.gt_clid:
