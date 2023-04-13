@@ -10,7 +10,7 @@ hydra:
 path: .
 viz_dir: ${path}/outputs/kit-xyz-motion-word/full_dataset/asymov_mt_ps102/reconstructions
 
-cluster_data: xyz  #{tan, tan64, xyz}
+cluster_data: fke  #{tan, tan64, xyz}
 traj: ??? #true
 
 datapath: ${path}/datasets  # not /kit
