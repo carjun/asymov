@@ -837,14 +837,14 @@ def write_vid_from_imgs(folder_p, fps):
     '''
     sid = ospb(folder_p)
     vid_p = osp.join(folder_p, f'{sid}.mp4')
-    # cmd = ['ffmpeg', '-r', str(int(fps)), '-i',
-    #                 osp.join(folder_p, 'frames', '%05d.jpg'), '-y', '-c:v', 'libx264', vid_p]
-    ffmpeg.input(folder_p+'*.jpg', pattern_type='glob', framerate=25).output(vid_p).run()
-    # FNULL = open(os.devnull, 'w')
-    # retcode = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
-    # if not 0 == retcode:
-        # print('*******ValueError(Error {0} executing command: {1}*********'.format(retcode, ' '.join(cmd)))
-    # shutil.rmtree(osp.join(folder_p, 'frames'))
+    cmd = ['ffmpeg', '-r', str(int(fps)), '-i',
+                    osp.join(folder_p, 'frames', '%05d.jpg'), '-y', '-c:v', 'libx264', vid_p]
+    # ffmpeg.input(folder_p+'*.jpg', pattern_type='glob', framerate=25).output(vid_p).run()
+    FNULL = open(os.devnull, 'w')
+    retcode = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+    if not 0 == retcode:
+        print('*******ValueError(Error {0} executing command: {1}*********'.format(retcode, ' '.join(cmd)))
+    shutil.rmtree(osp.join(folder_p, 'frames'))
 
 def joint2vid(name_keypoint, sk_type, frames_dir, fps, radius=1.2): #combine viz_skeleton
     name, keypoint = name_keypoint

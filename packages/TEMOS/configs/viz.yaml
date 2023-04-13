@@ -7,19 +7,19 @@ hydra:
     dir: .
   output_subdir: null
 
-path: .
-viz_dir: ${path}/outputs/kit-xyz-motion-word/full_dataset/asymov_mt_ps102/reconstructions
+path: . #packages/TEMOS #
+viz_dir: ${path}/outputs/kit-fke-motion-word/atharvan_local_run/greedy_exp1/reconstructions
 
 cluster_data: fke  #{tan, tan64, xyz}
 traj: ??? #true
 
 datapath: ${path}/datasets  # not /kit
-splitpath: ${path}/datasets/kit-splits-tiny
-split: recons
+splitpath: ${path}/datasets/kit-splits
+split: recons #visu
 sk_type: kitml
 
 data_fnames:
-    gt: ${cluster_data}_data.pkl
+    gt: ${cluster_data}_inplace_data.pkl
     clid2kp: proxy_centers_${cluster_data}.pkl
     clid2frame: proxy_centers_complete_${cluster_data}.pkl
     # seq2clidx: ${datapath}/contiguous_frame2cluster_mapping.pkl
@@ -37,8 +37,8 @@ approaches:
     asymov_temos: false #outputs/kit-xyz-motion-word/asymov_full_run_1/uoon5wnl/checkpoints/viz-epoch-144.ckpt
     asymov_mt: false #outputs/kit-xyz-motion-word/full_dataset/asymov_mt_ps102/checkpoints/viz-epoch-144.ckpt
     # If already inferenced, just want reconstruct and viz., give inference samples path below  
-    recons_viz: ${path}/outputs/kit-xyz-motion-word/full_dataset/asymov_mt_ps102/samples/neutral_recons
+    #recons_viz: ${path}/samples/neutral_visu
 
-rec_type: ['naive', 'naive_no_rep']
+rec_type: ['naive'] #, 'naive_no_rep']
 
 filters: ['none', 'uniform', 'spline']
