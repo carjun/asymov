@@ -29,6 +29,7 @@ wandb/
 outputs/
 
 samples/
+visualization/
 
 # Models
 packages/TEMOS/pretrained_models/

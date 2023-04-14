@@ -21,6 +21,8 @@ from temos.data.sampling import upsample
 from temos.model.utils.beam_search import beam_search
 from temos.model.utils.tools import create_mask
 
+import pickle
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,7 @@ def load_checkpoint(model, ckpt_path, *, eval_mode):
     # So only load state dict is preferable
     # pdb.set_trace()
     try:
-        ckpt = torch.load(ckpt_path)
+        ckpt = torch.load(ckpt_path)#, 'cuda:0')
     except:
         #TODO handle multi-gpu
         print('Device mismatch when loading checkpoint !')
@@ -100,26 +102,39 @@ def sample(newcfg: DictConfig) -> None:
     logger.info(f"Using checkpoint {ckpt_path}")
     load_checkpoint(model, ckpt_path, eval_mode=True)
 
+    # model.to('cuda:0')
 
 
     # remove printing for changing the seed
     logging.getLogger('pytorch_lightning.utilities.seed').setLevel(logging.WARNING)
 
+    if cfg.traj:
+        frame2traj_mapping = {}
     frame2cluster_mapping = {}
     contiguous_frame2cluster_mapping = {"name":[], "idx":[], "cluster":[], "length":[]}
     with torch.no_grad():
         pbar = tqdm(dataloader, "Sampling")
         for batch in pbar:
-            src: Tensor = batch["text"] #[Frames, Batch size]
-            tgt: Tensor = batch["motion_words"] #[Frames, Batch size]
+            src: Tensor = batch["text"]#.to(model.device) #[Frames, Batch size]
+            tgt: Tensor = batch["motion_words"]#.to(model.device) #[Frames, Batch size]
             tgt_input = tgt[:-1, :] #[Frames-1, Batch size]
             src_mask, _, src_padding_mask, _ = create_mask(src, tgt_input, model.PAD_IDX)
             
-            pred_mw_tokens, traj = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
+            if cfg.traj: 
+                pred_mw_tokens, pred_traj = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
+                pred_traj = [i.detach() for i in pred_traj]
+            else:
+                pred_mw_tokens = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
             assert len(batch["keyid"]) == len(pred_mw_tokens)
             
-            for keyid, clusters in zip(batch["keyid"], pred_mw_tokens):
+            for i, (keyid, clusters) in enumerate(zip(batch["keyid"], pred_mw_tokens)):
                 name = f"{keyid}"
+                
+                if cfg.traj:
+                    traj = np.array(pred_traj[i].cpu())
+                    # traj = pred_traj[i].cpu()
+                    frame2traj_mapping[name] = traj
+                
                 clusters = np.array(clusters)
                 frame2cluster_mapping[name] = clusters
                 
@@ -142,12 +157,24 @@ def sample(newcfg: DictConfig) -> None:
                         current_len = 1
                     prev = cc
     
+    if cfg.traj:
+        # frame2traj_mapping = pd.DataFrame.from_dict(frame2traj_mapping, orient='index', columns=['traj'])
+        # frame2traj_mapping.to_pickle(path/"frame2traj_mapping.pkl")
+        with open(path/"frame2traj_mapping.pkl", "wb+") as handle:
+            pickle.dump(frame2traj_mapping, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    
+    # with open(path/"frame2cluster_mapping.pkl") as handle:
+    #         pickle.dump(frame2cluster_mapping, handle, protocol=pickle.HIGHEST_PROTOCOL)
     frame2cluster_mapping = pd.DataFrame.from_dict(frame2cluster_mapping, orient='index')
     frame2cluster_mapping.to_pickle(path/"frame2cluster_mapping.pkl")
     
     contiguous_frame2cluster_mapping = pd.DataFrame.from_dict(contiguous_frame2cluster_mapping)
     contiguous_frame2cluster_mapping = contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping["idx"]>0]
     contiguous_frame2cluster_mapping.to_pickle(path/"contiguous_frame2cluster_mapping.pkl")
+    # temp_dict = {}
+    # for key, value in contiguous_frame2cluster_mapping.items():
+    #     if 
+    #     temp_dict[key] = value
 
     logger.info(f"All the sampling are done. You can find them here:\n{path}")
 

@@ -31,6 +31,8 @@ import utils
 from typing import List, Union
 from torch import Tensor
 
+import ffmpeg
+
 #TODO: change the import path to inside acton package
 # sys.path.append('/content/drive/Shareddrives/vid tokenization/asymov/packages/acton/')
 # from packages.acton.src.data.dataset import loader,utils
@@ -837,6 +839,7 @@ def write_vid_from_imgs(folder_p, fps):
     vid_p = osp.join(folder_p, f'{sid}.mp4')
     cmd = ['ffmpeg', '-r', str(int(fps)), '-i',
                     osp.join(folder_p, 'frames', '%05d.jpg'), '-y', '-c:v', 'libx264', vid_p]
+    # ffmpeg.input(folder_p+'*.jpg', pattern_type='glob', framerate=25).output(vid_p).run()
     FNULL = open(os.devnull, 'w')
     retcode = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
     if not 0 == retcode:
