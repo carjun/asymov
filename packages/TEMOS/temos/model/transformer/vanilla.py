@@ -30,7 +30,7 @@ class Seq2SeqTransformer(LightningModule):
                  src_vocab_size: int,
                  tgt_vocab_size: int,
                  mw_gen: list = [],
-                 traj_gen: list = [],
+                 traj_seq: list = [],
                  dim_feedforward: int = 512,
                  dropout: float = 0.1,
                  **kwargs):
@@ -61,11 +61,11 @@ class Seq2SeqTransformer(LightningModule):
             self.tgt_positional_encoding = PositionalEncoding(emb_size-3, dropout=dropout)
             
             #traj generator:
-            if traj_gen and len(traj_gen)>0:
-                traj_gen.insert(0, emb_size)
-                traj_gen.insert(len(traj_gen), 3)
+            if traj_seq and len(traj_seq)>0:
+                traj_seq.insert(0, emb_size)
+                traj_seq.insert(len(traj_seq), 3)
                 temp_traj_gen = []
-                for n,m in zip(traj_gen[:-1], traj_gen[1:]):
+                for n,m in zip(traj_seq[:-1], traj_seq[1:]):
                     temp_traj_gen += [nn.Linear(n,m)]
                 self.traj_generator = nn.Sequential(*temp_traj_gen)
             else:

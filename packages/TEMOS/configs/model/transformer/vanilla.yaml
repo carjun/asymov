@@ -11,7 +11,7 @@ src_vocab_size: ${model.text_vocab_size}
 tgt_vocab_size: ${model.mw_vocab_size}
 
 mw_gen:
-traj_gen:
+traj_seq: [128, 32]
 
 dim_feedforward: ${model.dim_feedforward}
 
