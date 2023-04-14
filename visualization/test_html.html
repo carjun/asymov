@@ -1,0 +1,36 @@
+<!-- OUTPUT_MODELS = -->
+
+<html>
+  <head>
+    <title>Audio Description clips</title>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/json3/3.3.2/json3.min.js'></script>    
+    <script src='https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js'></script>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+	<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+	  <style>
+		.vid{
+		/* width: 350px; */
+		width: 60%;
+		}
+		.wrapper{
+			display: flex;
+			flex-flow: row;
+			position: relative;
+		}
+	  </style>
+
+  </head>
+  <body>
+    <div class='container-fluid'>
+			<h3>Audio Description clips</h3> 
+			<p>
+	  		<ul>
+				<li>Visualizing <span id=num_videos></span> "Face expression" samples.</li>
+	  		</ul>
+			</p>
+  	</div>
+
+	<td><video class="vid" id="clip" loop autoplay><source src='naive/00009/00009.mp4' type="video/mp4"></video></td>;
+</body>
+</html>

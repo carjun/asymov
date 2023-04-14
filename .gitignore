@@ -22,3 +22,8 @@ packages/TEMOS/outputs/
 # Models
 packages/TEMOS/pretrained_models/
 
+visualization/reconstructions
+wandb/
+samples/
+outputs/
+
