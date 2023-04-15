@@ -12,8 +12,8 @@ kit-molan/xyz_data.pkl
 packages/R-Drop/
 packages/TEMOS/datasets/fke_inplace_data.pkl
 packages/Complextext2animation/src/dataProcessing/
-packages/TEMOS/datasets/kit-splits
-packages/TEMOS/datasets/kit-splits-tiny
+# packages/TEMOS/datasets/kit-splits
+# packages/TEMOS/datasets/kit-splits-tiny
 *.json
 *.pkl
 
@@ -34,3 +34,4 @@ visualization/
 # Models
 packages/TEMOS/pretrained_models/
 
+visualization

@@ -339,7 +339,7 @@ class ReconsMetrics(Metric):
                 #     end = start + num
                 #     mpjpe_per_sequence.append(np.mean(mpjpe_with_beams[start:end]))
                 #     start = end
-                getattr(self, f"MPJPE_{recons_type}_{filter}").__iadd__(np.mean(mpjpe_per_sequence))
+                getattr(self, f"MPJPE_{recons_type}_{filter}").__iadd__(np.sum(mpjpe_per_sequence))       #TODO: min_mpjpe
 
                 # length = min(gt, predicted)
                 lengths = [min(recons[i].shape[0], gt_with_beams[i].shape[0]) for i in range(len(recons))]
