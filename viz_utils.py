@@ -178,8 +178,10 @@ def naive_reconstruction(seq_names, contiguous_cluster_seqs, ground_truth_data, 
                     center_frame_complete_seq[center_frame_idx+1:center_frame_idx+r_frames+1]), # right supporting frames
                     axis=0
                 ))
-
-            reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+            try:
+                reconstructed_keypoints.append(np.concatenate(reconstructed_keypoint, axis=0))
+            except:
+                pdb.set_trace()
 
     return reconstructed_keypoints
 
