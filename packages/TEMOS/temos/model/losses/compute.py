@@ -140,7 +140,7 @@ class TemosComputeLosses(Metric):
         if loss=='cosine_similarity':
             val = self._losses_func[loss](outputs, inputs, torch.tensor([1]))
         elif loss=='traj_error':
-            val = sum([self._losses_func[loss](x, y) for x,y in zip(outputs, inputs)])
+            val = torch.mean(torch.Tensor([self._losses_func[loss](x, y) for x,y in zip(outputs, inputs)]))
         else:
             val = self._losses_func[loss](outputs, inputs)
         getattr(self, loss).__iadd__(val.detach())
