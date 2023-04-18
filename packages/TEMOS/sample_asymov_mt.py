@@ -70,7 +70,8 @@ def sample(newcfg: DictConfig) -> None:
     cfg = OmegaConf.merge(prevcfg, newcfg)
 
     logger.info("Sample script. The outputs will be stored in:")
-    storage = Path(os.getcwd()) / "samples" #${hydra.run.dir}/samples
+    # storage = Path(os.getcwd()) / "samples" #${hydra.run.dir}/samples
+    storage = Path(newcfg.folder) / "samples"
     path = get_path(storage, cfg.gender, cfg.split)
     path.mkdir(exist_ok=True, parents=True)
     logger.info(f"{path}")
