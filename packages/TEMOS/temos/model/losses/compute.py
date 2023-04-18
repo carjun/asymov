@@ -35,20 +35,27 @@ class TemosComputeLosses(Metric):
         if mode == "xyz" or force_loss_on_jfeats:
             if not ablation_no_motionencoder:
                 losses.append("recons_jfeats2jfeats")
+                losses.append("weighted_recons_jfeats2jfeats")
             losses.append("recons_text2jfeats")
+            losses.append("weighted_recons_text2jfeats")
         if mode == "smpl":
             if not ablation_no_motionencoder:
                 losses.append("recons_rfeats2rfeats")
+                losses.append("weighted_recons_rfeats2rfeats")
             losses.append("recons_text2rfeats")
+            losses.append("weighted_recons_text2rfeats")
         elif mode == "motion_word":
             if not ablation_no_motionencoder:
                 losses.append("recons_mw2mw")
+                losses.append("weighted_recons_mw2mw")
             losses.append("recons_text2mw")
+            losses.append("weighted_recons_text2mw")
         else:
             ValueError("This mode is not recognized.")
 
         if traj:
             losses.append("traj_error")
+            losses.append("weighted_traj_error")
 
         if vae or loss_on_both:
             kl_losses = []
@@ -144,8 +151,10 @@ class TemosComputeLosses(Metric):
         else:
             val = self._losses_func[loss](outputs, inputs)
         getattr(self, loss).__iadd__(val.detach())
+        
         # Return a weighted sum
         weighted_loss = self._params[loss] * val
+        getattr(self, 'weighted_'+loss).__iadd__(weighted_loss.detach())
         return weighted_loss
 
     def loss2logname(self, loss: str, split: str):
