@@ -86,9 +86,9 @@ class TemosComputeLosses(Metric):
 
         # Instantiate loss functions
         self._losses_func = {loss: hydra.utils.instantiate(kwargs[loss + "_func"])
-                             for loss in losses if loss != "total"}
+                             for loss in losses if (loss != "total" and not loss.startswith("weighted"))}
         # Save the lambda parameters
-        self._params = {loss: kwargs[loss] for loss in losses if loss != "total"}
+        self._params = {loss: kwargs[loss] for loss in losses if (loss != "total" and not loss.startswith("weighted"))}
 
     def update(self, ds_text=None, ds_motion=None, ds_ref=None,
                lat_text=None, lat_motion=None, dis_text=None,
@@ -160,7 +160,10 @@ class TemosComputeLosses(Metric):
     def loss2logname(self, loss: str, split: str):
         if loss == "total":
             log_name = f"{loss}/{split}"
-        else:
+        elif (loss.split("_"))==2:
             loss_type, name = loss.split("_")
             log_name = f"{loss_type}/{name}/{split}"
+        elif (loss.split("_"))==3:
+            variable, loss_type, name = loss.split("_")
+            log_name = f"{loss_type}/{variable}_{name}/{split}"
         return log_name
