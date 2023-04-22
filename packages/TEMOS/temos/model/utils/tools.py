@@ -1,4 +1,6 @@
 from typing import Tuple, List, Union
+import pandas as pd
+import numpy as np
 import torch
 from torch import Tensor
 from torch.nn import Module, Transformer as T
@@ -36,6 +38,33 @@ def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
     src_padding_mask = (src == PAD_IDX).transpose(0, 1) #[Batch size, Frames]
     tgt_padding_mask = (tgt == PAD_IDX).transpose(0, 1) #[Batch size, Frames-1]
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
+
+
+# function to obtain contiguous sets of same cluster ids
+def get_contiguous_cluster_seqs(seq_names: List[str], cluster_seqs: List[Tensor]):
+    # pdb.set_trace()
+    contiguous_frame2cluster_mapping = {"name":[], "idx":[], "cluster":[], "length":[]}
+    for name, cluster_seq in zip(seq_names, cluster_seqs):
+        prev=-1
+        running_idx=0
+        current_len = 0
+        cluster_seq = np.append(cluster_seq, [-1])
+        for cc in cluster_seq:
+            if cc == prev:
+                current_len += 1
+            else:
+                contiguous_frame2cluster_mapping["name"].append(name)
+                contiguous_frame2cluster_mapping["idx"].append(int(running_idx))
+                contiguous_frame2cluster_mapping["cluster"].append(prev)
+                contiguous_frame2cluster_mapping["length"].append(current_len)
+                running_idx += 1
+                current_len = 1
+            prev = cc
+    contiguous_frame2cluster_mapping = pd.DataFrame.from_dict(contiguous_frame2cluster_mapping)
+    contiguous_frame2cluster_mapping = contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping["idx"]>0]
+    contiguous_cluster_seqs = [contiguous_frame2cluster_mapping[contiguous_frame2cluster_mapping['name']==name][['cluster', 'length']].reset_index(drop=True) for name in seq_names]
+    return contiguous_cluster_seqs
+
 
 # function to generate output sequence using greedy algorithm
 def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int, traj: bool = True) -> Tensor:
