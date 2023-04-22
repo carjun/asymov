@@ -25,9 +25,10 @@ num_workers: ${machine.num_workers}
 
 # Motion
 vocab_size: ${num_mw_clusters}
-framerate: 12.5
+framerate: 12.5 #TODO 100
 sampler: ${sampler}
 
 # Other
+downsample: false
 tiny: false
 progress_bar: true

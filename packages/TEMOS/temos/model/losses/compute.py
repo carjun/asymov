@@ -160,10 +160,10 @@ class TemosComputeLosses(Metric):
     def loss2logname(self, loss: str, split: str):
         if loss == "total":
             log_name = f"{loss}/{split}"
-        elif (loss.split("_"))==2:
+        elif len(loss.split("_"))==2:
             loss_type, name = loss.split("_")
             log_name = f"{loss_type}/{name}/{split}"
-        elif (loss.split("_"))==3:
+        elif len(loss.split("_"))==3:
             variable, loss_type, name = loss.split("_")
             log_name = f"{loss_type}/{variable}_{name}/{split}"
         return log_name
