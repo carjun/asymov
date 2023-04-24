@@ -22,7 +22,8 @@ packages/TEMOS/outputs/
 # Models
 packages/TEMOS/pretrained_models/
 
-visualization/reconstructions
+visualization/reconstruction*
+visualization/annotation*
 wandb/
 samples/
 outputs/

@@ -33,7 +33,8 @@
 	  <style>
 		.vid{
 		/* width: 350px; */
-		width: 60%;
+		width: 200x;
+		height: 200px;
 		}
 		.wrapper{
 			display: flex;
@@ -85,7 +86,7 @@
             // JSON result in `data` variable
             $.getJSON('videos.json', function(data) {
 				console.log("DATA: ",data)
-                populate_webpage(data);
+			populate_webpage(data);
             });
 
         });
@@ -103,24 +104,24 @@
 						console.log('entry:', entry)
 
 						// var clip_path = "C:\Users\Atharvan Dogra\Downloads\\" + entry + ".mp4" ;
-						var clip_path = 'reconstructions-simpler-converted/';
+						var clip_path = 'reconstruction_noTraj/';
 						var annotation_path = 'annotations'+'/'+entry+'_annotations.json'
 
 
 						var request = new XMLHttpRequest();
 						request.open("GET", annotation_path, false);
 						request.send(null)
-						var row_html = '<td style="font-size:10px;">'+ JSON.parse(request.responseText)+'</td>';		//add annotation
+						var row_html = '<td style="font-size:14px;">'+ JSON.parse(request.responseText)+'</td>';		//add annotation
 						// alert (my_JSON_object.result[0]);
-						console.log("row html: ", row_html)
+						// console.log("row html: ", row_html)
 
-						row_html += '<td><video class="vid" id="clip-'+entry+'" loop autoplay><source src='+clip_path+'gt/'+entry+'/'+entry+'.mp4 type="video/mp4"></video></td>';
-						row_html += model_variants(data.variants, entry, row_html, clip_path)
+						row_html += '<td><video class="vid" id="clip-'+entry+'" loop controls><source src='+clip_path+'gt/'+entry+'/'+entry+'.mp4 type="video/mp4"></video></td>';
+						row_html = model_variants(data.variants, entry, row_html, clip_path)
 
 
 
 						// Append row to table
-						console.log("before append: ",row_html)
+						// console.log("before append: ",row_html)
 						$('#viz-table > tbody:last-child').append("<tr>"+row_html+"</tr>");   
 						}	
 
@@ -128,16 +129,16 @@
 						function model_variants(variants, row_id, row_html, clip_path) {						//asymov_mt: naive, naive_spline, naive_uniform
 							console.log("in model variants: ", row_html)
 							for (var j=0; j<variants.length; j++) {
-								row_html += '<td><video class="vid" id="clip-'+ row_id +'" loop autoplay><source src=' + clip_path+ 'asymov_mt/' + variants[j]+ '/' + row_id + '/' + row_id + '.mp4' + ' type="video/mp4"></video></td>';
+								row_html += '<td><video class="vid" id="clip-'+ row_id +'" loop controls><source src=' + clip_path+ 'asymov_mt/' + variants[j]+ '/' + row_id + '/' + row_id + '.mp4' + ' type="video/mp4"></video></td>';
 							}
 
 							for (var j=0; j<variants.length; j++) {						//gt_cluster_recon
-								row_html += '<td><video class="vid" id="clip-'+ row_id +'" loop autoplay><source src=' + clip_path+ 'gt_cluster_recon/' + variants[j]+ '/' + row_id + '/' + row_id + '.mp4' + ' type="video/mp4"></video></td>';
+								row_html += '<td><video class="vid" id="clip-'+ row_id +'" loop controls><source src=' + clip_path+ 'gt_cluster_recon/' + variants[j]+ '/' + row_id + '/' + row_id + '.mp4' + ' type="video/mp4"></video></td>';
 							}
-							console.log("in model variants 2: ", row_html)
+							// console.log("in model variants 2: ", row_html)
 							return row_html
 
-						}			
+						}	
 
 	</script>
 </body>
