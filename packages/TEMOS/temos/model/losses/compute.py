@@ -8,6 +8,7 @@ from torchmetrics import Metric
 class TemosComputeLosses(Metric):
     def __init__(self, vae: bool,
                  mode: str,
+                 span: bool,
                  traj: bool,
                  cross_modal_loss: str = 'func_latent',              #condition to use cosSimilarity or Smooth L1 (default)
                  loss_on_both: bool = False,
@@ -21,6 +22,7 @@ class TemosComputeLosses(Metric):
         # Save parameters
         self.vae = vae
         self.mode = mode
+        self.span = span
         self.traj = traj
 
         self.cross_modal_loss = cross_modal_loss
@@ -52,6 +54,10 @@ class TemosComputeLosses(Metric):
             losses.append("weighted_recons_text2mw")
         else:
             ValueError("This mode is not recognized.")
+
+        if span:
+            losses.append("span_error")
+            losses.append("weighted_span_error")
 
         if traj:
             losses.append("traj_error")
@@ -92,7 +98,8 @@ class TemosComputeLosses(Metric):
 
     def update(self, ds_text=None, ds_motion=None, ds_ref=None,
                lat_text=None, lat_motion=None, dis_text=None,
-               dis_motion=None, dis_ref=None, 
+               dis_motion=None, dis_ref=None,
+               span_text=None, span_ref=None,
                traj_text=None, traj_ref=None):
         total: float = 0.0
 
@@ -112,6 +119,9 @@ class TemosComputeLosses(Metric):
             total += self._update_loss("recons_text2mw", ds_text, ds_ref)
         
         # pdb.set_trace()
+        if self.span:
+            total += self._update_loss("span_error", span_text, span_ref)
+
         if self.traj:
             total += self._update_loss("traj_error", traj_text, traj_ref)
         
@@ -146,6 +156,8 @@ class TemosComputeLosses(Metric):
         # Update the loss
         if loss=='cosine_similarity':
             val = self._losses_func[loss](outputs, inputs, torch.tensor([1]))
+        elif loss=='span_error':
+            val = sum([self._losses_func[loss](x, y) for x,y in zip(outputs, inputs)])      # TODO: for MSE, check if to be changed to Cross Entropy
         elif loss=='traj_error':
             val = sum([self._losses_func[loss](x, y) for x,y in zip(outputs, inputs)])
         else:

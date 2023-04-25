@@ -145,6 +145,8 @@ class AsymovMT(BaseModel):
         tgt: Tensor = batch["motion_words"] #[Frames, Batch size]
         tgt_input = tgt[:-1, :] #[Frames-1, Batch size]
         tgt_out = tgt[1:, :].permute(1,0) #[Batch size, Frames-1]
+        if self.hparams.span:
+            tgt_span: Tensor = batch["span"]
         if self.hparams.traj:
             tgt_traj: Tensor = batch["traj"] #[Frames, Batch size, 3]
             tgt_traj_input: Tensor = tgt_traj[:-1] #[Frames-1, Batch size, 3]
@@ -152,8 +154,10 @@ class AsymovMT(BaseModel):
 
         src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, self.PAD_IDX)
 
+        if self.hparams.span:
+            mw_logits, span = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_span = tgt_span)        #220MB #220MB   #Gained ~300MB somewhere after it   #300MB
         if self.hparams.traj:
-            mw_logits, traj = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_traj_input)        #220MB #220MB   #Gained ~300MB somewhere after it   #300MB
+            mw_logits, traj = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj_input)        #220MB #220MB   #Gained ~300MB somewhere after it   #300MB
             #[Frames, Batch size, 3]
             traj = traj.permute(1,0,2) #[Batch size, Frames, 3]
             traj = remove_padding(traj, batch["length"]) #List[Tensor[Frames, 3]]
@@ -162,6 +166,8 @@ class AsymovMT(BaseModel):
         mw_logits = mw_logits.permute(1,2,0) #[Batch size, Classes, Frames]
 
         # Compute the losses
+        if self.hparams.span:
+            loss = self.losses[split].update(ds_text=mw_logits, ds_ref=tgt_out, span_text=span, span_ref=tgt_span)
         if self.hparams.traj:
             loss = self.losses[split].update(ds_text=mw_logits, ds_ref=tgt_out, traj_text=traj, traj_ref=tgt_traj_out)
         else:

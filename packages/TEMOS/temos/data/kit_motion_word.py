@@ -32,6 +32,7 @@ class KITMotionWordMTDataModule(BASEDataModule):
     def __init__(self, 
                  special_symbols: Union[List[str],ListConfig] = ['<pad>', '<bos>', '<eos>', '<unk>'],
                  num_mw_clusters: int = 1000,
+                 span: bool = True,
                  traj: bool = True,
                  batch_size: int = 32,
                  num_workers: int = 16,
@@ -77,7 +78,7 @@ class KITMotionWordMTDataModule(BASEDataModule):
         
         super().__init__(batch_size=batch_size,
                          num_workers=num_workers,
-                         collate_fn=partial(collate_fn, text_vocab=self.text_vocab, special_symbols=list(special_symbols), traj=traj))
+                         collate_fn=partial(collate_fn, text_vocab=self.text_vocab, special_symbols=list(special_symbols), traj=traj, span=span))
 
 class KITMotionWordDataModule(BASEDataModule):
     def __init__(self, data_dir: str = "",
@@ -108,6 +109,7 @@ class KITMotionWord(Dataset):
 
     def __init__(self, datapath: str, mw_dataname: str, 
                  traj: bool, traj_dataname: str, 
+                 span: bool, span_dataname: str,
                  ann_dataname: str,
                  splitpath: str,
                  vocab_size: int,
@@ -132,6 +134,7 @@ class KITMotionWord(Dataset):
         # self.load_with_rot = load_with_rot
         self.downsample = downsample
         self.traj = traj
+        self.span = span
 
         # if load_amass_data and not self.load_with_rot:
         #     self.transforms_xyz = transforms_xyz
@@ -172,11 +175,16 @@ class KITMotionWord(Dataset):
         
         with open(datapath/mw_dataname, 'rb') as f:
             motion_words_data = pickle.load(f)
+        
+        if self.span:
+            span_data = {}
+            with open(datapath/span_dataname, 'rb') as f:
+                span = pickle.load(f)
         if self.traj:
             traj_data = {}
             with open(datapath/traj_dataname, 'rb') as f:
                 trajectory_data = pickle.load(f)
-                
+
         with open(datapath/ann_dataname, 'r') as f:
             ann_data = json.load(f)["anns"]
         
@@ -204,6 +212,8 @@ class KITMotionWord(Dataset):
             # read xyz joints in MMM format
             # else:
             # joints = load_mmm_keyid(keyid, datapath)
+
+            # TODO : set argument for downsample and upsample in required places
             motion_words, duration = downsample_motion_words(motion_words_data[keyid], downsample=self.downsample, framerate=framerate)
 
             if split != "test" and not tiny:
@@ -227,6 +237,10 @@ class KITMotionWord(Dataset):
             texts_data[keyid] = text
             durations[keyid] = duration
 
+            if self.span:
+                spans = span[keyid]
+                assert len(motion_words) == len(spans)
+                span_data[keyid] = spans
             if self.traj:
                 residual_traj, _ = residual_downsample_traj(trajectory_data[keyid], downsample=self.downsample, framerate=framerate)
                 assert len(residual_traj) == duration
@@ -243,6 +257,8 @@ class KITMotionWord(Dataset):
 
         self.mw_data = mw_data
         self.texts_data = texts_data
+        if self.span:
+            self.span_data = span_data
         if self.traj:
             self.traj_data = traj_data
 
@@ -251,6 +267,9 @@ class KITMotionWord(Dataset):
         self.durations = durations
         self.vocab_size = vocab_size
 
+    def _load_span(self, keyid):
+        span = self.span_data[keyid]
+        return span
     def _load_traj(self, keyid):#, frame_ix=None):
         traj = self.traj_data[keyid]
         # datastruct = self.transforms.Datastruct(features=features)
@@ -282,6 +301,9 @@ class KITMotionWord(Dataset):
         text = self._load_text(keyid)
         element = {"motion_words": motion_words, "text": text,
                    "length": len(motion_words), "keyid": keyid}
+        if self.span:
+            span = self._load_span(keyid)
+            element["span"] = span
         if self.traj:
             traj = self._load_traj(keyid)
             element["traj"]=traj

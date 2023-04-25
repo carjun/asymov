@@ -9,9 +9,12 @@ num_mw_clusters: ${num_mw_clusters}
 # Traj
 traj: ${traj}
 
+span: ${span}
+
 # Paths
 datapath: ${path.datasets}/kit
 mw_dataname: ${.name}.pkl
+span_dataname: kit-${.cluster_data}-contiguous-span.pkl
 traj_dataname: fke_traj_data.pkl
 ann_dataname: anns.json
 splitpath: ${path.datasets}/kit-splits

@@ -4,6 +4,8 @@ hydra:
 
 # Global configurations shared between different modules
 experiment: atharvan_local_run #???
+
+span: true
 traj: true
 
 seed: 1234
@@ -23,7 +25,7 @@ viz_metrics_start_epoch: 0
 viz_metrics_every_n_epoch: 5
 # Composing nested config with default
 defaults:
-  - data: kit-xyz-motion-word-mt
+  - data: kit-xyz-contiguous-motion-word-mt #kit-xyz-motion-word-mt
   - model: asymov_mt
   - machine: server
   - trainer: gpu

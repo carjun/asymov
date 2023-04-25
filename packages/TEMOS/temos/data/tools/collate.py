@@ -91,6 +91,13 @@ def mw_transform(mw_cluster_ids: List[int], special_symbols: List[str]):
                              torch.tensor([special_symbols.index('<eos>')]))) # Add BOS/EOS assuming special first
     return mw_token_ids
 
+def span_transform(span: Tensor):
+    span = span.float() #double to float
+    span = torch.cat((span.new_zeros((1,1)),
+                          span,
+                          span.new_zeros((1,1))))
+    return span
+
 def traj_transform(traj_xyz: Tensor):
     traj_xyz = traj_xyz.float() #double to float
     traj_xyz = torch.cat((traj_xyz.new_zeros((1,3)),
@@ -98,7 +105,9 @@ def traj_transform(traj_xyz: Tensor):
                           traj_xyz.new_zeros((1,3))))
     return traj_xyz
 
-def collate_motion_words_and_text_mt(lst_elements: List, text_vocab:Vocab, special_symbols: List[str], traj: bool = True) -> Dict:
+
+def collate_motion_words_and_text_mt(lst_elements: List, text_vocab:Vocab, special_symbols: List[str],
+                                     traj: bool = True, span: bool = True) -> Dict:
 
     text_batch, mw_batch = [], []
     for x in lst_elements:
@@ -116,6 +125,9 @@ def collate_motion_words_and_text_mt(lst_elements: List, text_vocab:Vocab, speci
         "length": [len(x) for x in mw_batch]
         }
     
+    if span:
+        batch["span"] = pad_sequence(traj_batch, padding_value=0.0) #[Frames, Batch size, 1]
+
     if traj:
         # pdb.set_trace()
         traj_batch = [traj_transform(x['traj']) for x in lst_elements] #List[Tensor[Frames, 3]]

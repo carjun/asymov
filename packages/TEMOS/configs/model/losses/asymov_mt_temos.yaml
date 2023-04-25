@@ -3,6 +3,10 @@ _target_: temos.model.losses.TemosComputeLosses
 mode: motion_word
 
 # Loss terms
+
+## Span
+span: ${model.span}
+
 ## Trajectory
 traj: ${model.traj}
 
@@ -21,6 +25,10 @@ force_loss_on_jfeats: false
 ablation_no_kl_combine: true
 ablation_no_kl_gaussian: true
 ablation_no_motionencoder: true
+
+# Span
+span_error: 1.0
+span_error_func: ${model.func_span}
 
 # Trajectory
 traj_error: 1.0

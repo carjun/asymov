@@ -2,6 +2,7 @@ name: vanilla_transformer
 _target_: temos.model.transformer.vanilla.Seq2SeqTransformer
 
 traj: ${model.traj}
+span: ${model.span}
 
 num_encoder_layers: ${model.num_encoder_layers}
 num_decoder_layers: ${model.num_decoder_layers}

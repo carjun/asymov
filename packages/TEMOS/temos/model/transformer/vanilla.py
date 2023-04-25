@@ -22,6 +22,7 @@ class TokenEmbedding(nn.Module):
 # Seq2Seq Network
 class Seq2SeqTransformer(LightningModule):
     def __init__(self,
+                 span: bool,
                  traj: bool,
                  num_encoder_layers: int,
                  num_decoder_layers: int,
@@ -56,23 +57,32 @@ class Seq2SeqTransformer(LightningModule):
             self.generator = nn.Linear(emb_size, tgt_vocab_size)
         # pdb.set_trace()
 
-        if traj:
-            self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size-3)
-            self.tgt_positional_encoding = PositionalEncoding(emb_size-3, dropout=dropout)
+        if span: 
+            self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size-1)
+            self.tgt_positional_encoding = PositionalEncoding(emb_size-1, dropout=dropout)
             
-            #traj generator:
-            if traj_seq and len(traj_seq)>0:
-                traj_seq.insert(0, emb_size)
-                traj_seq.insert(len(traj_seq), 3)
-                temp_traj_gen = []
-                for n,m in zip(traj_seq[:-1], traj_seq[1:]):
-                    temp_traj_gen += [nn.Linear(n,m)]
-                self.traj_generator = nn.Sequential(*temp_traj_gen)
-            else:
-                self.traj_generator = nn.Linear(emb_size, 3)
+            self.span_generator = nn.Linear(emb_size, 1)
+
+        # TODO check how to handle traj and span together
+
+            if traj:
+                self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size-3)
+                self.tgt_positional_encoding = PositionalEncoding(emb_size-3, dropout=dropout)
+                
+                #traj generator:
+                if traj_seq and len(traj_seq)>0:
+                    traj_seq.insert(0, emb_size)
+                    traj_seq.insert(len(traj_seq), 3)
+                    temp_traj_gen = []
+                    for n,m in zip(traj_seq[:-1], traj_seq[1:]):
+                        temp_traj_gen += [nn.Linear(n,m)]
+                    self.traj_generator = nn.Sequential(*temp_traj_gen)
+                else:
+                    self.traj_generator = nn.Linear(emb_size, 3)
         else:
             self.tgt_positional_encoding = PositionalEncoding(emb_size, dropout=dropout)
             self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size)
+
         self.src_tok_emb = TokenEmbedding(src_vocab_size, emb_size)
         self.src_positional_encoding = PositionalEncoding(emb_size, dropout=dropout)
 
@@ -84,6 +94,7 @@ class Seq2SeqTransformer(LightningModule):
                 src_padding_mask: Tensor,
                 tgt_padding_mask: Tensor,
                 memory_key_padding_mask: Tensor,
+                tgt_span: Tensor = None,
                 tgt_traj: Tensor = None):
         # pdb.set_trace()
         src_emb = self.src_positional_encoding(self.src_tok_emb(src))
@@ -98,10 +109,14 @@ class Seq2SeqTransformer(LightningModule):
             # tgt_emb = self.positional_encoding(tgt_emb)
         # else:
         #     tgt_emb = self.positional_encoding(self.tgt_tok_emb(tgt))
+        if self.hparams.span:
+            tgt_emb = torch.cat((tgt_emb, tgt_span), -1)
         
         outs = self.transformer(src_emb, tgt_emb, src_mask, tgt_mask, None,
                                 src_padding_mask, tgt_padding_mask, memory_key_padding_mask)
-        if self.hparams.traj:
+        if self.hparams.span:
+            return self.generator(outs), self.span_generator(outs)
+        if self.hparams.traj:                                       #TODO make them compatible with each other
             return self.generator(outs), self.traj_generator(outs)
         else:
             return self.generator(outs)
@@ -112,7 +127,7 @@ class Seq2SeqTransformer(LightningModule):
 
     def decode(self, tgt: Tensor, memory: Tensor, 
                tgt_mask: Tensor, memory_mask: Tensor = None, tgt_padding_mask: Tensor = None, memory_key_padding_mask: Tensor = None,
-               tgt_traj: Tensor = None):
+               tgt_traj: Tensor = None, tgt_span: Tensor = None):
         tgt_emb = self.tgt_positional_encoding(self.tgt_tok_emb(tgt))
         if self.hparams.traj:
             assert tgt_traj is not None
@@ -122,6 +137,8 @@ class Seq2SeqTransformer(LightningModule):
             
             tgt_emb = torch.cat((tgt_emb, tgt_traj), -1)
             # tgt_emb = self.positional_encoding(tgt_emb)
+        if self.hparams.span:
+            tgt_emb = torch.cat((tgt_emb, tgt_span), -1)
         # else:
         #     tgt_emb = self.positional_encoding(self.tgt_tok_emb(tgt))
         
