@@ -147,6 +147,12 @@ class AsymovMT(BaseModel):
         tgt_out = tgt[1:, :].permute(1,0) #[Batch size, Frames-1]
         if self.hparams.span:
             tgt_span: Tensor = batch["span"]
+            tgt_span_input: Tensor = tgt_span[:-1]
+            try:
+                tgt_span_out: Tensor = remove_padding(tgt_span[1:].permute(1,0), batch["length"])
+            except:
+                print('here for debugging')
+
         if self.hparams.traj:
             tgt_traj: Tensor = batch["traj"] #[Frames, Batch size, 3]
             tgt_traj_input: Tensor = tgt_traj[:-1] #[Frames-1, Batch size, 3]
@@ -155,7 +161,9 @@ class AsymovMT(BaseModel):
         src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input, self.PAD_IDX)
 
         if self.hparams.span:
-            mw_logits, span = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_span = tgt_span)        #220MB #220MB   #Gained ~300MB somewhere after it   #300MB
+            mw_logits, span = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_span = tgt_span_input)        #220MB #220MB   #Gained ~300MB somewhere after it   #300MB
+            span = span.permute(1,0)
+            span = remove_padding(span, batch["length"])
         if self.hparams.traj:
             mw_logits, traj = self.transformer(src, tgt_input, src_mask, tgt_mask, src_padding_mask, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj_input)        #220MB #220MB   #Gained ~300MB somewhere after it   #300MB
             #[Frames, Batch size, 3]
@@ -167,7 +175,7 @@ class AsymovMT(BaseModel):
 
         # Compute the losses
         if self.hparams.span:
-            loss = self.losses[split].update(ds_text=mw_logits, ds_ref=tgt_out, span_text=span, span_ref=tgt_span)
+            loss = self.losses[split].update(ds_text=mw_logits, ds_ref=tgt_out, span_text=span, span_ref=tgt_span_out)
         if self.hparams.traj:
             loss = self.losses[split].update(ds_text=mw_logits, ds_ref=tgt_out, traj_text=traj, traj_ref=tgt_traj_out)
         else:

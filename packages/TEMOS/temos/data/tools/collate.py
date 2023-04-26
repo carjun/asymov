@@ -92,10 +92,10 @@ def mw_transform(mw_cluster_ids: List[int], special_symbols: List[str]):
     return mw_token_ids
 
 def span_transform(span: Tensor):
-    span = span.float() #double to float
-    span = torch.cat((span.new_zeros((1,1)),
+    span = torch.Tensor(span) # span = span.float() #double to float
+    span = torch.cat((span.new_zeros((1)),
                           span,
-                          span.new_zeros((1,1))))
+                          span.new_zeros((1))))
     return span
 
 def traj_transform(traj_xyz: Tensor):
@@ -126,7 +126,8 @@ def collate_motion_words_and_text_mt(lst_elements: List, text_vocab:Vocab, speci
         }
     
     if span:
-        batch["span"] = pad_sequence(traj_batch, padding_value=0.0) #[Frames, Batch size, 1]
+        span_batch = [span_transform(x['span']) for x in lst_elements] #List[Tensor[Frames, 1]]
+        batch["span"] = pad_sequence(span_batch, padding_value=0.0) #[Frames, Batch size, 1]
 
     if traj:
         # pdb.set_trace()
