@@ -180,7 +180,7 @@ class KITMotionWord(Dataset):
             span_data = {}
             with open(datapath/span_dataname, 'rb') as f:
                 span = pickle.load(f)
-        if self.traj:
+        if self.traj:                                   #TODO: if adding an else after, indent this block
             traj_data = {}
             with open(datapath/traj_dataname, 'rb') as f:
                 trajectory_data = pickle.load(f)

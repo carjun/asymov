@@ -62,6 +62,12 @@ class Seq2SeqTransformer(LightningModule):
             self.tgt_positional_encoding = PositionalEncoding(emb_size-1, dropout=dropout)
             
             self.span_generator = nn.Linear(emb_size, 1)
+            self.span_generator.bias = nn.Parameter(torch.ones_like(self.span_generator.bias), requires_grad=True)  #adding 1 bias in attempt to keep outputs >= 1; TODO might need to remove grad
+
+            self.span_generator = nn.Sequential(*[
+                self.span_generator,
+                nn.ReLU(),
+            ])
 
         # TODO check how to handle traj and span together
 
@@ -110,14 +116,14 @@ class Seq2SeqTransformer(LightningModule):
         # else:
         #     tgt_emb = self.positional_encoding(self.tgt_tok_emb(tgt))
         if self.hparams.span:
-            tgt_emb = torch.cat((tgt_emb, tgt_span), -1)
+            tgt_emb = torch.cat((tgt_emb, tgt_span.unsqueeze(2)), -1)
         
         outs = self.transformer(src_emb, tgt_emb, src_mask, tgt_mask, None,
                                 src_padding_mask, tgt_padding_mask, memory_key_padding_mask)
         if self.hparams.span:
             return self.generator(outs), self.span_generator(outs)
-        if self.hparams.traj:                                       #TODO make them compatible with each other
-            return self.generator(outs), self.traj_generator(outs)
+            if self.hparams.traj:                                       #TODO make them compatible with each other, currently ignoring
+                return self.generator(outs), self.traj_generator(outs), self.span_generator
         else:
             return self.generator(outs)
 
@@ -129,6 +135,10 @@ class Seq2SeqTransformer(LightningModule):
                tgt_mask: Tensor, memory_mask: Tensor = None, tgt_padding_mask: Tensor = None, memory_key_padding_mask: Tensor = None,
                tgt_traj: Tensor = None, tgt_span: Tensor = None):
         tgt_emb = self.tgt_positional_encoding(self.tgt_tok_emb(tgt))
+
+        if self.hparams.span:
+            tgt_emb = torch.cat((tgt_emb, tgt_span), -1)
+            
         if self.hparams.traj:
             assert tgt_traj is not None
             
@@ -137,8 +147,6 @@ class Seq2SeqTransformer(LightningModule):
             
             tgt_emb = torch.cat((tgt_emb, tgt_traj), -1)
             # tgt_emb = self.positional_encoding(tgt_emb)
-        if self.hparams.span:
-            tgt_emb = torch.cat((tgt_emb, tgt_span), -1)
         # else:
         #     tgt_emb = self.positional_encoding(self.tgt_tok_emb(tgt))
         

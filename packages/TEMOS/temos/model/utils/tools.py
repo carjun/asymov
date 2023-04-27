@@ -40,6 +40,12 @@ def create_mask(src: Tensor, tgt: Tensor, PAD_IDX: int) -> Tuple[Tensor]:
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
 
 
+def repeat_unique_cluster_ids(unqiue_mw, spans):
+    repeated_mw = []
+    for i,j in zip(unqiue_mw, spans):
+        repeated_mw += [torch.repeat_interleave(i, j)]
+    return repeated_mw
+
 # function to obtain contiguous sets of same cluster ids
 def get_contiguous_cluster_seqs(seq_names: List[str], cluster_seqs: List[Tensor]):
     # pdb.set_trace()
@@ -100,7 +106,7 @@ def greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, e
     return tgt #[Frames, 1]
 
 def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: int, end_symbol: int,
-                  src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True) -> Union[List[Tensor], Tuple[List[Tensor]]]:
+                  src_mask: Tensor = None, src_padding_mask: Tensor = None, traj: bool = True, span: bool = True) -> Union[List[Tensor], Tuple[List[Tensor]]]:
     # src: [Frames, Batches]
     if src_mask is None:
         num_tokens = src.shape[0]
@@ -111,7 +117,9 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
     # pdb.set_trace()
     batch_size = src.shape[1]
     tgt = src.new_full((1, batch_size),  start_symbol, dtype=torch.long) #[1, Batch size], 1 as for 1st frame
-    tgt_len = tgt.new_full((batch_size,), max_len) #[Batch Size] #same dtype as tgt
+    tgt_len = tgt.new_full((batch_size,), max_len) #[Batch Size] #same dtype as 
+    if span:
+        tgt_span = src.new_ones((1, batch_size, 1), dtype=torch.long) #[1, Batch size, 1]
     if traj:
         tgt_traj = src.new_zeros((1, batch_size, 3), dtype=torch.long) #[1, Batch size, 3], 1 as for 1st frame
 
@@ -125,11 +133,17 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
         else:
             tgt_padding_mask = torch.cat([tgt_padding_mask, (tgt_len<=i).unsqueeze(1)], dim=1)
 
-        if traj:
+        if span:
             # with CodeTimer('model.decode'):
-            out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
-            next_root = model.traj_generator(out[-1]) #[Batch Size, 3]
-            tgt_traj = torch.cat([tgt_traj, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
+            out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_span = tgt_span) #[Frames, Batch Size, *]
+            next_span = model.span_generator(out[-1]) #[Batch Size, 1]
+            tgt_span = torch.cat([tgt_span, next_span.unsqueeze(0)]) #[Frames+1, Batch size, 3]
+
+            if traj:
+                # with CodeTimer('model.decode'):
+                out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask, tgt_traj = tgt_traj) #[Frames, Batch Size, *]
+                next_root = model.traj_generator(out[-1]) #[Batch Size, 3]
+                tgt_traj = torch.cat([tgt_traj, next_root.unsqueeze(0)]) #[Frames+1, Batch size, 3]
         else:
             out = model.decode(tgt, memory, tgt_mask, None, tgt_padding_mask, src_padding_mask) #[Frames, Batch Size, *]
         logits = model.generator(out[-1]) #[Batch Size, Classes]
@@ -152,8 +166,11 @@ def batch_greedy_decode(model: Module, src: Tensor, max_len: int, start_symbol: 
     
     #remove BOS ([1:] slicing), EOS and padding and return effective frame predictions
     tgt_list = remove_padding_and_EOS(tgt[1:].permute(1, 0), tgt_len)
+    if span:
+        tgt_span_list = remove_padding_and_EOS(tgt_span[1:].squeeze().permute(1,0).int(), tgt_len)
+        return tgt_list, tgt_span_list
     if traj:
-        tgt_traj_list =  remove_padding_and_EOS(tgt_traj[1:].permute(1, 0, 2), tgt_len)
+        tgt_traj_list = remove_padding_and_EOS(tgt_traj[1:].permute(1, 0, 2), tgt_len)
         return tgt_list, tgt_traj_list #Tuple[List[Tensor[Frames]]]
     return tgt_list #List[Tensor[Frames]]
 
