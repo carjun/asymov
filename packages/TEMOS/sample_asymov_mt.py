@@ -19,7 +19,7 @@ import temos.launch.prepare  # noqa
 from temos.data.tools.collate import *
 from temos.data.sampling import upsample
 from temos.model.utils.beam_search import beam_search
-from temos.model.utils.tools import create_mask
+from temos.model.utils.tools import create_mask, repeat_unique_cluster_ids
 
 import pickle
 
@@ -124,6 +124,9 @@ def sample(newcfg: DictConfig) -> None:
             if cfg.traj: 
                 pred_mw_tokens, pred_traj = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
                 pred_traj = [i.detach() for i in pred_traj]
+            if cfg.span:
+                pred_mw_tokens, pred_span = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
+                pred_mw_tokens = repeat_unique_cluster_ids(pred_mw_tokens, pred_span)
             else:
                 pred_mw_tokens = model.batch_translate(src, src_mask, src_padding_mask, max_frames)
             assert len(batch["keyid"]) == len(pred_mw_tokens)
