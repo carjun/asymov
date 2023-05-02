@@ -13,14 +13,15 @@ from torch.utils.data import Dataset
 class VirtualAugSamples(Dataset):
     def __init__(self, pose, ann):
         # assert len(train_x) == len(train_y)
-        self.pose = train_x
-        self.train_y = train_y
+        self.pose = pose
+        self.annotation = ann
 
     def __len__(self):
-        return len(self.train_x)
+        return len(self.pose)
 
     def __getitem__(self, idx):
-        return {'text': self.train_x[idx], 'label': self.train_y[idx]}
+        return {'pose': self.pose[idx],
+                'annotation': self.annotation[self.annotations.index == self.pose[idx]['keyid']].values[0]}
 
     
 class ExplitAugSamples(Dataset):
