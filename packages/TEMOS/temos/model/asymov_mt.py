@@ -109,7 +109,7 @@ class AsymovMT(BaseModel):
 
             return tgt_list, span_list #Tuple[List[Tensor[Frames]]]
             
-            if self.hparams.traj:
+            if self.hparams.traj:       #add bool args for traj and span
                 if decoding_scheme == "greedy":
                     with CodeTimer('greedy batch_translate', unit='s'):
                         tgt_list, traj_list = batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
@@ -123,10 +123,10 @@ class AsymovMT(BaseModel):
         else:
             if decoding_scheme == "greedy":
                 tgt_list= batch_greedy_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX,
-                                                        src_mask, src_padding_mask, traj=False)
+                                                        src_mask, src_padding_mask, traj=False, span=False)
             else:
                 tgt_list= batch_beam_decode(self.transformer, src, max_len, self.BOS_IDX, self.EOS_IDX, decoding_scheme,
-                                                        src_mask, src_padding_mask, traj=False, beam_width=beam_width)
+                                                        src_mask, src_padding_mask, traj=False, beam_width=beam_width, span=False)
             return tgt_list #List[Tensor[Frames]]
 
     def translate(self, src_list: List[Tensor], max_len: Union[int, List[int]]) -> Union[List[Tensor],Tuple[List[Tensor]]]: # no teacher forcing
@@ -211,7 +211,8 @@ class AsymovMT(BaseModel):
         self.metrics[split]['acc_teachforce'].update(probs, target)
 
         pred_mw_tokens_teachforce = remove_padding(torch.argmax(probs, dim=1).int(), (torch.Tensor(batch["length"])-1).int())
-        pred_mw_tokens_teachforce = repeat_unique_cluster_ids(pred_mw_tokens_teachforce, span)
+        if self.hparams.span:
+            pred_mw_tokens_teachforce = repeat_unique_cluster_ids(pred_mw_tokens_teachforce, span)
 
         # predicted through teacher forcing, target motion word ids without padding for BLEU
         pred_mw_sents_teachforce = [" ".join(map(str, mw.int().tolist())) for mw in pred_mw_tokens_teachforce]
@@ -247,10 +248,10 @@ class AsymovMT(BaseModel):
                     # assert len(pred_mw_tokens) == len(pred_mw_tokens2) 
                     if self.hparams.span:
                         pred_mw_tokens = repeat_unique_cluster_ids(pred_mw_tokens, pred_span)
-                    
+
                     #TODO: aggregate BLEU over beams
                     # add EOS/BOS as they were removed during translation
-                    pred_mw_sents = [" ".join(map(str, [self.BOS_IDX] + mw.int().tolist() + [self.EOS_IDX])) for mw in pred_mw_tokens]
+                    pred_mw_sents = [" ".join(map(str, mw.int().tolist() + [self.EOS_IDX])) for mw in pred_mw_tokens]
                     self.metrics[split]['bleu'].update(pred_mw_sents, target_mw_sents)
 
                     # shift for special symbols (EOS/BOS and padding already removed)
