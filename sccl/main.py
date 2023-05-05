@@ -26,7 +26,7 @@ def run(args):
     set_global_random_seed(args.seed)
 
     # dataset loader
-    train_loader = dataloader.explict_augmentation_loader(args) if args.augtype == "explicit" else dataloader.virtual_augmentation_loader(args)
+    train_loader = dataloader.explict_augmentation_loader(args) if args.augtype == "explicit" else dataloader.pose_text_virtual_augmentation_loader(args)
 
     # model
     torch.cuda.set_device(args.gpuid[0])
@@ -38,7 +38,7 @@ def run(args):
     model = SCCLBert(bert, tokenizer, cluster_centers=cluster_centers, alpha=args.alpha) 
     model = model.cuda()
 
-    # optimizer 
+    # optimizer
     optimizer = get_optimizer(model, args)
     
     trainer = SCCLvTrainer(model, tokenizer, optimizer, train_loader, args)
@@ -55,13 +55,15 @@ def get_args(argv):
     parser.add_argument('--resdir', type=str, default='./results/')
     parser.add_argument('--s3_resdir', type=str, default='./results')
     
-    parser.add_argument('--bert', type=str, default='distilroberta', help="")
-    parser.add_argument('--use_pretrain', type=str, default='BERT', choices=["BERT", "SBERT", "PAIRSUPCON"])
+    parser.add_argument('--bert', type=str, default='distilbert', help="")
+    parser.add_argument('--use_pretrain', type=str, default='SBERT', choices=["BERT", "SBERT", "PAIRSUPCON"])
     
     # Dataset
-    parser.add_argument('--datapath', type=str, default='../datasets/')
-    parser.add_argument('--dataname', type=str, default='searchsnippets', help="")
-    parser.add_argument('--num_classes', type=int, default=8, help="")
+    parser.add_argument('--datapath', type=str, default='sccl/datasets/')
+    parser.add_argument('--ann_dataname', type=str, default='anns', help="")
+    parser.add_argument('--pose_dataname', type=str, default='fke_inplace_data', help="")
+
+    parser.add_argument('--num_classes', type=int, default=1000, help="")
     parser.add_argument('--max_length', type=int, default=32)
     parser.add_argument('--label', type=str, default='label')
     parser.add_argument('--text', type=str, default='text')
@@ -74,7 +76,7 @@ def get_args(argv):
     # contrastive learning
     parser.add_argument('--objective', type=str, default='contrastive')
     parser.add_argument('--augtype', type=str, default='virtual', choices=['virtual', 'explicit'])
-    parser.add_argument('--batch_size', type=int, default=400)
+    parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--temperature', type=float, default=0.5, help="temperature required by contrastive loss")
     parser.add_argument('--eta', type=float, default=1, help="")
     

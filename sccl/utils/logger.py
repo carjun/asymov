@@ -26,7 +26,8 @@ def setup_path(args):
     resPath += f'.{args.bert}'
     resPath += f'.{args.use_pretrain}'
     resPath += f'.{args.augtype}'
-    resPath += f'.{args.dataname}'
+    resPath += f'.{args.ann_dataname}'
+    resPath += f'.{args.pose_dataname}'
     resPath += f".{args.text}"
     resPath += f'.lr{args.lr}'
     resPath += f'.lrscale{args.lr_scale}'

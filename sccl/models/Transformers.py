@@ -31,8 +31,8 @@ class SCCLBert(nn.Module):
         initial_cluster_centers = torch.tensor(
             cluster_centers, dtype=torch.float, requires_grad=True)
         self.cluster_centers = Parameter(initial_cluster_centers)
-      
-    
+
+
     def forward(self, input_ids, attention_mask, task_type="virtual"):
         if task_type == "evaluate":
             return self.get_mean_embeddings(input_ids, attention_mask)
